@@ -43,7 +43,7 @@ export class WebhooksController {
      * Se não tem token configurado, processa (retrocompatível) com aviso de depreciação.
      */
     private async validateZApiToken(instanceId: string, incomingToken?: string): Promise<boolean> {
-        const connection = await this.prisma.whatsAppInstance.findUnique({
+        const connection = await (this.prisma as any).whatsAppInstance.findUnique({
             where: { zapiInstanceId: instanceId },
         });
 
@@ -52,10 +52,10 @@ export class WebhooksController {
         if (connection) {
             storedToken = (connection as any).zapiClientToken ?? null;
         } else {
-            const integration = await this.prisma.integration.findFirst({
+            const integration = await (this.prisma as any).integration.findFirst({
                 where: { zapiInstanceId: instanceId, isActive: true },
             });
-            storedToken = integration?.zapiClientToken ?? null;
+            storedToken = (integration as any)?.zapiClientToken ?? null;
         }
 
         // Se token configurado no sistema, validar
@@ -89,12 +89,12 @@ export class WebhooksController {
      * Busca em WhatsAppInstance e depois em Integration (configuração global).
      */
     private async resolveCompanyId(instanceId: string): Promise<string | null> {
-        const connection = await this.prisma.whatsAppInstance.findUnique({
+        const connection = await (this.prisma as any).whatsAppInstance.findUnique({
             where: { zapiInstanceId: instanceId },
         });
         if (connection) return connection.companyId;
 
-        const integration = await this.prisma.integration.findFirst({
+        const integration = await (this.prisma as any).integration.findFirst({
             where: { zapiInstanceId: instanceId, isActive: true },
         });
         if (integration) return integration.companyId;
@@ -246,7 +246,7 @@ export class WebhooksController {
             return;
         }
 
-        const connection = await this.prisma.whatsAppInstance.findUnique({
+        const connection = await (this.prisma as any).whatsAppInstance.findUnique({
             where: { zapiInstanceId: instanceId },
             include: { department: true },
         });
@@ -257,12 +257,12 @@ export class WebhooksController {
         }
 
         // Buscar ou criar contato
-        let contact = await this.prisma.contact.findFirst({
+        let contact = await (this.prisma as any).contact.findFirst({
             where: { phoneNumber, companyId },
         });
 
         if (!contact) {
-            contact = await this.prisma.contact.create({
+            contact = await (this.prisma as any).contact.create({
                 data: {
                     phoneNumber,
                     name: payload.senderName || payload.chatName || phoneNumber,
@@ -271,7 +271,7 @@ export class WebhooksController {
                 },
             });
         } else if (payload.senderPhoto && contact.profilePicture !== payload.senderPhoto) {
-            contact = await this.prisma.contact.update({
+            contact = await (this.prisma as any).contact.update({
                 where: { id: contact.id },
                 data: {
                     profilePicture: payload.senderPhoto,
@@ -281,7 +281,7 @@ export class WebhooksController {
         }
 
         // Buscar ticket ativo existente para este contato
-        let ticket = await this.prisma.ticket.findFirst({
+        let ticket = await (this.prisma as any).ticket.findFirst({
             where: {
                 contactId: contact.id,
                 companyId,
@@ -301,7 +301,7 @@ export class WebhooksController {
 
             const { content } = this.extractMessageContent(payload);
 
-            ticket = await this.prisma.ticket.create({
+            ticket = await (this.prisma as any).ticket.create({
                 data: {
                     contact: { connect: { id: contact.id } },
                     department: { connect: { id: department.id } },
@@ -357,7 +357,7 @@ export class WebhooksController {
             const internalStatus = ZAPI_STATUS_MAP[zapiStatus] || 'SENT';
 
             for (const externalId of ids) {
-                const message = await this.prisma.message.findFirst({
+                const message = await (this.prisma as any).message.findFirst({
                     where: {
                         externalId,
                         ticket: { companyId },
@@ -365,7 +365,7 @@ export class WebhooksController {
                 });
 
                 if (message) {
-                    await this.prisma.message.update({
+                    await (this.prisma as any).message.update({
                         where: { id: message.id },
                         data: { status: internalStatus as any },
                     });
@@ -387,7 +387,7 @@ export class WebhooksController {
         const companyId = await this.resolveCompanyId(instanceId);
         if (!companyId) return;
 
-        const ticket = await this.prisma.ticket.findFirst({
+        const ticket = await (this.prisma as any).ticket.findFirst({
             where: {
                 contact: { phoneNumber: phone },
                 companyId,

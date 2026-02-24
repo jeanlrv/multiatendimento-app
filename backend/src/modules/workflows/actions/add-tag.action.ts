@@ -28,7 +28,7 @@ export class AddTagAction implements ActionExecutor {
 
             // If tagId is not provided, try to find or create the tag by name
             if (!targetTagId && tagName) {
-                const tag = await this.prisma.tag.findFirst({
+                const tag = await (this.prisma as any).tag.findFirst({
                     where: {
                         companyId: context.companyId,
                         name: tagName
@@ -38,7 +38,7 @@ export class AddTagAction implements ActionExecutor {
                 if (tag) {
                     targetTagId = tag.id;
                 } else {
-                    const newTag = await this.prisma.tag.create({
+                    const newTag = await (this.prisma as any).tag.create({
                         data: {
                             name: tagName,
                             color: '#e2e8f0', // default gray color
@@ -50,7 +50,7 @@ export class AddTagAction implements ActionExecutor {
             }
 
             // Check if ticket already has this tag
-            const existingRelation = await this.prisma.ticketTag.findUnique({
+            const existingRelation = await (this.prisma as any).ticketTag.findUnique({
                 where: {
                     ticketId_tagId: {
                         ticketId,
@@ -60,7 +60,7 @@ export class AddTagAction implements ActionExecutor {
             });
 
             if (!existingRelation) {
-                await this.prisma.ticketTag.create({
+                await (this.prisma as any).ticketTag.create({
                     data: {
                         ticketId,
                         tagId: targetTagId

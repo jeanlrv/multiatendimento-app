@@ -24,7 +24,7 @@ export class TransferDepartmentAction implements ActionExecutor {
 
         try {
             // Verifica se o departamento existe para evitar erro de FK
-            const dept = await this.prisma.department.findUnique({
+            const dept = await (this.prisma as any).department.findUnique({
                 where: { id: departmentId }
             });
 
@@ -32,7 +32,7 @@ export class TransferDepartmentAction implements ActionExecutor {
                 return { success: false, error: `Departamento ${departmentId} não encontrado` };
             }
 
-            await this.prisma.ticket.update({
+            await (this.prisma as any).ticket.update({
                 where: { id: ticketId },
                 data: {
                     departmentId,

@@ -41,7 +41,7 @@ export class WorkflowsProcessor extends WorkerHost {
 
         try {
             // 1. Buscar a regra do workflow
-            const rule = await this.prisma.workflowRule.findUnique({
+            const rule = await (this.prisma as any).workflowRule.findUnique({
                 where: { id: workflowId },
             });
 
@@ -59,7 +59,7 @@ export class WorkflowsProcessor extends WorkerHost {
                 }
 
                 // Incrementar runCount
-                await this.prisma.workflowRule.update({
+                await (this.prisma as any).workflowRule.update({
                     where: { id: workflowId },
                     data: { runCount: { increment: 1 } }
                 }).catch(err => this.logger.error(`Failed to increment runCount: ${err.message}`));
@@ -67,18 +67,18 @@ export class WorkflowsProcessor extends WorkerHost {
 
             // 3. Buscar ou criar execução no banco
             if (isResuming) {
-                execution = await this.prisma.workflowExecution.findUnique({ where: { id: executionId } });
+                execution = await (this.prisma as any).workflowExecution.findUnique({ where: { id: executionId } });
                 if (!execution) {
                     this.logger.error(`Execution ${executionId} not found for resumption`);
                     return { success: false, reason: 'execution_not_found' };
                 }
                 // Limpar status de espera
-                await this.prisma.workflowExecution.update({
+                await (this.prisma as any).workflowExecution.update({
                     where: { id: execution.id },
                     data: { status: 'running' }
                 });
             } else {
-                execution = await this.prisma.workflowExecution.create({
+                execution = await (this.prisma as any).workflowExecution.create({
                     data: {
                         workflowRuleId: workflowId,
                         companyId,
@@ -92,8 +92,8 @@ export class WorkflowsProcessor extends WorkerHost {
 
             // 3. Inicializar contexto
             const graph = {
-                nodes: rule.nodes as any,
-                edges: rule.edges as any,
+                nodes: (rule as any).nodes,
+                edges: (rule as any).edges,
             } as WorkflowGraph;
 
             // Determinar nó inicial
@@ -115,7 +115,7 @@ export class WorkflowsProcessor extends WorkerHost {
 
             if (!currentNodeId) {
                 this.logger.warn(`No node to execute (end of workflow or invalid state)`);
-                await this.prisma.workflowExecution.update({
+                await (this.prisma as any).workflowExecution.update({
                     where: { id: execution.id },
                     data: { status: 'success' }
                 });
@@ -154,7 +154,7 @@ export class WorkflowsProcessor extends WorkerHost {
                     context.currentNodeId = currentNodeId;
                 } else if (result.status === 'delayed' || result.status === 'waiting_event') {
                     // Tratar suspensão/atraso
-                    await this.prisma.workflowExecution.update({
+                    await (this.prisma as any).workflowExecution.update({
                         where: { id: execution.id },
                         data: {
                             status: result.status,
@@ -163,7 +163,7 @@ export class WorkflowsProcessor extends WorkerHost {
                     });
 
                     if (result.status === 'waiting_event' && result.suspendData) {
-                        await this.prisma.workflowSuspension.create({
+                        await (this.prisma as any).workflowSuspension.create({
                             data: {
                                 workflowExecutionId: execution.id,
                                 stepId: currentNodeId,
@@ -201,7 +201,7 @@ export class WorkflowsProcessor extends WorkerHost {
             }
 
             // 5. Finalizar execução no banco
-            await this.prisma.workflowExecution.update({
+            await (this.prisma as any).workflowExecution.update({
                 where: { id: execution.id },
                 data: {
                     status: 'success',
@@ -217,7 +217,7 @@ export class WorkflowsProcessor extends WorkerHost {
             // A1: Atualizar execução para 'failed' em caso de exceção
             if (execution?.id) {
                 try {
-                    await this.prisma.workflowExecution.update({
+                    await (this.prisma as any).workflowExecution.update({
                         where: { id: execution.id },
                         data: { status: 'failed' },
                     });

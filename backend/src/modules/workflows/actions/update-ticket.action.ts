@@ -26,7 +26,7 @@ export class UpdateTicketAction implements ActionExecutor {
             if (params.assignedUserId) updateData.assignedUserId = params.assignedUserId;
             if (params.mode) updateData.mode = params.mode;
 
-            const updatedTicket = await this.prisma.ticket.update({
+            const updatedTicket = await (this.prisma as any).ticket.update({
                 where: { id: ticketId },
                 data: updateData,
             });

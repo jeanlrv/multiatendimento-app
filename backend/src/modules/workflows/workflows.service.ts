@@ -29,7 +29,7 @@ export class WorkflowsService implements OnModuleInit {
     ============================================================ */
 
     async findActiveByEvent(event: string, companyId: string) {
-        return this.prisma.workflowRule.findMany({
+        return (this.prisma as any).workflowRule.findMany({
             where: {
                 companyId,
                 isActive: true,
@@ -49,7 +49,7 @@ export class WorkflowsService implements OnModuleInit {
     ============================================================ */
 
     async findAllRules(companyId: string) {
-        return this.prisma.workflowRule.findMany({
+        return (this.prisma as any).workflowRule.findMany({
             where: { companyId },
             include: {
                 _count: { select: { executions: true } },
@@ -59,7 +59,7 @@ export class WorkflowsService implements OnModuleInit {
     }
 
     async createRule(companyId: string, data: CreateWorkflowDto) {
-        return this.prisma.workflowRule.create({
+        return (this.prisma as any).workflowRule.create({
             data: {
                 name: data.name,
                 description: data.description || '',
@@ -77,11 +77,11 @@ export class WorkflowsService implements OnModuleInit {
 
     async updateRule(id: string, companyId: string, data: UpdateWorkflowDto) {
         // Garantir que pertence à empresa
-        await this.prisma.workflowRule.findFirstOrThrow({
+        await (this.prisma as any).workflowRule.findFirstOrThrow({
             where: { id, companyId }
         });
 
-        return this.prisma.workflowRule.update({
+        return (this.prisma as any).workflowRule.update({
             where: { id },
             data: data as any,
         });
@@ -89,17 +89,17 @@ export class WorkflowsService implements OnModuleInit {
 
     async deleteRule(id: string, companyId: string) {
         // Garantir que pertence à empresa
-        await this.prisma.workflowRule.findFirstOrThrow({
+        await (this.prisma as any).workflowRule.findFirstOrThrow({
             where: { id, companyId }
         });
 
-        return this.prisma.workflowRule.delete({
+        return (this.prisma as any).workflowRule.delete({
             where: { id },
         });
     }
 
     async duplicateRule(id: string, companyId: string) {
-        const original = await this.prisma.workflowRule.findFirst({
+        const original = await (this.prisma as any).workflowRule.findFirst({
             where: { id, companyId },
         });
 
@@ -107,7 +107,7 @@ export class WorkflowsService implements OnModuleInit {
 
         const { id: _, createdAt, updatedAt, runCount, ...data } = original;
 
-        return this.prisma.workflowRule.create({
+        return (this.prisma as any).workflowRule.create({
             data: {
                 ...data,
                 companyId,
@@ -133,14 +133,14 @@ export class WorkflowsService implements OnModuleInit {
         const skip = (page - 1) * limit;
 
         const [items, total] = await Promise.all([
-            this.prisma.workflowExecution.findMany({
+            (this.prisma as any).workflowExecution.findMany({
                 where,
                 include: { workflowRule: true },
                 orderBy: { executedAt: 'desc' },
                 take: limit,
                 skip,
             }),
-            this.prisma.workflowExecution.count({ where }),
+            (this.prisma as any).workflowExecution.count({ where }),
         ]);
 
         return { items, total };
@@ -148,8 +148,8 @@ export class WorkflowsService implements OnModuleInit {
 
     async getRuleStats(id: string, companyId: string) {
         const [total, failures] = await Promise.all([
-            this.prisma.workflowExecution.count({ where: { workflowRuleId: id, companyId } }),
-            this.prisma.workflowExecution.count({ where: { workflowRuleId: id, status: 'failed', companyId } }),
+            (this.prisma as any).workflowExecution.count({ where: { workflowRuleId: id, companyId } }),
+            (this.prisma as any).workflowExecution.count({ where: { workflowRuleId: id, status: 'failed', companyId } }),
         ]);
 
         return {
@@ -161,12 +161,12 @@ export class WorkflowsService implements OnModuleInit {
 
     async getAllRuleStats(companyId: string) {
         const [totals, failures] = await Promise.all([
-            this.prisma.workflowExecution.groupBy({
+            (this.prisma as any).workflowExecution.groupBy({
                 by: ['workflowRuleId'],
                 where: { companyId },
                 _count: { id: true },
             }),
-            this.prisma.workflowExecution.groupBy({
+            (this.prisma as any).workflowExecution.groupBy({
                 by: ['workflowRuleId'],
                 where: { companyId, status: 'failed' },
                 _count: { id: true },
@@ -191,9 +191,9 @@ export class WorkflowsService implements OnModuleInit {
 
     async getAnalytics(companyId: string) {
         const [total, failures, durationAgg] = await Promise.all([
-            this.prisma.workflowExecution.count({ where: { companyId } }),
-            this.prisma.workflowExecution.count({ where: { companyId, status: 'failed' } }),
-            this.prisma.workflowExecution.aggregate({
+            (this.prisma as any).workflowExecution.count({ where: { companyId } }),
+            (this.prisma as any).workflowExecution.count({ where: { companyId, status: 'failed' } }),
+            (this.prisma as any).workflowExecution.aggregate({
                 where: { companyId },
                 _avg: { duration: true },
             }),
@@ -212,11 +212,11 @@ export class WorkflowsService implements OnModuleInit {
 
     async findAllVersions(workflowId: string, companyId: string) {
         // Garantir que o workflow pertence à empresa
-        await this.prisma.workflowRule.findFirstOrThrow({
+        await (this.prisma as any).workflowRule.findFirstOrThrow({
             where: { id: workflowId, companyId }
         });
 
-        return this.prisma.workflowVersion.findMany({
+        return (this.prisma as any).workflowVersion.findMany({
             where: { workflowId },
             orderBy: { version: 'desc' },
         });
@@ -228,28 +228,28 @@ export class WorkflowsService implements OnModuleInit {
         description: string,
         userId: string,
     ) {
-        const rule = await this.prisma.workflowRule.findFirst({
+        const rule = await (this.prisma as any).workflowRule.findFirst({
             where: { id, companyId },
         });
 
         if (!rule)
             throw new NotFoundException('Workflow rule not found');
 
-        const [version] = await this.prisma.$transaction([
-            this.prisma.workflowVersion.create({
+        const [version] = await (this.prisma as any).$transaction([
+            (this.prisma as any).workflowVersion.create({
                 data: {
                     workflowId: id,
                     version: rule.version + 1,
                     trigger: rule.trigger as any,
                     actions: rule.actions as any,
-                    nodes: rule.nodes as any,
-                    edges: rule.edges as any,
+                    nodes: (rule as any).nodes,
+                    edges: (rule as any).edges,
                     description,
                     commitMessage: description,
                     createdBy: userId,
                 } as any,
             }),
-            this.prisma.workflowRule.update({
+            (this.prisma as any).workflowRule.update({
                 where: { id },
                 data: { version: { increment: 1 } },
             }),
@@ -259,7 +259,7 @@ export class WorkflowsService implements OnModuleInit {
     }
 
     async restoreVersion(id: string, companyId: string, versionId: string) {
-        const version = await this.prisma.workflowVersion.findUnique({
+        const version = await (this.prisma as any).workflowVersion.findUnique({
             where: { id: versionId },
         });
 
@@ -268,11 +268,11 @@ export class WorkflowsService implements OnModuleInit {
         }
 
         // Garantir que o workflow pertence à empresa
-        await this.prisma.workflowRule.findFirstOrThrow({
+        await (this.prisma as any).workflowRule.findFirstOrThrow({
             where: { id, companyId }
         });
 
-        return this.prisma.workflowRule.update({
+        return (this.prisma as any).workflowRule.update({
             where: { id },
             data: {
                 trigger: version.trigger,
@@ -293,7 +293,7 @@ export class WorkflowsService implements OnModuleInit {
         let edges = data.edges || [];
 
         if (nodes.length === 0 && data.ruleId) {
-            const rule = await this.prisma.workflowRule.findFirst({
+            const rule = await (this.prisma as any).workflowRule.findFirst({
                 where: { id: data.ruleId, companyId },
             });
 
@@ -393,7 +393,7 @@ export class WorkflowsService implements OnModuleInit {
     ============================================================ */
 
     async runManual(id: string, companyId: string) {
-        const rule = await this.prisma.workflowRule.findFirst({
+        const rule = await (this.prisma as any).workflowRule.findFirst({
             where: { id, companyId },
         });
 
@@ -430,7 +430,7 @@ export class WorkflowsService implements OnModuleInit {
 
     async checkTimeouts() {
         const now = new Date();
-        const expired = await this.prisma.workflowSuspension.findMany({
+        const expired = await (this.prisma as any).workflowSuspension.findMany({
             where: {
                 timeoutAt: { lte: now }
             },
@@ -451,13 +451,13 @@ export class WorkflowsService implements OnModuleInit {
                 payload: { timeout: true },
             });
 
-            await this.prisma.workflowSuspension.delete({ where: { id: suspension.id } });
+            await (this.prisma as any).workflowSuspension.delete({ where: { id: suspension.id } });
         }
     }
 
     async seedDefaultAeroWorkflow(companyId: string, aiAgentId?: string) {
         // 1. Verificar se já existe um Aero Flow ativo
-        const existing = await this.prisma.workflowRule.findFirst({
+        const existing = await (this.prisma as any).workflowRule.findFirst({
             where: { companyId, name: 'Aero Default Flow (V1)' },
         });
 
@@ -477,7 +477,7 @@ export class WorkflowsService implements OnModuleInit {
         this.logger.log(`Seeding Aero Default Flow for company ${companyId}`);
 
         // 3. Criar o Grafo do Aero Flow
-        return this.prisma.workflowRule.create({
+        return (this.prisma as any).workflowRule.create({
             data: {
                 name: 'Aero Default Flow (V1)',
                 description: 'Fluxo completo: Recepção IA, Transferência de Setor e Análise Sentimental após 30min.',

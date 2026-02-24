@@ -20,7 +20,7 @@ export class AIIntentAction implements ActionExecutor {
         let lastMessage = context.payload?.content || context.payload?.body;
 
         if (!lastMessage && context.entityType === 'ticket') {
-            const ticket = await this.prisma.ticket.findUnique({
+            const ticket = await (this.prisma as any).ticket.findUnique({
                 where: { id: context.entityId },
                 include: { messages: { orderBy: { sentAt: 'desc' }, take: 1 } }
             });

@@ -30,7 +30,7 @@ export class AIRespondAction implements ActionExecutor {
             let lastMessage = context.payload?.content || context.payload?.body;
 
             if (!lastMessage) {
-                const ticket = await this.prisma.ticket.findUnique({
+                const ticket = await (this.prisma as any).ticket.findUnique({
                     where: { id: ticketId },
                     include: { messages: { orderBy: { sentAt: 'desc' }, take: 1 } }
                 });
@@ -58,7 +58,7 @@ export class AIRespondAction implements ActionExecutor {
             }
 
             // 4. Enviar mensagem
-            const ticketDetail = await this.prisma.ticket.findUnique({
+            const ticketDetail = await (this.prisma as any).ticket.findUnique({
                 where: { id: ticketId },
                 include: { contact: true },
             });
@@ -75,7 +75,7 @@ export class AIRespondAction implements ActionExecutor {
             );
 
             // 5. Salvar mensagem no banco
-            const createdMessage = await this.prisma.message.create({
+            const createdMessage = await (this.prisma as any).message.create({
                 data: {
                     ticketId,
                     content: aiResponse,
@@ -88,7 +88,7 @@ export class AIRespondAction implements ActionExecutor {
             });
 
             // 6. Atualizar ticket
-            await this.prisma.ticket.update({
+            await (this.prisma as any).ticket.update({
                 where: { id: ticketId },
                 data: {
                     updatedAt: new Date(),

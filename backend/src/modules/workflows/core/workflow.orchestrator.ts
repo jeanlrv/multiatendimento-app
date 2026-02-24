@@ -124,7 +124,7 @@ export class WorkflowOrchestrator {
 
     private async updateMetrics(workflowId: string, nodeId: string, actionType: string, status: 'completed' | 'failed', duration: number) {
         try {
-            const stats = await this.prisma.workflowActionMetric.findUnique({
+            const stats = await (this.prisma as any).workflowActionMetric.findUnique({
                 where: {
                     workflowRuleId_nodeId_actionType: {
                         workflowRuleId: workflowId,
@@ -142,7 +142,7 @@ export class WorkflowOrchestrator {
                 const currentAvg = stats.averageDuration || 0;
                 const newAverageDuration = ((currentAvg * (totalExecutions - 1)) + duration) / totalExecutions;
 
-                await this.prisma.workflowActionMetric.update({
+                await (this.prisma as any).workflowActionMetric.update({
                     where: { id: stats.id },
                     data: {
                         totalExecutions,
@@ -152,7 +152,7 @@ export class WorkflowOrchestrator {
                     },
                 });
             } else {
-                await this.prisma.workflowActionMetric.create({
+                await (this.prisma as any).workflowActionMetric.create({
                     data: {
                         workflowRuleId: workflowId,
                         nodeId: nodeId,

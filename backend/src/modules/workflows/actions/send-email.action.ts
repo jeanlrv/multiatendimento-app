@@ -20,13 +20,13 @@ export class SendEmailAction implements ActionExecutor {
         // Try to resolve "to" from context if not provided manually
         if (!to) {
             if (context.entityType === 'ticket' && context.entityId) {
-                const ticket = await this.prisma.ticket.findUnique({
+                const ticket = await (this.prisma as any).ticket.findUnique({
                     where: { id: context.entityId },
                     include: { contact: true }
                 });
                 to = ticket?.contact?.email;
             } else if (context.entityType === 'contact' && context.entityId) {
-                const contact = await this.prisma.contact.findUnique({
+                const contact = await (this.prisma as any).contact.findUnique({
                     where: { id: context.entityId }
                 });
                 to = contact?.email;

@@ -34,7 +34,7 @@ export class SendMessageAction implements ActionExecutor {
             }
 
             // Create the message in the database
-            const ticket = await this.prisma.ticket.findUnique({
+            const ticket = await (this.prisma as any).ticket.findUnique({
                 where: { id: ticketId },
                 include: { contact: true },
             });
@@ -60,7 +60,7 @@ export class SendMessageAction implements ActionExecutor {
                 context.companyId,
             );
 
-            const createdMessage = await this.prisma.message.create({
+            const createdMessage = await (this.prisma as any).message.create({
                 data: {
                     ticketId,
                     content: resolvedMessage,
@@ -73,7 +73,7 @@ export class SendMessageAction implements ActionExecutor {
             });
 
             // Update ticket timestamps
-            await this.prisma.ticket.update({
+            await (this.prisma as any).ticket.update({
                 where: { id: ticketId },
                 data: {
                     updatedAt: new Date(),

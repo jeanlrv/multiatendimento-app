@@ -20,7 +20,7 @@ export class TransferToHumanAction implements ActionExecutor {
 
         try {
             // Check if ticket exists
-            const ticket = await this.prisma.ticket.findUnique({
+            const ticket = await (this.prisma as any).ticket.findUnique({
                 where: { id: ticketId }
             });
 
@@ -44,7 +44,7 @@ export class TransferToHumanAction implements ActionExecutor {
             }
 
             // Update ticket
-            await this.prisma.ticket.update({
+            await (this.prisma as any).ticket.update({
                 where: { id: ticketId },
                 data: updateData
             });

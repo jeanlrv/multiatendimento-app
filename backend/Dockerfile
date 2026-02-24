@@ -16,7 +16,7 @@ COPY . .
 RUN DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy" npx prisma generate
 
 # Compilar a aplicação NestJS
-RUN npm run build
+RUN npm run build && find /app -name main.js
 
 # Stage 2 - Production
 FROM node:18-alpine
@@ -32,7 +32,8 @@ RUN npm install --omit=dev --legacy-peer-deps
 # Copiar artefatos do estágio builder
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package*.json ./
 
 # Copiar e configurar o entrypoint para rodar migrações
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
