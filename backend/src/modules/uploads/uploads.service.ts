@@ -6,7 +6,7 @@ export class UploadsService {
     constructor(private configService: ConfigService) { }
 
     getPublicUrl(filename: string) {
-        const port = this.configService.get<string>('PORT', '3002');
+        const port = this.configService.get<string>('PORT', '3000');
         const baseUrl = this.configService.get<string>('API_URL', `http://localhost:${port}`);
         return `${baseUrl}/public/uploads/${filename}`;
     }

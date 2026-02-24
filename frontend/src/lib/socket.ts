@@ -1,6 +1,6 @@
 import { io, Socket } from 'socket.io-client';
 
-const BASE_URL = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:3002';
+const BASE_URL = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:3000';
 
 const sockets: Record<string, Socket> = {};
 

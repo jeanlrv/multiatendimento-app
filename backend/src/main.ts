@@ -103,7 +103,7 @@ async function bootstrap() {
         res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
     });
 
-    const port = process.env.PORT || 3002;
+    const port = process.env.PORT || 3000;
     await app.listen(port, '0.0.0.0');
 
     logger.log(`🚀 Servidor iniciado na porta ${port}`);
