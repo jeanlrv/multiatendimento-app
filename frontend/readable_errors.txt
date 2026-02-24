@@ -1,0 +1,11 @@
+﻿src/app/dashboard/tickets/page.tsx(1363,45): error TS2322: Type 'string | undefined' is not assignable to type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+
+src/app/dashboard/workflows/builder/WorkflowBuilder.tsx(153,17): error TS2322: Type '{ actionType?: string | undefined; label: string; }' is not assignable to type 'NodeData'.
+  Types of property 'actionType' are incompatible.
+
+src/app/dashboard/workflows/hooks/useWorkflows.ts(33,26): error TS2345: Argument of type 'Record<string, { totalExecutions: number; totalFailures: number; successRate: number; }>' is not assignable to parameter of type 'SetStateAction<Record<string, WorkflowStats>>'.
+src/app/dashboard/workflows/page.tsx(480,49): error TS7006: Parameter 'exec' implicitly has an 'any' type.
+
+src/app/dashboard/workflows/page.tsx(480,49): error TS7006: Parameter 'exec' implicitly has an 'any' type.
+

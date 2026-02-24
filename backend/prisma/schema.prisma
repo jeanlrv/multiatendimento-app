@@ -1,0 +1,875 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// COMPOSIÇÃO DE EMPRESA
+// ============================================
+
+model Role {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  permissions String[] 
+  companyId   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company     Company  @relation(fields: [companyId], references: [id])
+  users       User[]
+
+  @@unique([companyId, name])
+  @@map("roles")
+}
+
+model User {
+  id                  String   @id @default(uuid())
+  email               String   @unique
+  password            String
+  name                String
+  avatar              String?
+  roleId              String
+  role                Role     @relation(fields: [roleId], references: [id])
+  isActive            Boolean  @default(true)
+  companyId           String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  company           Company?            @relation(fields: [companyId], references: [id])
+
+  assignedTickets Ticket[]       @relation("AssignedUser")
+  deletedMessages Message[]      @relation("DeletedBy")
+  auditLogs       AuditLog[]
+  refreshTokens   RefreshToken[]
+  departments     UserDepartment[]
+  schedules       Schedule[]
+  workflowVersions WorkflowVersion[]
+  
+  // Relações do Hub de Colaboração (Épico 4)
+  internalChatMembers  InternalChatMember[]
+  internalChatMessages InternalChatMessage[]
+  savedFilters         SavedFilter[]
+  notifications        Notification[]
+
+  @@index([email])
+  @@map("users")
+}
+
+model UserDepartment {
+  id            String   @id @default(uuid())
+  userId        String
+  departmentId  String
+
+  user          User       @relation(fields: [userId], references: [id])
+  department    Department @relation(fields: [departmentId], references: [id])
+
+  @@unique([userId, departmentId])
+  @@map("user_departments")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+  @@map("refresh_tokens")
+}
+
+// ============================================
+// DEPARTAMENTOS E FLUXOS
+// ============================================
+
+enum TicketMode {
+  AI
+  HUMANO
+  HIBRIDO
+}
+
+model Department {
+  id                String   @id @default(uuid())
+  name              String
+  description       String?
+  emoji             String?  @default("💬")
+  color             String   @default("#2563eb")
+  displayOrder      Int      @default(0)
+  
+  aiAgentId         String?
+  workflowId        String?
+  defaultMode       TicketMode @default(AI)
+  
+  slaFirstResponseMin Int?
+  slaResolutionMin    Int?
+  
+  outOfHoursMessage   String?  @db.Text
+  greetingMessage     String?  @db.Text
+  businessHours     Json?
+  autoDistribute    Boolean  @default(true)
+  isActive          Boolean  @default(true)
+  companyId         String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  company           Company              @relation(fields: [companyId], references: [id])
+  aiAgent           AIAgent?             @relation(fields: [aiAgentId], references: [id])
+
+  users               UserDepartment[]
+  tickets             Ticket[]
+  whatsappInstances   WhatsAppInstance[]
+  flow                DepartmentFlow?
+  scheduleConfig      ScheduleConfig?
+  Schedule            Schedule[]
+
+  @@unique([companyId, name])
+  @@index([companyId])
+  @@index([displayOrder])
+  @@map("departments")
+}
+
+model DepartmentFlow {
+  id           String   @id @default(uuid())
+  departmentId String   @unique
+  states       Json
+  transitions  Json
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  department Department @relation(fields: [departmentId], references: [id])
+
+  @@map("department_flows")
+}
+
+// ============================================
+// WHATSAPP
+// ============================================
+
+model WhatsAppInstance {
+  id             String           @id @default(uuid())
+  name           String
+  phoneNumber    String?          @unique
+  zapiInstanceId String?          @unique
+  zapiToken      String?
+  status         String           @default("DESCONECTADO")
+  qrCode         String?
+  lastSeenAt     DateTime?
+  isActive       Boolean          @default(true)
+  companyId      String
+  departmentId   String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  company     Company      @relation(fields: [companyId], references: [id])
+  department  Department?  @relation(fields: [departmentId], references: [id])
+  tickets     Ticket[]
+
+  @@index([companyId])
+  @@map("whatsapp_instances")
+}
+
+// WhatsAppConnection mantido apenas para referência se necessário ou removido se WhatsAppInstance assumir totalmente
+// Removendo WhatsAppConnection para evitar dualidade
+
+enum ConnectionStatus {
+  CONNECTED
+  DISCONNECTED
+  ERROR
+}
+
+// ============================================
+// CONTATOS E CRM
+// ============================================
+
+model Contact {
+  id             String   @id @default(uuid())
+  phoneNumber    String
+  name           String?
+  email          String?
+  profilePicture String?
+  notes          String?
+  information    String?  @db.Text
+  riskScore      Float    @default(0.0)
+  companyId      String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  company   Company  @relation(fields: [companyId], references: [id])
+  tickets   Ticket[]
+  schedules Schedule[]
+
+  @@index([phoneNumber])
+  @@index([riskScore])
+  @@index([companyId])
+  @@map("contacts")
+}
+
+enum PlanTier {
+  STARTER
+  PRO
+  ENTERPRISE
+}
+
+model Company {
+  id                  String               @id @default(uuid())
+  name                String
+  plan                PlanTier             @default(STARTER)
+  maxUsers            Int                  @default(3)
+  maxDepartments      Int                  @default(1)
+  maxWhatsApp         Int                  @default(1)
+  expiresAt           DateTime?
+  
+  contacts            Contact[]
+  users               User[]
+  departments         Department[]
+  whatsappInstances   WhatsAppInstance[]
+  tickets             Ticket[]
+  schedules           Schedule[]
+  aiAgents            AIAgent[]
+  evaluations         Evaluation[]
+  integrations        Integration[]
+  tags                Tag[]
+  workflowRules       WorkflowRule[]
+  workflowExecutions  WorkflowExecution[]
+  settings            Setting[]
+  smtpConfigs         SMTPConfig[]
+  auditLogs           AuditLog[]
+  roles               Role[]
+  limitTokens         Int                  @default(100000)
+  logoUrl             String?
+  primaryColor        String               @default("#3B82F6") // Padrão KSZap Blue
+  secondaryColor      String               @default("#1E293B") // Padrão Slate 800
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+
+  // Relações do Hub de Colaboração (Épico 4 e 2.2)
+  internalChats       InternalChat[]
+  savedFilters        SavedFilter[]
+
+  @@map("companies")
+}
+
+// ============================================
+// TICKETS
+// ============================================
+
+model Ticket {
+  id               String         @id @default(uuid())
+  contactId        String
+  departmentId     String
+  connectionId     String?        // Opcional se usar WhatsAppInstance
+  assignedUserId   String?
+  status           TicketStatus   @default(OPEN)
+  priority         TicketPriority @default(MEDIUM)
+  mode             TicketMode     @default(AI)
+  subject          String?
+  unreadMessages   Int            @default(0)
+  currentFlowState String?
+  companyId        String
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  closedAt         DateTime?
+  firstResponseAt  DateTime?
+  resolvedAt       DateTime?
+  lastMessageAt    DateTime?      @default(now())
+  summary          String?        @db.Text
+
+  company      Company            @relation(fields: [companyId], references: [id])
+
+  contact      Contact            @relation(fields: [contactId], references: [id])
+  department   Department         @relation(fields: [departmentId], references: [id])
+  assignedUser User?              @relation("AssignedUser", fields: [assignedUserId], references: [id])
+  whatsappInstance WhatsAppInstance? @relation(fields: [connectionId], references: [id])
+
+  messages   Message[]
+  tags       TicketTag[]
+  evaluation Evaluation?
+
+  @@index([companyId, status])
+  @@index([companyId, updatedAt])
+  @@index([companyId, departmentId])
+  @@index([departmentId])
+  @@index([lastMessageAt])
+  @@index([contactId])
+  @@index([assignedUserId])
+  @@index([status])
+  @@index([companyId])
+  @@map("tickets")
+}
+
+enum TicketStatus {
+  OPEN
+  PENDING
+  IN_PROGRESS
+  PAUSED
+  WAITING
+  RESOLVED
+  CANCELLED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+// ============================================
+// MENSAGENS
+// ============================================
+
+model Message {
+  id            String        @id @default(uuid())
+  ticketId      String
+  externalId    String?       @unique
+  fromMe        Boolean
+  origin        MessageOrigin @default(AGENT)
+  messageType   MessageType
+  content       String?
+  mediaUrl      String?
+  status        MessageStatus @default(PENDING)
+  isDeleted     Boolean       @default(false)
+  deletedById   String?
+  sentAt        DateTime      @default(now())
+  deliveredAt   DateTime?
+  readAt        DateTime?
+  transcription String?       @db.Text
+
+  ticket    Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  deletedBy User?  @relation("DeletedBy", fields: [deletedById], references: [id])
+
+  @@index([ticketId])
+  @@index([externalId])
+  @@index([status])
+  @@index([origin])
+  @@map("messages")
+}
+
+enum MessageOrigin {
+  CLIENT
+  AGENT
+  AI
+}
+
+enum MessageStatus {
+  PENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  AUDIO
+  VIDEO
+  DOCUMENT
+  STICKER
+  LOCATION
+  CONTACT
+  INTERNAL
+}
+
+// ============================================
+// TAGS
+// ============================================
+
+model Tag {
+  id        String   @id @default(uuid())
+  name      String
+  color     String   @default("#3B82F6")
+  companyId String
+  createdAt DateTime @default(now())
+
+  company Company     @relation(fields: [companyId], references: [id])
+  tickets TicketTag[]
+
+  @@unique([companyId, name])
+  @@index([companyId])
+  @@map("tags")
+}
+
+model TicketTag {
+  ticketId String
+  tagId    String
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([ticketId, tagId])
+  @@map("ticket_tags")
+}
+
+// ============================================
+// IA (AnythingLLM)
+// ============================================
+
+model AIAgent {
+  id                     String   @id @default(uuid())
+  name                   String
+  description            String?
+  anythingllmWorkspaceId String
+  configuration          Json?
+  isActive               Boolean  @default(true)
+  companyId              String
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  company     Company      @relation(fields: [companyId], references: [id])
+  departments Department[]
+
+  @@index([companyId])
+  @@map("ai_agents")
+}
+
+// ============================================
+// AVALIAÇÕES
+// ============================================
+
+model Evaluation {
+  id                String    @id @default(uuid())
+  ticketId          String    @unique
+  customerRating    Int?
+  customerFeedback  String?
+  aiSentiment       Sentiment
+  aiSentimentScore  Float
+  aiSummary         String
+  aiJustification   String
+  workflowTriggered Boolean   @default(false)
+  companyId         String
+  createdAt         DateTime  @default(now())
+
+  ticket  Ticket  @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@index([aiSentimentScore])
+  @@index([companyId])
+  @@map("evaluations")
+}
+
+enum Sentiment {
+  POSITIVE
+  NEUTRAL
+  NEGATIVE
+}
+
+// ============================================
+// WORKFLOWS ADVANCED
+// ============================================
+
+model WorkflowRule {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  trigger     Json
+  actions     Json
+  priority    Int      @default(0)
+  isActive    Boolean  @default(true)
+  isTemplate  Boolean  @default(false)
+  nodes       Json?    // Estrutura de Grafo (Nodes)
+  edges       Json?    // Estrutura de Grafo (Edges)
+  config      Json?    // Configurações avançadas (concurrency, timeout, etc)
+  runCount    Int      @default(0)
+  environment String   @default("PRODUCTION") // PRODUCTION, TEST
+  version     Int      @default(1)
+  companyId   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company       Company                @relation(fields: [companyId], references: [id])
+  executions    WorkflowExecution[]
+  versions      WorkflowVersion[]
+  actionMetrics WorkflowActionMetric[]
+
+  @@index([companyId])
+  @@index([isActive])
+  @@index([isTemplate])
+  @@map("workflow_rules")
+}
+
+model WorkflowVersion {
+  id             String   @id @default(uuid())
+  workflowId     String
+  version        Int
+  trigger        Json
+  actions        Json
+  nodes          Json?    // Grafo visual — nós
+  edges          Json?    // Grafo visual — arestas
+  description    String?
+  diff           Json?    // JSON Patch da diferença
+  commitMessage  String?  // Comentário obrigatório da versão
+  userId         String?  // Quem criou a versão
+  createdAt      DateTime @default(now())
+  createdBy      String?  // Mantido para compatibilidade ou string livre
+
+  workflow       WorkflowRule @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  user           User?        @relation(fields: [userId], references: [id])
+
+  @@index([workflowId])
+  @@map("workflow_rule_versions")
+}
+
+model WorkflowExecution {
+  id             String   @id @default(uuid())
+  workflowRuleId String
+  entityType     String
+  entityId       String
+  status         String   // success, partial, failed
+  steps          Json
+  result         Json?
+  logs           Json?    // Logs estruturados detalhados
+  duration       Int?     // Tempo de execução em ms
+  retryCount     Int      @default(0)
+  correlationId  String?  @unique @default(uuid())
+  companyId      String
+  executedAt     DateTime @default(now())
+
+  company      Company             @relation(fields: [companyId], references: [id])
+  workflowRule WorkflowRule        @relation(fields: [workflowRuleId], references: [id], onDelete: Cascade)
+  suspensions  WorkflowSuspension[]
+
+  @@index([companyId])
+  @@index([workflowRuleId])
+  @@index([entityId])
+  @@index([status])
+  @@index([executedAt])
+  @@map("workflow_executions")
+}
+
+model WorkflowSuspension {
+  id                  String   @id @default(uuid())
+  workflowExecutionId String
+  stepId              String
+  eventName           String
+  correlationKey      String?
+  timeoutAt           DateTime?
+  metadata            Json?
+  createdAt           DateTime @default(now())
+
+  execution WorkflowExecution @relation(fields: [workflowExecutionId], references: [id], onDelete: Cascade)
+
+  @@index([eventName, correlationKey])
+  @@index([workflowExecutionId])
+  @@map("workflow_suspensions")
+}
+
+model WorkflowActionMetric {
+  id              String    @id @default(uuid())
+  workflowRuleId  String
+  nodeId          String?   // ID do nó no grafo para métricas granulares
+  actionType      String
+  totalExecutions Int       @default(0)
+  totalFailures   Int       @default(0)
+  averageDuration Float     @default(0)
+  lastExecutedAt  DateTime?
+  updatedAt       DateTime  @updatedAt
+
+  workflowRule WorkflowRule @relation(fields: [workflowRuleId], references: [id], onDelete: Cascade)
+
+  @@unique([workflowRuleId, nodeId, actionType])
+  @@index([actionType])
+  @@index([nodeId])
+  @@map("workflow_action_metrics")
+}
+
+// ============================================
+// AGENDAMENTO (CLINICAS / SERVIÇOS)
+// ============================================
+
+model ScheduleConfig {
+  id                 String   @id @default(uuid())
+  departmentId       String   @unique
+  slotDuration       Int      @default(30)
+  businessHours      Json
+  maxSchedulesPerDay Int?
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  department Department @relation(fields: [departmentId], references: [id])
+
+  @@map("schedule_configs")
+}
+
+model Schedule {
+  id           String         @id @default(uuid())
+  contactId    String
+  departmentId String
+  userId       String?
+  startTime    DateTime
+  endTime      DateTime
+  status       ScheduleStatus @default(PENDING)
+  notes        String?        @db.Text
+  companyId    String
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  company    Company            @relation(fields: [companyId], references: [id])
+
+  contact    Contact            @relation(fields: [contactId], references: [id])
+  department Department         @relation(fields: [departmentId], references: [id])
+  user       User?              @relation(fields: [userId], references: [id])
+  reminders  ScheduleReminder[]
+
+  @@index([contactId])
+  @@index([departmentId])
+  @@index([startTime])
+  @@index([companyId])
+  @@map("schedules")
+}
+
+model ScheduleReminder {
+  id         String    @id @default(uuid())
+  scheduleId String
+  type       String
+  remindAt   DateTime
+  sentAt     DateTime?
+  status     String    @default("PENDING")
+
+  schedule Schedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+
+  @@index([scheduleId])
+  @@map("schedule_reminders")
+}
+
+enum ScheduleStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  FINISHED
+  NOSHOW
+}
+
+// ============================================
+// AUDITORIA E CONFIGURAÇÕES
+// ============================================
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  companyId String?
+  action    String
+  entity    String
+  entityId  String
+  changes   Json?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  user    User?    @relation(fields: [userId], references: [id])
+  company Company? @relation(fields: [companyId], references: [id])
+
+  @@index([userId])
+  @@index([companyId])
+  @@map("audit_logs")
+}
+
+model Setting {
+  id          String   @id @default(uuid())
+  companyId   String
+  key         String
+  value       Json
+  description String?
+  updatedAt   DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@unique([companyId, key])
+  @@index([companyId])
+  @@map("settings")
+}
+
+// ============================================
+// FEATURE FLAGS & ROLLOUT
+// ============================================
+
+model FeatureFlag {
+  id                String   @id @default(uuid())
+  key               String   @unique
+  description       String?
+  isEnabled         Boolean  @default(false)
+  rolloutPercentage Int      @default(0) // 0 a 100
+  targetTenants     String[] // Department IDs or User IDs enabled
+  excludedTenants   String[] // IDs explicitly excluded
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@map("feature_flags")
+}
+
+model SMTPConfig {
+  id        String   @id @default(uuid())
+  companyId String
+  name      String
+  host      String
+  port      Int
+  user      String
+  password  String
+  fromEmail String
+  fromName  String
+  isDefault Boolean  @default(false)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@index([companyId])
+  @@map("smtp_configs")
+}
+model Integration {
+  id                String   @id @default(uuid())
+  name              String   // Ex: "Z-API Comercial"
+  provider          String   // "ZAPI"
+  zapiInstanceId    String
+  zapiToken         String
+  zapiClientToken   String?  // Client-Token de segurança da Z-API (Security Token)
+  webhookUrl        String?  // URL do webhook registrada na Z-API
+  isActive          Boolean  @default(true)
+  companyId         String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@index([companyId])
+  @@map("integrations")
+}
+
+model AIUsage {
+  id        String   @id @default(uuid())
+  companyId String
+  tokens    Int
+  cost      Float    @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([companyId])
+  @@index([createdAt])
+  @@map("ai_usage")
+}
+
+model CannedResponse {
+  id        String   @id @default(uuid())
+  companyId String
+  title     String
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([companyId])
+  @@map("canned_responses")
+}
+// ============================================
+// MENSAGERIA INTERNA (HUB DE COLABORAÇÃO)
+// ============================================
+
+enum InternalChatType {
+  DIRECT
+  GROUP
+}
+
+model InternalChat {
+  id        String           @id @default(uuid())
+  name      String?          // Nome apenas para grupos
+  type      InternalChatType @default(DIRECT)
+  companyId String
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  company  Company              @relation(fields: [companyId], references: [id])
+  members  InternalChatMember[]
+  messages InternalChatMessage[]
+
+  @@map("internal_chats")
+}
+
+model InternalChatMember {
+  id        String   @id @default(uuid())
+  chatId    String
+  userId    String
+  role      String   @default("MEMBER") // ADMIN, MEMBER
+  createdAt DateTime @default(now())
+
+  chat      InternalChat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  user      User         @relation(fields: [userId], references: [id])
+
+  @@unique([chatId, userId])
+  @@map("internal_chat_members")
+}
+
+model InternalChatMessage {
+  id          String    @id @default(uuid())
+  chatId      String
+  senderId    String
+  content     String?   @db.Text
+  mediaUrl    String?
+  type        MessageType @default(TEXT)
+  readAt      Json?     // Mapeamento de { userId: timestamp }
+  deliveredAt DateTime?
+  sentAt      DateTime  @default(now())
+
+  chat   InternalChat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  sender User         @relation(fields: [senderId], references: [id])
+
+  @@index([chatId])
+  @@index([senderId])
+  @@map("internal_chat_messages")
+}
+
+// ============================================
+// NOTIFICAÇÕES
+// ============================================
+
+model Notification {
+  id         String    @id @default(uuid())
+  userId     String    @map("user_id")
+  companyId  String    @map("company_id")
+  type       String    // ticket.assigned | ticket.mention | sla.breach | system
+  title      String
+  body       String?
+  entityType String?   @map("entity_type") // ticket | message | schedule
+  entityId   String?   @map("entity_id")
+  readAt     DateTime? @map("read_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+  @@index([companyId])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+// ============================================
+// FILTROS SALVOS (SMART VIEWS)
+// ============================================
+
+model SavedFilter {
+  id        String   @id @default(uuid())
+  name      String
+  userId    String
+  companyId String
+  filters   Json     // Filtros serializados
+  color     String?  @default("#3B82F6")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id])
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@index([userId])
+  @@index([companyId])
+  @@map("saved_filters")
+}

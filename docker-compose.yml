@@ -1,0 +1,147 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: whatsapp-postgres
+    environment:
+      POSTGRES_USER: whatsapp_user
+      POSTGRES_PASSWORD: whatsapp_pass
+      POSTGRES_DB: whatsapp_saas
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    # Porta exposta apenas em desenvolvimento local. Remover em produção.
+    ports:
+      - "127.0.0.1:5432:5432"
+    networks:
+      - app-network
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U whatsapp_user -d whatsapp_saas" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: whatsapp-redis
+    command: >
+      redis-server --appendonly yes --appendfsync everysec --requirepass ${REDIS_PASSWORD:?Defina REDIS_PASSWORD no .env}
+    # Porta exposta apenas em desenvolvimento local. Remover em produção.
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - app-network
+    healthcheck:
+      test: [ "CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping" ]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: ${BUILD_TARGET:-development}
+    container_name: whatsapp-backend
+    environment:
+      DATABASE_URL: postgresql://whatsapp_user:whatsapp_pass@postgres:5432/whatsapp_saas
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      JWT_EXPIRATION: ${JWT_EXPIRATION:-15m}
+      JWT_REFRESH_EXPIRATION: ${JWT_REFRESH_EXPIRATION:-7d}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: 3002
+      NODE_OPTIONS: "--max-old-space-size=2048"
+      ZAPI_BASE_URL: ${ZAPI_BASE_URL:-https://api.z-api.io}
+      BACKEND_PUBLIC_URL: ${BACKEND_PUBLIC_URL:-}
+      ANYTHINGLLM_API_URL: ${ANYTHINGLLM_API_URL:-http://host.docker.internal:3001}
+      ANYTHINGLLM_API_KEY: ${ANYTHINGLLM_API_KEY:-your-anythingllm-api-key}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+    ports:
+      - "127.0.0.1:3002:3002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    networks:
+      - app-network
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -sf http://localhost:3002/health || exit 1" ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: ${BUILD_TARGET:-development}
+    container_name: whatsapp-frontend
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3002}
+      NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-ws://localhost:3002}
+      NODE_OPTIONS: "--max-old-space-size=2048"
+      WATCHPACK_POLLING: "true"
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/next-build
+    networks:
+      - app-network
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -sf http://localhost:3000/ || exit 1" ]
+      interval: 20s
+      timeout: 5s
+      retries: 10
+      start_period: 120s
+
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    container_name: whatsapp-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/certs:/etc/nginx/certs
+    depends_on:
+      frontend:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    networks:
+      - app-network
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -skf https://localhost/health || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+volumes:
+  postgres_data:
+  redis_data:
+
+
+networks:
+  app-network:
+    driver: bridge

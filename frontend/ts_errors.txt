@@ -1,0 +1,6 @@
+﻿src/app/dashboard/tickets/page.tsx(844,58): error TS2339: Property 'information' does not exist on type '{ name: string; phoneNumber: string; }'.
+src/app/dashboard/tickets/page.tsx(848,102): error TS2339: Property 'information' does not exist on type '{ name: string; phoneNumber: string; }'.
+src/app/dashboard/tickets/page.tsx(854,46): error TS2304: Cannot find name 'Info'.
+src/app/dashboard/tickets/page.tsx(859,73): error TS2339: Property 'information' does not exist on type '{ name: string; phoneNumber: string; }'.
+src/app/dashboard/workflows/hooks/useWorkflows.ts(38,40): error TS2339: Property 'getAnalytics' does not exist on type '{ getRules(): Promise<WorkflowRule[]>; createRule(data: Partial<WorkflowRule>): Promise<WorkflowRule>; ... 9 more ...; restoreVersion(ruleId: string, versionId: string): Promise<...>; }'.
+src/app/dashboard/workflows/utils/workflow-converter.ts(2,59): error TS2307: Cannot find module '../../../../modules/workflows/types/workflow-graph.types' or its corresponding type declarations.
