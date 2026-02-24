@@ -126,9 +126,10 @@ export class WorkflowOrchestrator {
         try {
             const stats = await this.prisma.workflowActionMetric.findUnique({
                 where: {
-                    workflowRuleId_nodeId: {
+                    workflowRuleId_nodeId_actionType: {
                         workflowRuleId: workflowId,
                         nodeId: nodeId,
+                        actionType: actionType,
                     },
                 },
             });

@@ -31,6 +31,7 @@ export class AuditInterceptor implements NestInterceptor {
 
                 this.auditService.log({
                     userId: user.id,
+                    companyId: user.companyId,
                     action: method,
                     entity: entity,
                     entityId: data?.id || body?.id || 'N/A',
