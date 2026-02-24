@@ -38,7 +38,7 @@ RUN npx prisma generate
 RUN npm run build
 
 # Remover devDependencies após build
-RUN npm prune --omit=dev
+RUN npm prune --omit=dev --legacy-peer-deps
 
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN sed -i 's/\r$//' /usr/local/bin/entrypoint.sh
