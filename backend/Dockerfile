@@ -1,5 +1,5 @@
 # Stage 1 - Build
-FROM node:18-alpine AS builder
+FROM node:22-alpine AS builder
 
 # Instalar dependências necessárias para o Prisma
 RUN apk add --no-cache openssl libc6-compat
@@ -19,7 +19,7 @@ RUN DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy" npx prisma gene
 RUN npm run build && find /app -name main.js
 
 # Stage 2 - Production
-FROM node:18-alpine
+FROM node:22-alpine
 
 # Instalar dependências necessárias para o Prisma em runtime
 RUN apk add --no-cache openssl libc6-compat curl
