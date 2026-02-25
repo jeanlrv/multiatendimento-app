@@ -3,8 +3,8 @@ import * as bcrypt from 'bcryptjs';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 
-// Carregar variáveis de ambiente
-dotenv.config({ path: path.join(__dirname, '../../.env') });
+// Carregar variáveis de ambiente - Ajustado para a nova localização em src/prisma/seed.ts
+dotenv.config({ path: path.join(__dirname, '../../../.env') });
 
 const prisma = new PrismaClient();
 
@@ -499,8 +499,6 @@ async function main() {
     console.log('');
     console.log('🎉 Seed concluído com sucesso!');
     console.log('');
-    // SEGURANÇA: credenciais não são logadas em texto puro.
-    // Consulte o arquivo seed.ts para saber os e-mails de acesso.
     console.log('📧 Usuários criados: admin@kszap.com | supervisor@kszap.com | atendente@kszap.com');
     console.log('');
 }
