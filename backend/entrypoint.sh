@@ -17,6 +17,7 @@ echo "📦 Executando Prisma migrate deploy..."
   echo "⚠️ Erro no migrate deploy. Tentando resolver migrações falhas conhecidas (P3009)..."
   ./node_modules/.bin/prisma migrate resolve --applied 20260222000001_sync_schema_roles_collaboration || true
   ./node_modules/.bin/prisma migrate resolve --applied 20260222000002_users_roleid_not_null || true
+  ./node_modules/.bin/prisma migrate resolve --applied 20260222000003_indexes_columns_fixes || true
   
   echo "📦 Segunda tentativa de migrate deploy..."
   ./node_modules/.bin/prisma migrate deploy || {
