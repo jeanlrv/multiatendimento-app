@@ -36,6 +36,12 @@ RUN npm install --legacy-peer-deps
 COPY . .
 
 # BUILD COM MAIS MEMÓRIA
+ARG NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+
+ARG NEXT_PUBLIC_WS_URL
+ENV NEXT_PUBLIC_WS_URL=$NEXT_PUBLIC_WS_URL
+
 RUN npm run build
 
 # Remover devDependencies após build
