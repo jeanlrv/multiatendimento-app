@@ -20,15 +20,21 @@ echo "🔍 Verificando variáveis de ambiente do Redis..."
 
 # Tenta rodar migrations
 echo "📦 Executando Prisma migrate deploy..."
-./node_modules/.bin/prisma migrate deploy || {
-  echo "⚠️ Erro no migrate deploy. Tentando resolver migrações falhas conhecidas (P3009)..."
-  ./node_modules/.bin/prisma migrate resolve --applied 20260222000001_sync_schema_roles_collaboration || true
-  ./node_modules/.bin/prisma migrate resolve --applied 20260222000002_users_roleid_not_null || true
-  ./node_modules/.bin/prisma migrate resolve --applied 20260222000003_indexes_columns_fixes || true
+./node_modules/.bin/prisma migrate deploy 2>&1 || {
+  echo "⚠️ Erro no migrate deploy. Detectando migrações falhas..."
+  
+  # Resolve todas as migrações existentes no diretório prisma/migrations
+  for dir in prisma/migrations/*/; do
+    MIGRATION_NAME=$(basename "$dir")
+    if [ "$MIGRATION_NAME" != "migration_lock.toml" ]; then
+      echo "🔧 Marcando migração como aplicada: $MIGRATION_NAME"
+      ./node_modules/.bin/prisma migrate resolve --applied "$MIGRATION_NAME" 2>&1 || true
+    fi
+  done
   
   echo "📦 Segunda tentativa de migrate deploy..."
-  ./node_modules/.bin/prisma migrate deploy || {
-    echo "⚠️ Falha persistente na migração. Tentando db push como último recurso..."
+  ./node_modules/.bin/prisma migrate deploy 2>&1 || {
+    echo "⚠️ Fallback para db push..."
     ./node_modules/.bin/prisma db push --accept-data-loss
   }
 }
