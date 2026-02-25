@@ -69,11 +69,13 @@ import { PermissionsGuard } from './modules/auth/guards/permissions.guard';
                         if (redisUrl) {
                             try {
                                 const parsed = new URL(redisUrl);
+                                const isTls = parsed.protocol === 'rediss:';
                                 return {
                                     host: parsed.hostname,
                                     port: parseInt(parsed.port, 10) || 6379,
                                     password: parsed.password || undefined,
                                     username: parsed.username || undefined,
+                                    ...(isTls ? { tls: { rejectUnauthorized: false } } : {}),
                                 };
                             } catch (e) {
                                 console.error('❌ [Redis Config] Erro ao parsear REDIS_URL:', e.message);
