@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, ArrowRightLeft, Building2, User, RefreshCcw, Send } from 'lucide-react';
+import { api } from '@/services/api';
 
 interface TransferTicketModalProps {
     isOpen: boolean;
@@ -23,7 +23,6 @@ interface User {
     departmentId?: string;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002';
 
 export default function TransferTicketModal({ isOpen, onClose, ticketId, onSuccess }: TransferTicketModalProps) {
     const [departments, setDepartments] = useState<Department[]>([]);
@@ -44,8 +43,8 @@ export default function TransferTicketModal({ isOpen, onClose, ticketId, onSucce
         const token = localStorage.getItem('token');
         try {
             const [deptRes, usersRes] = await Promise.all([
-                axios.get(`${API_URL}/api/departments`, { headers: { Authorization: `Bearer ${token}` } }),
-                axios.get(`${API_URL}/api/users`, { headers: { Authorization: `Bearer ${token}` } })
+                api.get('/departments'),
+                api.get('/users')
             ]);
             setDepartments(deptRes.data);
             setUsers(usersRes.data);
@@ -62,12 +61,11 @@ export default function TransferTicketModal({ isOpen, onClose, ticketId, onSucce
         setSubmitting(true);
         const token = localStorage.getItem('token');
         try {
-            await axios.patch(`${API_URL}/api/tickets/${ticketId}`,
+            await api.patch(`/tickets/${ticketId}`,
                 {
                     departmentId: selectedDept || undefined,
                     assignedUserId: selectedUser || null // Se selecionado apenas depto, tira o usuário atual ou deixa pra auto-distribuição
-                },
-                { headers: { Authorization: `Bearer ${token}` } }
+                }
             );
 
             // Opcional: Enviar mensagem avisando (já planejado no service futuramente)

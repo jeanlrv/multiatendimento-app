@@ -2,9 +2,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { X, Calendar as CalendarIcon, Clock, AlignLeft } from 'lucide-react';
-import axios from 'axios';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
+import { api } from '@/services/api';
 
 interface CreateScheduleModalProps {
     isOpen: boolean;
@@ -15,7 +15,6 @@ interface CreateScheduleModalProps {
     onSuccess: () => void;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002';
 
 export function CreateScheduleModal({
     isOpen,
@@ -61,7 +60,7 @@ export function CreateScheduleModal({
         try {
             setLoading(true);
             const token = localStorage.getItem('token');
-            await axios.post(`${API_URL}/api/scheduling`, {
+            await api.post('/scheduling', {
                 contactId,
                 userId: user?.id,
                 departmentId: departmentId || user?.departments?.[0]?.id,
