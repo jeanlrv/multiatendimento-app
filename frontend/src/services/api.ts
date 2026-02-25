@@ -3,7 +3,7 @@ import axios, { AxiosRequestConfig } from 'axios';
 const API_URL = process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.host}` : '');
 
 export const api = axios.create({
-    baseURL: `${API_URL}/api`,
+    baseURL: '/api',
 });
 
 // ─── Request interceptor — injeta token em cada request ────────────────────────

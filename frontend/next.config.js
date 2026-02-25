@@ -31,6 +31,20 @@ const nextConfig = {
     experimental: {
         workerThreads: false,
     },
+
+    async rewrites() {
+        const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3002';
+        return [
+            {
+                source: '/api/:path*',
+                destination: `${BACKEND_URL}/api/:path*`,
+            },
+            {
+                source: '/socket.io/:path*',
+                destination: `${BACKEND_URL}/socket.io/:path*`,
+            },
+        ];
+    },
 }
 
 module.exports = withPWA(nextConfig);
