@@ -55,13 +55,37 @@ import { PermissionsGuard } from './modules/auth/guards/permissions.guard';
             },
         ]),
         EventEmitterModule.forRoot(),
-        BullModule.forRoot({
-            connection: process.env.REDIS_URL ? {
-                url: process.env.REDIS_URL,
-            } : {
-                host: process.env.REDISHOST || process.env.REDIS_HOST || 'localhost',
-                port: parseInt(process.env.REDISPORT || process.env.REDIS_PORT || '6379', 10),
-                password: process.env.REDISPASSWORD || process.env.REDIS_PASSWORD || undefined,
+        BullModule.forRootAsync({
+            useFactory: () => {
+                const redisUrl = process.env.REDIS_URL;
+                const host = process.env.REDISHOST || process.env.REDIS_HOST || 'localhost';
+                const port = parseInt(process.env.REDISPORT || process.env.REDIS_PORT || '6379', 10);
+                const password = process.env.REDISPASSWORD || process.env.REDIS_PASSWORD || undefined;
+
+                console.log(`🔍 [Redis Config] Host: ${host}, Port: ${port}, HasPassword: ${!!password}, HasURL: ${!!redisUrl}`);
+
+                return {
+                    connection: (() => {
+                        if (redisUrl) {
+                            try {
+                                const parsed = new URL(redisUrl);
+                                return {
+                                    host: parsed.hostname,
+                                    port: parseInt(parsed.port, 10) || 6379,
+                                    password: parsed.password || undefined,
+                                    username: parsed.username || undefined,
+                                };
+                            } catch (e) {
+                                console.error('❌ [Redis Config] Erro ao parsear REDIS_URL:', e.message);
+                            }
+                        }
+                        return {
+                            host,
+                            port,
+                            password,
+                        };
+                    })(),
+                };
             },
         }),
         DatabaseModule,
