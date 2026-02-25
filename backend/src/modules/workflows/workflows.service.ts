@@ -177,8 +177,8 @@ export class WorkflowsService implements OnModuleInit {
 
         const result: Record<string, { totalExecutions: number; totalFailures: number; successRate: number }> = {};
         for (const row of totals) {
-            const total = row._count.id;
-            const failed = failureMap.get(row.workflowRuleId) || 0;
+            const total = (row as any)._count.id;
+            const failed = (failureMap.get(row.workflowRuleId) as any) || 0;
             result[row.workflowRuleId] = {
                 totalExecutions: total,
                 totalFailures: failed,
