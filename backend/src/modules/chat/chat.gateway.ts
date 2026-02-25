@@ -36,17 +36,25 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect, On
     ) { }
 
     async onModuleInit() {
-        const redisHost = process.env.REDIS_HOST || 'localhost';
-        const redisPort = parseInt(process.env.REDIS_PORT, 10) || 6379;
-        const redisPassword = process.env.REDIS_PASSWORD || undefined;
+        const redisUrl = process.env.REDIS_URL;
+        const redisHost = process.env.REDISHOST || process.env.REDIS_HOST || 'localhost';
+        const redisPort = parseInt(process.env.REDISPORT || process.env.REDIS_PORT || '6379', 10);
+        const redisPassword = process.env.REDISPASSWORD || process.env.REDIS_PASSWORD || undefined;
 
         try {
-            const pubClient = new Redis({
-                host: redisHost,
-                port: redisPort,
-                ...(redisPassword && { password: redisPassword }),
-                retryStrategy: (times) => Math.min(times * 50, 2000),
-            });
+            const redisOptions = {
+                retryStrategy: (times: number) => Math.min(times * 50, 2000),
+            };
+
+            const pubClient = redisUrl
+                ? new Redis(redisUrl, redisOptions)
+                : new Redis({
+                    host: redisHost,
+                    port: redisPort,
+                    ...(redisPassword && { password: redisPassword }),
+                    ...redisOptions,
+                });
+
             const subClient = pubClient.duplicate();
 
             if (this.server && typeof this.server.adapter === 'function') {
@@ -119,7 +127,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect, On
         const departamentosPermitidos = user.departments?.map((d: any) => d.id) || [];
 
         // Validar se o ticket pertence à empresa do usuário E ao departamento permitido
-        const ticketExists = await this.prisma.ticket.findFirst({
+        const ticketExists = await (this.prisma as any).ticket.findFirst({
             where: {
                 id: ticketId,
                 companyId: user.companyId,

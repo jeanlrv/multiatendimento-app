@@ -11,6 +11,13 @@ if [ -z "$DATABASE_URL" ]; then
   exit 1
 fi
 
+echo "🔍 Verificando variáveis de ambiente do Redis..."
+[ -n "$REDIS_URL" ] && echo "✅ REDIS_URL detectada." || echo "ℹ️ REDIS_URL não definida."
+[ -n "$REDISHOST" ] && echo "✅ REDISHOST detectada: $REDISHOST" || echo "ℹ️ REDISHOST não definida."
+[ -n "$REDISPORT" ] && echo "✅ REDISPORT detectada: $REDISPORT" || echo "ℹ️ REDISPORT não definida."
+[ -n "$REDIS_HOST" ] && echo "✅ REDIS_HOST detectada: $REDIS_HOST" || echo "ℹ️ REDIS_HOST não definida."
+[ -n "$REDIS_PORT" ] && echo "✅ REDIS_PORT detectada: $REDIS_PORT" || echo "ℹ️ REDIS_PORT não definida."
+
 # Tenta rodar migrations
 echo "📦 Executando Prisma migrate deploy..."
 ./node_modules/.bin/prisma migrate deploy || {
