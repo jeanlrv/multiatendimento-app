@@ -34,6 +34,7 @@ const nextConfig = {
 
     async rewrites() {
         const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3002';
+        console.log(`[NextConfig] Proxying /api to ${BACKEND_URL}`);
         return [
             {
                 source: '/api/:path*',
