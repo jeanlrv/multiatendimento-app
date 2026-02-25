@@ -6,3 +6,5 @@ Dockerfile
 docker-compose.yml
 *.log
 coverage
+.env
+.env.*
