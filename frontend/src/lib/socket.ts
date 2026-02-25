@@ -1,6 +1,6 @@
 import { io, Socket } from 'socket.io-client';
 
-const BASE_URL = process.env.NEXT_PUBLIC_WS_URL || (typeof window !== 'undefined' ? `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.hostname}:3002` : '');
+const BASE_URL = process.env.NEXT_PUBLIC_WS_URL || (typeof window !== 'undefined' ? `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}` : '');
 
 const sockets: Record<string, Socket> = {};
 
