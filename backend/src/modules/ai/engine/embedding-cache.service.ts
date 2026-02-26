@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
-import type { PrismaService } from '../../../database/prisma.service';
+import { PrismaService } from '../../../database/prisma.service';
 
 /**
  * Serviço de cache de embeddings para otimizar o processamento de documentos.
