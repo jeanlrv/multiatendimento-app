@@ -275,16 +275,17 @@ export class ChatService {
     }
 
     async getMacros(companyId: string) {
-        return this.prisma.cannedResponse.findMany({
+        return this.prisma.quickReply.findMany({
             where: { companyId },
-            orderBy: { title: 'asc' }
+            orderBy: { shortcut: 'asc' }
         });
     }
 
     async createMacro(companyId: string, data: { title: string, content: string }) {
-        return this.prisma.cannedResponse.create({
+        return this.prisma.quickReply.create({
             data: {
-                ...data,
+                shortcut: data.title,
+                content: data.content,
                 companyId
             }
         });

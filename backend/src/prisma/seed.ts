@@ -122,7 +122,7 @@ async function main() {
     await prisma.aIAgent.deleteMany();
     await prisma.role.deleteMany();
     await prisma.aIUsage.deleteMany();
-    await prisma.cannedResponse.deleteMany();
+    await prisma.quickReply.deleteMany();
     await prisma.featureFlag.deleteMany();
     await prisma.setting.deleteMany();
     await prisma.sMTPConfig.deleteMany();
