@@ -1,16 +1,16 @@
 import { Controller, Get, Post, Patch, Delete, Body, Param, Query, Req, UseGuards, HttpCode } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
-import { CannedResponsesService } from './canned-responses.service';
+import { QuickRepliesService } from './quick-replies.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RequirePermission } from '../../common/decorators/permissions.decorator';
 import { Permission } from '../auth/constants/permissions';
 
-@ApiTags('Canned Responses')
-@Controller('canned-responses')
+@ApiTags('Quick Replies')
+@Controller('quick-replies')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
-export class CannedResponsesController {
-    constructor(private readonly service: CannedResponsesService) { }
+export class QuickRepliesController {
+    constructor(private readonly service: QuickRepliesService) { }
 
     @Get()
     @RequirePermission(Permission.TICKETS_READ)
