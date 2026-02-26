@@ -7,6 +7,8 @@ import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
 import { LLMProviderFactory } from './engine/llm-provider.factory';
 import { ChatRequestDto } from './dto/chat-request.dto';
 import { Observable } from 'rxjs';
+import { ConversationHistoryService } from './conversation-history.service';
+import { NotificationService } from './notifications/notification.service';
 
 @ApiTags('AI')
 @Controller('ai')
@@ -16,6 +18,8 @@ export class AIController {
     constructor(
         private readonly aiService: AIService,
         private readonly providerFactory: LLMProviderFactory,
+        private readonly conversationHistoryService: ConversationHistoryService,
+        private readonly notificationService: NotificationService,
     ) { }
 
     // ========== Agent CRUD ==========
@@ -112,5 +116,75 @@ export class AIController {
         history?: { role: 'user' | 'assistant' | 'system', content: string }[];
     }) {
         return this.aiService.chatMultimodal(req.user.companyId, id, body.message, body.imageUrls, body.history || []);
+    }
+
+    // ========== Histórico de Conversas ==========
+
+    @Post('conversations')
+    @ApiOperation({ summary: 'Criar nova conversa' })
+    createConversation(@Req() req: any, @Body() data: { agentId: string; title?: string }) {
+        return this.conversationHistoryService.createConversation(
+            req.user.companyId,
+            req.user.id,
+            data.agentId,
+            data.title
+        );
+    }
+
+    @Get('conversations')
+    @ApiOperation({ summary: 'Listar conversas do usuário' })
+    getUserConversations(@Req() req: any) {
+        return this.conversationHistoryService.getUserConversations(req.user.companyId, req.user.id);
+    }
+
+    @Get('conversations/:id')
+    @ApiOperation({ summary: 'Obter detalhes de uma conversa' })
+    getConversationDetails(@Req() req: any, @Param('id') id: string) {
+        return this.conversationHistoryService.getConversationDetails(req.user.companyId, req.user.id, id);
+    }
+
+    @Post('conversations/:id/messages')
+    @ApiOperation({ summary: 'Adicionar mensagem a uma conversa' })
+    addMessage(@Req() req: any, @Param('id') id: string, @Body() data: { role: 'user' | 'assistant'; content: string; metadata?: any }) {
+        return this.conversationHistoryService.addMessage(req.user.companyId, req.user.id, id, data.role, data.content, data.metadata);
+    }
+
+    @Delete('conversations/:id')
+    @ApiOperation({ summary: 'Deletar conversa' })
+    deleteConversation(@Req() req: any, @Param('id') id: string) {
+        return this.conversationHistoryService.deleteConversation(req.user.companyId, req.user.id, id);
+    }
+
+    @Patch('conversations/:id')
+    @ApiOperation({ summary: 'Renomear conversa' })
+    renameConversation(@Req() req: any, @Param('id') id: string, @Body('title') title: string) {
+        return this.conversationHistoryService.renameConversation(req.user.companyId, req.user.id, id, title);
+    }
+
+    @Get('conversations/stats')
+    @ApiOperation({ summary: 'Obter estatísticas de uso' })
+    getUsageStats(@Req() req: any) {
+        return this.conversationHistoryService.getUsageStats(req.user.companyId, req.user.id);
+    }
+
+    // ========== Notificações ==========
+
+    @Get('notifications/pending')
+    @ApiOperation({ summary: 'Obter notificações pendentes' })
+    getPendingNotifications(@Req() req: any) {
+        return this.notificationService.getPendingNotifications(req.user.companyId);
+    }
+
+    @Delete('notifications')
+    @ApiOperation({ summary: 'Limpar todas as notificações' })
+    clearNotifications(@Req() req: any) {
+        this.notificationService.clearNotifications(req.user.companyId);
+        return { message: 'Notificações limpas com sucesso' };
+    }
+
+    @Get('notifications/stats')
+    @ApiOperation({ summary: 'Obter estatísticas de notificações' })
+    getNotificationStats(@Req() req: any) {
+        return this.notificationService.getNotificationStats(req.user.companyId);
     }
 }
