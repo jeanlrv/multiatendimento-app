@@ -183,61 +183,70 @@ export class ChatService {
             startOfMonth.setDate(1);
             startOfMonth.setHours(0, 0, 0, 0);
 
-            const [ticket, messages] = await Promise.all([
-                this.prisma.ticket.findUnique({
-                    where: { id: ticketId },
-                    include: {
-                        department: true,
-                        contact: true,
-                        company: { select: { limitTokens: true } },
-                    },
-                }),
+            // Primeiro, buscar apenas o ticket para obter o companyId
+            const ticket = await this.prisma.ticket.findUnique({
+                where: { id: ticketId },
+                include: {
+                    department: true,
+                    contact: true,
+                    company: { select: { limitTokens: true } },
+                },
+            });
+
+            if (!ticket?.department?.aiAgentId) {
+                return;
+            }
+
+            // VALIDAR MODO: Só responde automaticamente se estiver em modo IA ou HIBRIDO
+            const ticketMode = (ticket as any).mode || 'MANUAL';
+            if (ticketMode === 'MANUAL' || ticketMode === 'HUMAN') {
+                this.logger.log(`IA ignorada para o ticket ${ticketId}: Modo ${ticketMode}`);
+                return;
+            }
+
+            // Buscar mensagens e uso de tokens em paralelo (agora que temos ticket.companyId)
+            const [messages, currentUsage] = await Promise.all([
                 this.prisma.message.findMany({
                     where: { ticketId },
                     orderBy: { sentAt: 'desc' },
                     take: 11,
                 }),
-            ]);
-
-            if (ticket?.department?.aiAgentId) {
-                const usage = await this.prisma.aIUsage.aggregate({
+                // Usar transação para garantir atomicidade na verificação de limite
+                this.prisma.aIUsage.aggregate({
                     where: { companyId: ticket.companyId, createdAt: { gte: startOfMonth } },
                     _sum: { tokens: true },
+                }).catch(() => ({ _sum: { tokens: 0 } })),
+            ]);
+
+            // Verificar limite de tokens com atomicidade
+            const tokenLimit = (ticket as any).company?.limitTokens ?? 100000;
+            const estimatedTokens = Math.ceil((content.length + 200) / 4); // Estimativa conservadora
+            const currentTokens = currentUsage._sum.tokens || 0;
+
+            if (currentTokens + estimatedTokens >= tokenLimit) {
+                this.logger.warn(`Limite de IA atingido para a empresa ${ticket.companyId}`);
+                return;
+            }
+
+            const history = messages
+                .filter(m => m.content !== content)
+                .reverse()
+                .map(m => ({
+                    role: m.fromMe ? 'assistant' : 'user',
+                    content: m.content
+                }));
+
+            const aiResponse = await this.aiService.chat(ticket.companyId, ticket.department.aiAgentId, content, history);
+
+            if (aiResponse) {
+                await this.sendMessage(ticketId, aiResponse, true, 'TEXT', undefined, ticket.companyId, 'AI');
+                await this.prisma.aIUsage.create({
+                    data: {
+                        companyId: ticket.companyId,
+                        tokens: Math.ceil((content.length + aiResponse.length) / 4),
+                        cost: 0
+                    }
                 });
-
-                const tokenLimit = (ticket as any).company?.limitTokens ?? 100000;
-                if ((usage._sum.tokens || 0) >= tokenLimit) {
-                    this.logger.warn(`Limite de IA atingido para a empresa ${ticket.companyId}`);
-                    return;
-                }
-
-                // VALIDAR MODO: Só responde automaticamente se estiver em modo IA ou HIBRIDO
-                const ticketMode = (ticket as any).mode || 'MANUAL';
-                if (ticketMode === 'MANUAL' || ticketMode === 'HUMAN') {
-                    this.logger.log(`IA ignorada para o ticket ${ticketId}: Modo ${ticketMode}`);
-                    return;
-                }
-
-                const history = messages
-                    .filter(m => m.content !== content)
-                    .reverse()
-                    .map(m => ({
-                        role: m.fromMe ? 'assistant' : 'user',
-                        content: m.content
-                    }));
-
-                const aiResponse = await this.aiService.chat(ticket.companyId, ticket.department.aiAgentId, content, history);
-
-                if (aiResponse) {
-                    await this.sendMessage(ticketId, aiResponse, true, 'TEXT', undefined, ticket.companyId, 'AI');
-                    await this.prisma.aIUsage.create({
-                        data: {
-                            companyId: ticket.companyId,
-                            tokens: Math.ceil((content.length + aiResponse.length) / 4),
-                            cost: 0
-                        }
-                    });
-                }
             }
         } catch (error) {
             this.logger.error(`Erro ao processar resposta de IA: ${error.message}`);

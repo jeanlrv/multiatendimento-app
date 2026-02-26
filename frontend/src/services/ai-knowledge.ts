@@ -1,0 +1,79 @@
+import { api } from './api';
+
+export interface KnowledgeBase {
+    id: string;
+    name: string;
+    description?: string;
+    companyId: string;
+    createdAt: string;
+    updatedAt: string;
+    _count?: {
+        documents: number;
+    };
+}
+
+export interface AIDocument {
+    id: string;
+    knowledgeBaseId: string;
+    title: string;
+    sourceType: 'TEXT' | 'PDF' | 'URL' | 'DOCX';
+    contentUrl?: string;
+    rawContent?: string;
+    status: 'PENDING' | 'PROCESSING' | 'READY' | 'ERROR';
+    chunkCount: number;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export const AIKnowledgeService = {
+    findAllBases: async () => {
+        const response = await api.get<KnowledgeBase[]>('/ai/knowledge/bases');
+        return response.data;
+    },
+
+    findOneBase: async (id: string) => {
+        const response = await api.get<KnowledgeBase & { documents: AIDocument[] }>(`/ai/knowledge/bases/${id}`);
+        return response.data;
+    },
+
+    createBase: async (data: Partial<KnowledgeBase>) => {
+        const response = await api.post<KnowledgeBase>('/ai/knowledge/bases', data);
+        return response.data;
+    },
+
+    removeBase: async (id: string) => {
+        await api.delete(`/ai/knowledge/bases/${id}`);
+    },
+
+    addDocument: async (baseId: string, data: Partial<AIDocument>) => {
+        const response = await api.post<AIDocument>(`/ai/knowledge/bases/${baseId}/documents`, data);
+        return response.data;
+    },
+
+    uploadDocument: async (baseId: string, file: File) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        const response = await api.post<AIDocument>(`/ai/knowledge/bases/${baseId}/upload`, formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data',
+            },
+        });
+        return response.data;
+    },
+
+    getDocumentStatus: async (id: string) => {
+        const response = await api.get<AIDocument>(`/ai/knowledge/documents/${id}/status`);
+        return response.data;
+    },
+
+    removeDocument: async (id: string) => {
+        await api.delete(`/ai/knowledge/documents/${id}`);
+    },
+
+    reprocessDocument: async (documentId: string) => {
+        const response = await api.post(`/ai/knowledge/documents/${documentId}/reprocess`);
+        return response.data;
+    }
+};
+
+

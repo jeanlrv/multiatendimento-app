@@ -1,32 +1,64 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { AIAgentsService, AIAgent } from '@/services/ai-agents';
+import { AIAgentsService, AIAgent, AIProviderModels } from '@/services/ai-agents';
+import { AIKnowledgeService, KnowledgeBase } from '@/services/ai-knowledge';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bot, Plus, Pencil, Trash2, CheckCircle, XCircle, Settings, X, RefreshCcw, Save, Shield, Activity, Share2 } from 'lucide-react';
+import { Bot, Plus, Trash2, CheckCircle, Settings, X, RefreshCcw, Save, Shield, Activity, Brain, Database, MessageSquare, Zap, Cpu } from 'lucide-react';
 
 export default function AIAgentsPage() {
     const [agents, setAgents] = useState<AIAgent[]>([]);
+    const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>([]);
+    const [availableModels, setAvailableModels] = useState<AIProviderModels[]>([]);
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [currentAgent, setCurrentAgent] = useState<Partial<AIAgent> | null>(null);
     const [submitting, setSubmitting] = useState(false);
+    const [activeTab, setActiveTab] = useState<'basic' | 'cognitive' | 'knowledge' | 'playground'>('basic');
+    const [chatMessage, setChatMessage] = useState('');
+    const [chatHistory, setChatHistory] = useState<{ role: string, content: string }[]>([]);
+    const [chatLoading, setChatLoading] = useState(false);
 
-    const fetchAgents = async () => {
+    const fetchData = async () => {
         try {
             setLoading(true);
-            const data = await AIAgentsService.findAll();
-            setAgents(data);
+            const [agentsData, kbData, modelsData] = await Promise.all([
+                AIAgentsService.findAll(),
+                AIKnowledgeService.findAllBases(),
+                AIAgentsService.getModels().catch(() => []),
+            ]);
+            setAgents(agentsData);
+            setKnowledgeBases(kbData);
+            setAvailableModels(modelsData);
         } catch (error) {
-            console.error('Erro ao buscar agentes:', error);
+            console.error('Erro ao buscar dados:', error);
         } finally {
             setLoading(false);
         }
     };
 
     useEffect(() => {
-        fetchAgents();
+        fetchData();
     }, []);
+
+    const handleChatTest = async () => {
+        if (!chatMessage || !currentAgent?.id) return;
+
+        setChatLoading(true);
+        const userMsg = { role: 'user', content: chatMessage };
+        const updatedHistory = [...chatHistory, userMsg];
+        setChatHistory(updatedHistory);
+        setChatMessage('');
+
+        try {
+            const response = await AIAgentsService.chat(currentAgent.id, userMsg.content, updatedHistory.slice(0, -1));
+            setChatHistory(prev => [...prev, { role: 'assistant', content: typeof response === 'string' ? response : response?.textResponse || 'Sem resposta' }]);
+        } catch (error) {
+            setChatHistory(prev => [...prev, { role: 'assistant', content: 'Erro ao processar mensagem.' }]);
+        } finally {
+            setChatLoading(false);
+        }
+    };
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -38,7 +70,7 @@ export default function AIAgentsPage() {
                 await AIAgentsService.create(currentAgent!);
             }
             setIsModalOpen(false);
-            fetchAgents();
+            fetchData();
         } catch (error) {
             console.error('Erro ao salvar agente:', error);
         } finally {
@@ -47,14 +79,33 @@ export default function AIAgentsPage() {
     };
 
     const handleDelete = async (id: string) => {
-        if (confirm('Tem certeza que deseja excluir o processamento cognitivo deste agente?')) {
+        if (confirm('Tem certeza que deseja excluir este agente de IA?')) {
             try {
                 await AIAgentsService.remove(id);
-                fetchAgents();
+                fetchData();
             } catch (error) {
                 console.error('Erro ao excluir agente:', error);
             }
         }
+    };
+
+    // Encontra o nome do modelo para exibição
+    const getModelDisplayName = (modelId?: string) => {
+        if (!modelId) return 'GPT-4o Mini';
+        for (const provider of availableModels) {
+            const model = provider.models.find(m => m.id === modelId);
+            if (model) return model.name;
+        }
+        return modelId;
+    };
+
+    // Encontra o nome do provider para exibição
+    const getProviderName = (modelId?: string) => {
+        if (!modelId) return 'OpenAI';
+        for (const provider of availableModels) {
+            if (provider.models.some(m => m.id === modelId)) return provider.providerName;
+        }
+        return 'Desconhecido';
     };
 
     return (
@@ -67,20 +118,22 @@ export default function AIAgentsPage() {
                     </h2>
                     <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-1 italic flex items-center gap-2">
                         <Activity size={14} className="text-primary" />
-                        Gerenciamento de Inteligência Artificial KSZap
+                        Gerenciamento de Inteligência Artificial
                     </p>
                 </div>
 
                 <div className="flex items-center gap-4">
                     <button
                         onClick={() => {
-                            setCurrentAgent({ name: '', anythingllmWorkspaceId: '', isActive: true });
+                            setCurrentAgent({ name: '', modelId: 'gpt-4o-mini', temperature: 0.7, isActive: true });
+                            setActiveTab('basic');
+                            setChatHistory([]);
                             setIsModalOpen(true);
                         }}
                         className="flex items-center gap-3 px-8 py-4 bg-primary text-white rounded-[1.5rem] shadow-2xl shadow-primary/30 transition-all active:scale-95 font-bold text-xs uppercase tracking-widest group"
                     >
                         <Plus className="h-5 w-5 group-hover:rotate-90 transition-transform" />
-                        <span className="hidden sm:inline">Acionar IA</span>
+                        <span className="hidden sm:inline">Criar Agente</span>
                     </button>
                 </div>
             </div>
@@ -98,11 +151,13 @@ export default function AIAgentsPage() {
                     </div>
                     <h3 className="text-3xl font-black text-slate-900 dark:text-white mb-3 uppercase tracking-tighter italic">Intelecto Nulo</h3>
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-12 text-center max-w-sm leading-relaxed italic opacity-80">
-                        Nenhum agente cognitivo vinculado. Conecte seu workspace AnythingLLM para dar vida ao Aero.
+                        Nenhum agente cognitivo vinculado. Crie um agente e forneça conhecimento para ele operar.
                     </p>
                     <button
                         onClick={() => {
-                            setCurrentAgent({ name: '', anythingllmWorkspaceId: '', isActive: true });
+                            setCurrentAgent({ name: '', modelId: 'gpt-4o-mini', temperature: 0.7, isActive: true });
+                            setActiveTab('basic');
+                            setChatHistory([]);
                             setIsModalOpen(true);
                         }}
                         className="px-14 py-5 bg-primary text-white rounded-[2rem] font-bold text-sm uppercase tracking-widest shadow-2xl shadow-primary/40 hover:scale-[1.02] active:scale-95 transition-all"
@@ -132,6 +187,8 @@ export default function AIAgentsPage() {
                                         <button
                                             onClick={() => {
                                                 setCurrentAgent(agent);
+                                                setChatHistory([]);
+                                                setActiveTab('basic');
                                                 setIsModalOpen(true);
                                             }}
                                             className="h-10 w-10 flex items-center justify-center bg-white dark:bg-white/5 hover:bg-primary hover:text-white text-primary rounded-[1.2rem] shadow-lg transition-all border border-slate-100 dark:border-white/10"
@@ -142,7 +199,7 @@ export default function AIAgentsPage() {
                                         <button
                                             onClick={() => handleDelete(agent.id)}
                                             className="h-10 w-10 flex items-center justify-center bg-white dark:bg-white/5 hover:bg-rose-500 hover:text-white text-rose-500 rounded-[1.2rem] shadow-lg transition-all border border-slate-100 dark:border-white/10"
-                                            title="Desativar IA"
+                                            title="Excluir Agente"
                                         >
                                             <Trash2 size={18} />
                                         </button>
@@ -162,10 +219,10 @@ export default function AIAgentsPage() {
                                 <div className="mt-auto pt-6 border-t border-slate-100 dark:border-white/5 space-y-4 relative z-10">
                                     <div className="flex items-center justify-between text-xs">
                                         <span className="text-slate-400 font-bold uppercase tracking-widest flex items-center gap-2">
-                                            <Share2 size={14} className="text-primary/60" /> Workspace
+                                            <Cpu size={14} className="text-primary/60" /> Modelo
                                         </span>
-                                        <span className="font-mono text-primary font-bold bg-primary/10 px-3 py-1.5 rounded-xl text-[11px] truncate max-w-[140px]" title={agent.anythingllmWorkspaceId}>
-                                            {agent.anythingllmWorkspaceId}
+                                        <span className="font-mono text-primary font-bold bg-primary/10 px-3 py-1.5 rounded-xl text-[11px] truncate max-w-[180px]" title={agent.modelId || 'gpt-4o-mini'}>
+                                            {getModelDisplayName(agent.modelId)}
                                         </span>
                                     </div>
                                     <div className="flex items-center justify-between text-xs">
@@ -187,7 +244,7 @@ export default function AIAgentsPage() {
                 </div>
             )}
 
-            {/* Modal Aero Integrado */}
+            {/* Modal de Configuração */}
             <AnimatePresence>
                 {isModalOpen && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -202,19 +259,19 @@ export default function AIAgentsPage() {
                             initial={{ opacity: 0, scale: 0.9, y: 40 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.9, y: 40 }}
-                            className="relative w-full max-w-2xl liquid-glass dark:bg-slate-900/95 rounded-[3rem] shadow-2xl overflow-hidden border border-white/80 dark:border-white/10"
+                            className="relative w-full max-w-3xl liquid-glass dark:bg-slate-900/95 rounded-[3rem] shadow-2xl overflow-hidden border border-white/80 dark:border-white/10 flex flex-col max-h-[90vh]"
                             onClick={e => e.stopPropagation()}
                         >
-                            <div className="p-10 border-b border-slate-100 dark:border-white/5 flex items-center justify-between bg-primary/5">
+                            <div className="p-8 border-b border-slate-100 dark:border-white/5 flex items-center justify-between bg-primary/5">
                                 <div className="flex items-center gap-4">
                                     <div className="h-12 w-12 rounded-2xl bg-primary flex items-center justify-center text-white shadow-lg">
                                         <Bot size={24} />
                                     </div>
                                     <div>
                                         <h3 className="text-3xl font-black text-slate-900 dark:text-white tracking-tighter italic">
-                                            {currentAgent?.id ? 'Calibrar' : 'Embutir'} <span className="text-primary">IA</span>
+                                            {currentAgent?.id ? 'Calibrar' : 'Criar'} <span className="text-primary">Agente</span>
                                         </h3>
-                                        <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-1">Sintonização Neural de Workspace</p>
+                                        <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-1">Configuração do Motor Cognitivo</p>
                                     </div>
                                 </div>
                                 <button onClick={() => setIsModalOpen(false)} className="p-4 hover:bg-white/50 dark:hover:bg-white/10 rounded-2xl transition-all">
@@ -222,59 +279,222 @@ export default function AIAgentsPage() {
                                 </button>
                             </div>
 
-                            <form onSubmit={handleSave} className="p-10 space-y-8">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                    <div className="space-y-3">
-                                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1 block">Codinome do Agente</label>
-                                        <input
-                                            required
-                                            value={currentAgent?.name || ''}
-                                            onChange={e => setCurrentAgent({ ...currentAgent, name: e.target.value })}
-                                            className="w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 focus:ring-4 focus:ring-primary/10 rounded-2xl px-6 py-4 text-sm font-semibold outline-none transition-all dark:text-white placeholder:text-slate-400 uppercase"
-                                            placeholder="Ex: IA Jurídica Aero"
-                                        />
-                                    </div>
+                            {/* Tabs Navigation */}
+                            <div className="flex px-8 mt-4 border-b border-slate-100 dark:border-white/5">
+                                {[
+                                    { id: 'basic', label: 'Básico', icon: Bot },
+                                    { id: 'cognitive', label: 'Cérebro', icon: Brain },
+                                    { id: 'knowledge', label: 'Conhecimento', icon: Database },
+                                    { id: 'playground', label: 'Playground', icon: MessageSquare }
+                                ].map(tab => (
+                                    <button
+                                        key={tab.id}
+                                        type="button"
+                                        onClick={() => setActiveTab(tab.id as any)}
+                                        className={`flex items-center gap-2 px-6 py-4 text-xs font-bold uppercase tracking-widest transition-all relative ${activeTab === tab.id ? 'text-primary' : 'text-slate-400 hover:text-slate-600'}`}
+                                    >
+                                        <tab.icon size={16} />
+                                        {tab.label}
+                                        {activeTab === tab.id && (
+                                            <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-1 bg-primary rounded-t-full" />
+                                        )}
+                                    </button>
+                                ))}
+                            </div>
 
-                                    <div className="space-y-3">
-                                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1 block flex items-center gap-2">
-                                            Workspace <span className="text-[10px] bg-slate-200 dark:bg-white/10 px-2 py-0.5 rounded-full">AnythingLLM</span>
-                                        </label>
-                                        <input
-                                            required
-                                            value={currentAgent?.anythingllmWorkspaceId || ''}
-                                            onChange={e => setCurrentAgent({ ...currentAgent, anythingllmWorkspaceId: e.target.value })}
-                                            className="w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 focus:ring-4 focus:ring-primary/10 rounded-2xl px-6 py-4 text-sm font-semibold outline-none transition-all dark:text-white placeholder:text-slate-400 font-mono tracking-tight"
-                                            placeholder="slug-do-workspace"
-                                        />
-                                    </div>
-
-                                    <div className="space-y-3 md:col-span-2">
-                                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1 block">Diretriz de IA</label>
-                                        <textarea
-                                            value={currentAgent?.description || ''}
-                                            onChange={e => setCurrentAgent({ ...currentAgent, description: e.target.value })}
-                                            className="w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 focus:ring-4 focus:ring-primary/10 rounded-2xl px-6 py-5 text-sm font-semibold outline-none transition-all dark:text-white placeholder:text-slate-400 h-32 resize-none italic"
-                                            placeholder="Especifique a função principal que esta IA deve assumir..."
-                                        />
-                                    </div>
-                                </div>
-
-                                <div className="flex justify-between items-center py-4 border-t border-slate-100 dark:border-white/5 pt-8">
-                                    <div className="flex items-center gap-4 group cursor-pointer" onClick={() => setCurrentAgent({ ...currentAgent, isActive: !currentAgent?.isActive })}>
-                                        <div className="relative">
+                            <form onSubmit={handleSave} className="flex-1 overflow-y-auto p-10 space-y-8 custom-scrollbar">
+                                {activeTab === 'basic' && (
+                                    <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-8">
+                                        <div className="space-y-3">
+                                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1 block">Codinome do Agente</label>
                                             <input
-                                                type="checkbox"
-                                                checked={currentAgent?.isActive}
-                                                readOnly
-                                                className="w-6 h-6 rounded-lg border-transparent text-primary bg-slate-200 dark:bg-white/10 focus:ring-0 pointer-events-none"
+                                                required
+                                                value={currentAgent?.name || ''}
+                                                onChange={e => setCurrentAgent({ ...currentAgent, name: e.target.value })}
+                                                className="w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 focus:ring-4 focus:ring-primary/10 rounded-2xl px-6 py-4 text-sm font-semibold outline-none transition-all dark:text-white placeholder:text-slate-400 uppercase"
+                                                placeholder="Ex: Assistente Jurídico"
                                             />
                                         </div>
-                                        <span className="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-widest italic select-none">
-                                            IA Disponível para Células
-                                        </span>
-                                    </div>
 
-                                    <div className="flex gap-4 min-w-[300px]">
+                                        <div className="space-y-3">
+                                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1 block">Descrição Curta</label>
+                                            <input
+                                                value={currentAgent?.description || ''}
+                                                onChange={e => setCurrentAgent({ ...currentAgent, description: e.target.value })}
+                                                className="w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 focus:ring-4 focus:ring-primary/10 rounded-2xl px-6 py-4 text-sm font-semibold outline-none transition-all dark:text-white placeholder:text-slate-400"
+                                                placeholder="Breve descrição do propósito deste agente"
+                                            />
+                                        </div>
+
+                                        <div className="flex items-center gap-4 group cursor-pointer" onClick={() => setCurrentAgent({ ...currentAgent, isActive: !currentAgent?.isActive })}>
+                                            <div className="relative">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={currentAgent?.isActive}
+                                                    readOnly
+                                                    className="w-6 h-6 rounded-lg border-transparent text-primary bg-slate-200 dark:bg-white/10 focus:ring-0 pointer-events-none"
+                                                />
+                                            </div>
+                                            <span className="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-widest italic select-none">
+                                                Agente Ativo e Operacional
+                                            </span>
+                                        </div>
+                                    </motion.div>
+                                )}
+
+                                {activeTab === 'cognitive' && (
+                                    <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-8">
+                                        <div className="space-y-3">
+                                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1 block">Modelo de Linguagem (LLM)</label>
+                                            <select
+                                                value={currentAgent?.modelId || 'gpt-4o-mini'}
+                                                onChange={e => setCurrentAgent({ ...currentAgent, modelId: e.target.value })}
+                                                className="w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl px-6 py-4 text-sm font-semibold outline-none transition-all dark:text-white appearance-none"
+                                            >
+                                                {availableModels.length > 0 ? (
+                                                    availableModels.map(provider => (
+                                                        <optgroup key={provider.provider} label={`🔌 ${provider.providerName}`}>
+                                                            {provider.models.map(model => (
+                                                                <option key={model.id} value={model.id}>{model.name}</option>
+                                                            ))}
+                                                        </optgroup>
+                                                    ))
+                                                ) : (
+                                                    <>
+                                                        <optgroup label="🔌 OpenAI">
+                                                            <option value="gpt-4o-mini">GPT-4o Mini (Rápido & Econômico)</option>
+                                                            <option value="gpt-4o">GPT-4o (Poderoso & Preciso)</option>
+                                                        </optgroup>
+                                                    </>
+                                                )}
+                                            </select>
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-2 mt-1">
+                                                Provider: {getProviderName(currentAgent?.modelId)}
+                                            </p>
+                                        </div>
+
+                                        <div className="space-y-3">
+                                            <div className="flex justify-between items-center px-1">
+                                                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Criatividade (Temperatura)</label>
+                                                <span className="text-xs font-mono font-bold text-primary">{currentAgent?.temperature || 0.7}</span>
+                                            </div>
+                                            <input
+                                                type="range"
+                                                min="0"
+                                                max="1"
+                                                step="0.1"
+                                                value={currentAgent?.temperature || 0.7}
+                                                onChange={e => setCurrentAgent({ ...currentAgent, temperature: parseFloat(e.target.value) })}
+                                                className="w-full accent-primary h-2 bg-slate-200 dark:bg-white/10 rounded-lg appearance-none cursor-pointer"
+                                            />
+                                        </div>
+
+                                        <div className="space-y-3">
+                                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1 flex items-center gap-2">
+                                                Instruções Cognitivas (System Prompt) <Zap size={12} className="text-amber-500" />
+                                            </label>
+                                            <textarea
+                                                value={currentAgent?.prompt || ''}
+                                                onChange={e => setCurrentAgent({ ...currentAgent, prompt: e.target.value })}
+                                                className="w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 focus:ring-4 focus:ring-primary/10 rounded-3xl px-6 py-5 text-sm font-semibold outline-none transition-all dark:text-white placeholder:text-slate-400 h-48 resize-none italic leading-relaxed"
+                                                placeholder="Defina detalhadamente como o agente deve agir, tom de voz, restrições e objetivos..."
+                                            />
+                                        </div>
+                                    </motion.div>
+                                )}
+
+                                {activeTab === 'knowledge' && (
+                                    <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-8">
+                                        <div className="space-y-3">
+                                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1 block">Vincular Base de Conhecimento (RAG)</label>
+                                            <div className="grid grid-cols-1 gap-4">
+                                                {knowledgeBases.length === 0 ? (
+                                                    <div className="p-8 border-2 border-dashed border-slate-200 dark:border-white/10 rounded-3xl text-center">
+                                                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Nenhuma base de conhecimento criada.</p>
+                                                    </div>
+                                                ) : (
+                                                    knowledgeBases.map(kb => (
+                                                        <div
+                                                            key={kb.id}
+                                                            onClick={() => setCurrentAgent({ ...currentAgent, knowledgeBaseId: currentAgent?.knowledgeBaseId === kb.id ? undefined : kb.id })}
+                                                            className={`p-6 rounded-3xl border transition-all cursor-pointer flex items-center justify-between group ${currentAgent?.knowledgeBaseId === kb.id ? 'bg-primary/10 border-primary shadow-lg' : 'bg-slate-50 dark:bg-white/5 border-slate-200 dark:border-white/10 hover:border-primary/50'}`}
+                                                        >
+                                                            <div className="flex items-center gap-4">
+                                                                <div className={`p-3 rounded-xl ${currentAgent?.knowledgeBaseId === kb.id ? 'bg-primary text-white' : 'bg-white dark:bg-white/10 text-slate-400'}`}>
+                                                                    <Database size={20} />
+                                                                </div>
+                                                                <div>
+                                                                    <p className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight">{kb.name}</p>
+                                                                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{kb._count?.documents || 0} Documentos Treinados</p>
+                                                                </div>
+                                                            </div>
+                                                            {currentAgent?.knowledgeBaseId === kb.id && <CheckCircle className="text-primary" size={24} />}
+                                                        </div>
+                                                    ))
+                                                )}
+                                            </div>
+                                        </div>
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center px-8 leading-relaxed">
+                                            O RAG (Retrieval-Augmented Generation) permite que o agente consulte documentos específicos da sua empresa antes de responder ao cliente, garantindo precisão e confiança.
+                                        </p>
+                                    </motion.div>
+                                )}
+
+                                {activeTab === 'playground' && (
+                                    <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="flex flex-col h-[400px]">
+                                        {!currentAgent?.id && (
+                                            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-600/30 rounded-2xl p-4 mb-4 text-xs font-bold text-amber-700 dark:text-amber-300 uppercase tracking-widest text-center">
+                                                Salve o agente antes de testar no Playground
+                                            </div>
+                                        )}
+                                        <div className="flex-1 overflow-y-auto space-y-4 p-4 bg-slate-50 dark:bg-black/20 rounded-3xl mb-4 border border-slate-100 dark:border-white/5 custom-scrollbar">
+                                            {chatHistory.length === 0 ? (
+                                                <div className="flex flex-col items-center justify-center h-full opacity-30 italic text-sm">
+                                                    <MessageSquare size={32} className="mb-2" />
+                                                    Nenhuma mensagem trocada.
+                                                </div>
+                                            ) : (
+                                                chatHistory.map((msg, i) => (
+                                                    <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                                        <div className={`max-w-[80%] p-4 rounded-2xl text-sm font-medium ${msg.role === 'user' ? 'bg-primary text-white ml-12 rounded-tr-none' : 'bg-white dark:bg-white/10 text-slate-800 dark:text-slate-200 mr-12 rounded-tl-none shadow-sm'}`}>
+                                                            {msg.content}
+                                                        </div>
+                                                    </div>
+                                                ))
+                                            )}
+                                            {chatLoading && (
+                                                <div className="flex justify-start">
+                                                    <div className="bg-white dark:bg-white/10 p-4 rounded-2xl rounded-tl-none animate-pulse flex gap-1">
+                                                        <div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" />
+                                                        <div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:0.2s]" />
+                                                        <div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:0.4s]" />
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <input
+                                                value={chatMessage}
+                                                onChange={e => setChatMessage(e.target.value)}
+                                                onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleChatTest())}
+                                                placeholder="Envie uma mensagem para testar..."
+                                                disabled={!currentAgent?.id}
+                                                className="flex-1 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl px-6 py-4 text-sm font-semibold outline-none focus:ring-2 focus:ring-primary/20 dark:text-white disabled:opacity-50"
+                                            />
+                                            <button
+                                                type="button"
+                                                disabled={chatLoading || !currentAgent?.id}
+                                                onClick={handleChatTest}
+                                                className="p-4 bg-primary text-white rounded-2xl hover:scale-105 active:scale-95 transition-all shadow-lg disabled:opacity-50"
+                                            >
+                                                <Zap size={20} />
+                                            </button>
+                                        </div>
+                                    </motion.div>
+                                )}
+
+                                {activeTab !== 'playground' && (
+                                    <div className="flex gap-4 min-w-[300px] pt-8 border-t border-slate-100 dark:border-white/5">
                                         <button
                                             type="button"
                                             onClick={() => setIsModalOpen(false)}
@@ -296,7 +516,7 @@ export default function AIAgentsPage() {
                                             )}
                                         </button>
                                     </div>
-                                </div>
+                                )}
                             </form>
                         </motion.div>
                     </div>

@@ -133,12 +133,18 @@ export class TicketsService {
         }
 
         // Filtro de Tags (Trabalha com Array de IDs)
-        if (tags && tags.length > 0) {
-            where.tags = {
-                some: {
-                    tagId: { in: Array.isArray(tags) ? tags : [tags] }
-                }
-            };
+        if (tags) {
+            const tagIds = Array.isArray(tags) ? tags : [tags];
+            // Filtrar tags vazias ou undefined
+            const validTagIds = tagIds.filter(id => id && id.trim() !== '');
+
+            if (validTagIds.length > 0) {
+                where.tags = {
+                    some: {
+                        tagId: { in: validTagIds }
+                    }
+                };
+            }
         }
 
         // Filtro de Intervalo de Datas

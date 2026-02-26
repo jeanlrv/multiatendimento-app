@@ -1,50 +1,86 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, Sse } from '@nestjs/common';
 import { AIService } from './ai.service';
 import { CreateAIAgentDto } from './dto/create-ai-agent.dto';
 import { UpdateAIAgentDto } from './dto/update-ai-agent.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { LLMProviderFactory } from './engine/llm-provider.factory';
+import { ChatRequestDto } from './dto/chat-request.dto';
+import { Observable } from 'rxjs';
 
 @ApiTags('AI')
-@Controller('ai/agents')
+@Controller('ai')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class AIController {
-    constructor(private readonly aiService: AIService) { }
+    constructor(
+        private readonly aiService: AIService,
+        private readonly providerFactory: LLMProviderFactory,
+    ) { }
 
-    @Post()
+    // ========== Agent CRUD ==========
+
+    @Post('agents')
     @ApiOperation({ summary: 'Criar um novo agente de IA' })
     create(@Req() req: any, @Body() createAIAgentDto: CreateAIAgentDto) {
         return this.aiService.createAgent(req.user.companyId, createAIAgentDto);
     }
 
-    @Get()
+    @Get('agents')
     @ApiOperation({ summary: 'Listar todos os agentes de IA' })
     findAll(@Req() req: any) {
         return this.aiService.findAllAgents(req.user.companyId);
     }
 
-    @Get(':id')
+    @Get('agents/:id')
     @ApiOperation({ summary: 'Obter detalhes de um agente de IA' })
     findOne(@Req() req: any, @Param('id') id: string) {
         return this.aiService.findOneAgent(req.user.companyId, id);
     }
 
-    @Patch(':id')
+    @Patch('agents/:id')
     @ApiOperation({ summary: 'Atualizar um agente de IA' })
     update(@Req() req: any, @Param('id') id: string, @Body() updateAIAgentDto: UpdateAIAgentDto) {
         return this.aiService.updateAgent(req.user.companyId, id, updateAIAgentDto);
     }
 
-    @Delete(':id')
+    @Delete('agents/:id')
     @ApiOperation({ summary: 'Remover um agente de IA' })
     remove(@Req() req: any, @Param('id') id: string) {
         return this.aiService.removeAgent(req.user.companyId, id);
     }
 
-    @Post(':id/chat')
+    // ========== Chat ==========
+
+    @Post('agents/:id/chat')
     @ApiOperation({ summary: 'Interagir com o agente de IA' })
-    chat(@Req() req: any, @Param('id') id: string, @Body() body: { message: string }) {
-        return this.aiService.chat(req.user.companyId, id, body.message);
+    chat(@Req() req: any, @Param('id') id: string, @Body() chatRequest: ChatRequestDto) {
+        return this.aiService.chat(req.user.companyId, id, chatRequest.message, chatRequest.history || []);
+    }
+
+    @Sse('agents/:id/stream')
+    @ApiOperation({ summary: 'Streaming de respostas da IA' })
+    streamChat(@Req() req: any, @Param('id') id: string, @Body() chatRequest: ChatRequestDto): Observable<any> {
+        return this.aiService.streamChat(req.user.companyId, id, chatRequest.message, chatRequest.history || []);
+    }
+
+    // ========== Models & Usage ==========
+
+    @Get('models')
+    @ApiOperation({ summary: 'Listar modelos de IA disponíveis por provider' })
+    getModels() {
+        return this.providerFactory.getAvailableModels();
+    }
+
+    @Get('usage')
+    @ApiOperation({ summary: 'Obter uso de tokens/IA da empresa' })
+    getUsage(@Req() req: any) {
+        return this.aiService.getUsage(req.user.companyId);
+    }
+
+    @Get('metrics')
+    @ApiOperation({ summary: 'Obter métricas detalhadas de uso da IA' })
+    async getMetrics(@Req() req: any) {
+        return await this.aiService.getDetailedMetrics(req.user.companyId);
     }
 }

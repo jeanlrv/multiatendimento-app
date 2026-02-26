@@ -88,8 +88,8 @@ export default function TicketsPage() {
     const [showCopilot, setShowCopilot] = useState(false);
     const [sending, setSending] = useState(false);
 
-    // Macros (Canned Responses) & Autocomplete
-    const [macros, setMacros] = useState<{ id: string, title: string, content: string }[]>([]);
+    // Quick Replies (Macros) & Autocomplete
+    const [macros, setMacros] = useState<{ id: string, shortcut: string, content: string }[]>([]);
     const [showMacroMenu, setShowMacroMenu] = useState(false);
     const [macroFilter, setMacroFilter] = useState('');
     const [macroSelectedIndex, setMacroSelectedIndex] = useState(0);
@@ -186,7 +186,7 @@ export default function TicketsPage() {
             api.get('/tags'),
             api.get('/departments'),
             api.get('/whatsapp'),
-            api.get('/chat/macros'),
+            api.get('/quick-replies'),
         ]);
 
         if (tagsResult.status === 'fulfilled') setAvailableTags(tagsResult.value.data);
@@ -1151,12 +1151,12 @@ export default function TicketsPage() {
                                                             <div className="text-[10px] font-black uppercase text-slate-400 mb-2 px-2 sticky top-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm z-10 py-1">
                                                                 Respostas Rápidas (Use setas para navegar)
                                                             </div>
-                                                            {macros.filter(m => m.title.toLowerCase().includes(macroFilter.toLowerCase())).length === 0 ? (
+                                                            {macros.filter(m => m.shortcut.toLowerCase().includes(macroFilter.toLowerCase())).length === 0 ? (
                                                                 <div className="p-3 text-xs text-slate-500 text-center italic">
-                                                                    Nenhuma macro encontrada para "{macroFilter}"
+                                                                    Nenhuma resposta rápida encontrada para "{macroFilter}"
                                                                 </div>
                                                             ) : (
-                                                                macros.filter(m => m.title.toLowerCase().includes(macroFilter.toLowerCase())).map((macro, idx) => (
+                                                                macros.filter(m => m.shortcut.toLowerCase().includes(macroFilter.toLowerCase())).map((macro, idx) => (
                                                                     <button
                                                                         key={macro.id}
                                                                         type="button"
@@ -1172,7 +1172,7 @@ export default function TicketsPage() {
                                                                     >
                                                                         <div className="flex items-center gap-2 mb-1">
                                                                             <Bot className="h-4 w-4 text-primary" />
-                                                                            <span className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-wider">{macro.title}</span>
+                                                                            <span className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-wider">{macro.shortcut}</span>
                                                                         </div>
                                                                         <p className="text-[10px] text-slate-500 line-clamp-2 leading-relaxed">{macro.content}</p>
                                                                     </button>
@@ -1232,7 +1232,7 @@ export default function TicketsPage() {
                                                     onChange={(e) => handleMessageChange(e.target.value)}
                                                     onKeyDown={(e) => {
                                                         if (showMacroMenu) {
-                                                            const filteredMacros = macros.filter(m => m.title.toLowerCase().includes(macroFilter.toLowerCase()));
+                                                            const filteredMacros = macros.filter(m => m.shortcut.toLowerCase().includes(macroFilter.toLowerCase()));
                                                             if (e.key === 'ArrowDown') {
                                                                 e.preventDefault();
                                                                 setMacroSelectedIndex(prev => Math.min(prev + 1, Math.max(0, filteredMacros.length - 1)));

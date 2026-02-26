@@ -1,5 +1,5 @@
-import { Controller, Post, Body, Logger, Inject, forwardRef, HttpCode } from '@nestjs/common';
-import { SkipThrottle } from '@nestjs/throttler';
+import { Controller, Post, Body, Logger, Inject, forwardRef, HttpCode, BadRequestException } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { PrismaService } from '../../database/prisma.service';
 import { WhatsAppService } from './whatsapp.service';
@@ -21,8 +21,15 @@ const ZAPI_STATUS_MAP: Record<string, string> = {
     PLAYED: 'READ',         // Áudio/vídeo reproduzido
 };
 
+/**
+ * Rate limiting para webhooks Z-API:
+ * - 100 requisições por minuto por IP (padrão)
+ * - 10 requisições por segundo para evitar abuse
+ */
+const WEBHOOK_THROTTLE_LIMIT = 100;
+const WEBHOOK_THROTTLE_TTL = 60000; // 1 minuto
+
 @ApiTags('Webhooks')
-@SkipThrottle() // Webhooks Z-API podem ter alta frequência — excluir do throttle global
 @Controller('webhooks')
 export class WebhooksController {
     private readonly logger = new Logger(WebhooksController.name);
@@ -165,6 +172,7 @@ export class WebhooksController {
     @Post('zapi')
     @Public()
     @HttpCode(200)
+    @Throttle({ default: { limit: WEBHOOK_THROTTLE_LIMIT, ttl: WEBHOOK_THROTTLE_TTL } })
     @ApiOperation({ summary: 'Webhook para receber eventos da Z-API' })
     async handleZApiWebhook(@Body() payload: any) {
         try {

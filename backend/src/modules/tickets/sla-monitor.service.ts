@@ -104,7 +104,7 @@ export class SlaMonitorService extends WorkerHost implements OnModuleInit {
                 if (shouldNotify) {
                     this.breachNotifiedAt.set(cacheKey, Date.now());
 
-                    // FIX: nome correto do evento — 'sla.breach' (era 'ticket.sla_breached')
+                    // Emitir evento de violação de SLA
                     this.eventEmitter.emit('sla.breach', {
                         ticketId: ticket.id,
                         companyId: ticket.companyId,

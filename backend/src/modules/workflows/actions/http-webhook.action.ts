@@ -2,8 +2,11 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ActionExecutor, WorkflowContext, ActionResult } from '../interfaces/action-executor.interface';
 import axios from 'axios';
 
-// Ranges de IPs privados/locais bloqueados para evitar SSRF
-const BLOCKED_PATTERNS = [
+/**
+ * Lista de padrões de hostname bloqueados para prevenir SSRF (Server-Side Request Forgery)
+ * Bloqueia acesso a recursos internos, locais e privados da rede.
+ */
+const BLOCKED_HOSTNAME_PATTERNS = [
     /^localhost$/i,
     /^127\./,
     /^0\./,
@@ -17,11 +20,47 @@ const BLOCKED_PATTERNS = [
     /^fe80:/i,              // IPv6 link-local
 ];
 
+/**
+ * Lista de protocolos permitidos para prevenir ataques de SSRF via protocol handlers
+ */
+const ALLOWED_PROTOCOLS = ['http:', 'https:'];
+
+/**
+ * Valida se uma URL está segura para requisições externas (proteção SSRF)
+ * @param rawUrl URL bruta a ser validada
+ * @returns true se a URL for bloqueada, false se for segura
+ */
 function isSsrfBlockedUrl(rawUrl: string): boolean {
     try {
-        const { hostname, protocol } = new URL(rawUrl);
-        if (protocol !== 'http:' && protocol !== 'https:') return true;
-        return BLOCKED_PATTERNS.some((p) => p.test(hostname));
+        const parsedUrl = new URL(rawUrl);
+
+        // Verificar protocolo
+        if (!ALLOWED_PROTOCOLS.includes(parsedUrl.protocol)) {
+            return true;
+        }
+
+        // Verificar hostname contra padrões bloqueados
+        if (BLOCKED_HOSTNAME_PATTERNS.some((p) => p.test(parsedUrl.hostname))) {
+            return true;
+        }
+
+        // Verificar se o hostname é um IP numérico
+        const ipPattern = /^(\d{1,3}\.){3}\d{1,3}$/;
+        if (ipPattern.test(parsedUrl.hostname)) {
+            // Verificar se é IP privado
+            const ipParts = parsedUrl.hostname.split('.').map(Number);
+            if (
+                ipParts[0] === 10 ||
+                (ipParts[0] === 172 && ipParts[1] >= 16 && ipParts[1] <= 31) ||
+                (ipParts[0] === 192 && ipParts[1] === 168) ||
+                ipParts[0] === 127 ||
+                ipParts[0] === 0
+            ) {
+                return true;
+            }
+        }
+
+        return false;
     } catch {
         return true; // URL inválida = bloquear
     }

@@ -4,27 +4,34 @@ import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Zap, Plus, Search, Edit2, Trash2, X, Save, RefreshCcw, Copy } from 'lucide-react';
 import { toast } from 'sonner';
-import { cannedResponsesService, CannedResponse } from '@/services/canned-responses';
+import { QuickRepliesService, QuickReply } from '@/services/quick-replies';
 import { useAuth } from '@/contexts/AuthContext';
 import { hasPermission } from '@/lib/permissions';
 
 export default function MacrosPage() {
     const { user } = useAuth();
-    const [macros, setMacros] = useState<CannedResponse[]>([]);
+    const [macros, setMacros] = useState<QuickReply[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchInput, setSearchInput] = useState('');
     const [showModal, setShowModal] = useState(false);
-    const [editing, setEditing] = useState<CannedResponse | null>(null);
+    const [editing, setEditing] = useState<QuickReply | null>(null);
     const [deletingId, setDeletingId] = useState<string | null>(null);
 
     const canManage = hasPermission(user, 'settings:update');
 
     const fetchMacros = useCallback(async () => {
         try {
-            const data = await cannedResponsesService.findAll(searchInput || undefined);
-            setMacros(data);
+            const data = await QuickRepliesService.findAll();
+            // Filtragem local por enquanto, se a API não suportar busca
+            const filtered = searchInput
+                ? data.filter(m =>
+                    m.shortcut.toLowerCase().includes(searchInput.toLowerCase()) ||
+                    m.content.toLowerCase().includes(searchInput.toLowerCase())
+                )
+                : data;
+            setMacros(filtered);
         } catch {
-            toast.error('Erro ao carregar macros');
+            toast.error('Erro ao carregar respostas rápidas');
         } finally {
             setLoading(false);
         }
@@ -36,14 +43,14 @@ export default function MacrosPage() {
         return () => clearTimeout(t);
     }, [fetchMacros]);
 
-    const handleDelete = async (macro: CannedResponse) => {
+    const handleDelete = async (macro: QuickReply) => {
         setDeletingId(macro.id);
         try {
-            await cannedResponsesService.remove(macro.id);
+            await QuickRepliesService.remove(macro.id);
             setMacros(prev => prev.filter(m => m.id !== macro.id));
-            toast.success('Macro removida');
+            toast.success('Resposta rápida removida');
         } catch (err: any) {
-            toast.error(err.response?.data?.message || 'Erro ao remover macro');
+            toast.error(err.response?.data?.message || 'Erro ao remover resposta rápida');
         } finally {
             setDeletingId(null);
         }
@@ -61,10 +68,10 @@ export default function MacrosPage() {
                 <div>
                     <h2 className="text-4xl font-black text-slate-900 dark:text-white tracking-tighter italic flex items-center gap-4">
                         <Zap className="text-primary h-10 w-10 shadow-[0_0_20px_rgba(56,189,248,0.3)]" />
-                        Macros / <span className="text-primary italic">Respostas Rápidas</span>
+                        Respostas <span className="text-primary italic">Rápidas</span>
                     </h2>
                     <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mt-1 italic">
-                        Digite / no chat para ativar autocomplete · {macros.length} macros configuradas
+                        Atalhos registrados: {macros.length}
                     </p>
                 </div>
                 {canManage && (
@@ -73,7 +80,7 @@ export default function MacrosPage() {
                         className="flex items-center gap-3 px-8 py-4 bg-primary text-white rounded-[1.5rem] shadow-2xl shadow-primary/30 font-bold text-xs uppercase tracking-widest group active:scale-95 transition-all"
                     >
                         <Plus className="h-5 w-5 group-hover:scale-110 transition-transform" />
-                        <span className="hidden sm:inline">Nova Macro</span>
+                        <span className="hidden sm:inline">Nova Resposta</span>
                     </button>
                 )}
             </div>
@@ -84,7 +91,7 @@ export default function MacrosPage() {
                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-primary transition-colors" />
                     <input
                         type="text"
-                        placeholder="Buscar macro pelo título ou conteúdo..."
+                        placeholder="Buscar pelo atalho ou conteúdo..."
                         value={searchInput}
                         onChange={e => setSearchInput(e.target.value)}
                         className="w-full pl-12 pr-5 py-3.5 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-[1.5rem] text-xs font-bold outline-none focus:ring-4 focus:ring-primary/10 transition-all dark:text-white"
@@ -103,14 +110,14 @@ export default function MacrosPage() {
                 <div className="flex flex-col items-center justify-center py-32 text-slate-400">
                     <Zap size={48} className="mb-4 opacity-20" />
                     <p className="font-bold text-sm">
-                        {searchInput ? 'Nenhuma macro encontrada.' : 'Nenhuma macro configurada ainda.'}
+                        {searchInput ? 'Nada encontrado.' : 'Nenhuma resposta configurada.'}
                     </p>
                     {!searchInput && canManage && (
                         <button
                             onClick={() => { setEditing(null); setShowModal(true); }}
                             className="mt-4 px-6 py-3 bg-primary text-white rounded-2xl font-bold text-xs uppercase tracking-widest"
                         >
-                            Criar primeira macro
+                            Criar primeira resposta
                         </button>
                     )}
                 </div>
@@ -136,9 +143,8 @@ export default function MacrosPage() {
                                     {/* Conteúdo */}
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-center gap-3 mb-1.5">
-                                            <span className="font-black text-slate-900 dark:text-white text-sm">{macro.title}</span>
-                                            <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 uppercase tracking-widest">
-                                                /{macro.title.toLowerCase().replace(/\s+/g, '_').slice(0, 15)}
+                                            <span className="font-black text-slate-900 dark:text-white text-sm">
+                                                {macro.shortcut.startsWith('/') ? macro.shortcut : `/${macro.shortcut}`}
                                             </span>
                                         </div>
                                         <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed line-clamp-2">
@@ -210,37 +216,44 @@ export default function MacrosPage() {
 // ─── Modal ─────────────────────────────────────────────────────────────────────
 
 interface ModalProps {
-    macro: CannedResponse | null;
+    macro: QuickReply | null;
     onClose: () => void;
-    onSave: (saved: CannedResponse) => void;
+    onSave: (saved: QuickReply) => void;
 }
 
 function MacroModal({ macro, onClose, onSave }: ModalProps) {
     const isNew = !macro;
     const [form, setForm] = useState({
-        title: macro?.title ?? '',
+        shortcut: macro?.shortcut ?? '',
         content: macro?.content ?? '',
     });
     const [submitting, setSubmitting] = useState(false);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!form.title.trim()) { toast.error('Título é obrigatório'); return; }
+        if (!form.shortcut.trim()) { toast.error('Atalho é obrigatório'); return; }
         if (!form.content.trim()) { toast.error('Conteúdo é obrigatório'); return; }
+
+        // Garantir que comece com barra se for do estilo atalho
+        let finalShortcut = form.shortcut.trim();
+        if (!finalShortcut.startsWith('/')) {
+            finalShortcut = '/' + finalShortcut;
+        }
 
         setSubmitting(true);
         try {
             const result = isNew
-                ? await cannedResponsesService.create(form)
-                : await cannedResponsesService.update(macro.id, form);
-            toast.success(isNew ? 'Macro criada!' : 'Macro atualizada!');
+                ? await QuickRepliesService.create({ ...form, shortcut: finalShortcut })
+                : await QuickRepliesService.update(macro.id, { ...form, shortcut: finalShortcut });
+            toast.success(isNew ? 'Criada!' : 'Atualizada!');
             onSave(result);
         } catch (err: any) {
-            toast.error(err.response?.data?.message || 'Erro ao salvar macro');
+            toast.error(err.response?.data?.message || 'Erro ao salvar');
         } finally {
             setSubmitting(false);
         }
     };
+
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -277,18 +290,18 @@ function MacroModal({ macro, onClose, onSave }: ModalProps) {
                 <form onSubmit={handleSubmit} className="p-8 space-y-5">
                     <div className="space-y-2">
                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
-                            Título / Atalho *
+                            Atalho *
                         </label>
                         <input
                             required
-                            value={form.title}
-                            onChange={e => setForm({ ...form, title: e.target.value })}
+                            value={form.shortcut}
+                            onChange={e => setForm({ ...form, shortcut: e.target.value })}
                             className="w-full px-5 py-3.5 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 outline-none focus:ring-2 focus:ring-primary/20 text-sm font-semibold dark:text-white transition-all"
-                            placeholder="Ex: Saudação inicial"
+                            placeholder="Ex: /ola"
                         />
-                        {form.title && (
+                        {form.shortcut && (
                             <p className="text-[10px] text-slate-400 ml-1">
-                                Atalho: <span className="text-primary font-black">/{form.title.toLowerCase().replace(/\s+/g, '_').slice(0, 20)}</span>
+                                Digite <span className="text-primary font-black">{form.shortcut.startsWith('/') ? form.shortcut : `/${form.shortcut}`}</span> no chat para usar.
                             </p>
                         )}
                     </div>
@@ -323,7 +336,7 @@ function MacroModal({ macro, onClose, onSave }: ModalProps) {
                         >
                             {submitting
                                 ? <RefreshCcw className="animate-spin h-4 w-4" />
-                                : <><Save size={14} /> {isNew ? 'Criar Macro' : 'Salvar'}</>
+                                : <><Save size={14} /> {isNew ? 'Criar' : 'Salvar'}</>
                             }
                         </button>
                     </div>

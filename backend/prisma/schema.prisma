@@ -2,13 +2,15 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-  provider      = "prisma-client-js"
-  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+  provider        = "prisma-client-js"
+  binaryTargets   = ["native", "linux-musl-openssl-3.0.x"]
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [vector]
 }
 
 // ============================================
@@ -19,41 +21,41 @@ model Role {
   id          String   @id @default(uuid())
   name        String
   description String?
-  permissions String[] 
+  permissions String[]
   companyId   String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  company     Company  @relation(fields: [companyId], references: [id])
-  users       User[]
+  company Company @relation(fields: [companyId], references: [id])
+  users   User[]
 
   @@unique([companyId, name])
   @@map("roles")
 }
 
 model User {
-  id                  String   @id @default(uuid())
-  email               String   @unique
-  password            String
-  name                String
-  avatar              String?
-  roleId              String
-  role                Role     @relation(fields: [roleId], references: [id])
-  isActive            Boolean  @default(true)
-  companyId           String?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String
+  avatar    String?
+  roleId    String
+  role      Role     @relation(fields: [roleId], references: [id])
+  isActive  Boolean  @default(true)
+  companyId String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  company           Company?            @relation(fields: [companyId], references: [id])
+  company Company? @relation(fields: [companyId], references: [id])
 
-  assignedTickets Ticket[]       @relation("AssignedUser")
-  deletedMessages Message[]      @relation("DeletedBy")
-  auditLogs       AuditLog[]
-  refreshTokens   RefreshToken[]
-  departments     UserDepartment[]
-  schedules       Schedule[]
+  assignedTickets  Ticket[]          @relation("AssignedUser")
+  deletedMessages  Message[]         @relation("DeletedBy")
+  auditLogs        AuditLog[]
+  refreshTokens    RefreshToken[]
+  departments      UserDepartment[]
+  schedules        Schedule[]
   workflowVersions WorkflowVersion[]
-  
+
   // Relações do Hub de Colaboração (Épico 4)
   internalChatMembers  InternalChatMember[]
   internalChatMessages InternalChatMessage[]
@@ -65,12 +67,12 @@ model User {
 }
 
 model UserDepartment {
-  id            String   @id @default(uuid())
-  userId        String
-  departmentId  String
+  id           String @id @default(uuid())
+  userId       String
+  departmentId String
 
-  user          User       @relation(fields: [userId], references: [id])
-  department    Department @relation(fields: [departmentId], references: [id])
+  user       User       @relation(fields: [userId], references: [id])
+  department Department @relation(fields: [departmentId], references: [id])
 
   @@unique([userId, departmentId])
   @@map("user_departments")
@@ -101,22 +103,22 @@ enum TicketMode {
 }
 
 model Department {
-  id                String   @id @default(uuid())
-  name              String
-  description       String?
-  emoji             String?  @default("💬")
-  color             String   @default("#2563eb")
-  displayOrder      Int      @default(0)
-  
-  aiAgentId         String?
-  workflowId        String?
-  defaultMode       TicketMode @default(AI)
-  
+  id           String  @id @default(uuid())
+  name         String
+  description  String?
+  emoji        String? @default("💬")
+  color        String  @default("#2563eb")
+  displayOrder Int     @default(0)
+
+  aiAgentId   String?
+  workflowId  String?
+  defaultMode TicketMode @default(AI)
+
   slaFirstResponseMin Int?
   slaResolutionMin    Int?
-  
-  outOfHoursMessage   String?  @db.Text
-  greetingMessage     String?  @db.Text
+
+  outOfHoursMessage String?  @db.Text
+  greetingMessage   String?  @db.Text
   businessHours     Json?
   autoDistribute    Boolean  @default(true)
   isActive          Boolean  @default(true)
@@ -124,15 +126,15 @@ model Department {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  company           Company              @relation(fields: [companyId], references: [id])
-  aiAgent           AIAgent?             @relation(fields: [aiAgentId], references: [id])
+  company Company  @relation(fields: [companyId], references: [id])
+  aiAgent AIAgent? @relation(fields: [aiAgentId], references: [id])
 
-  users               UserDepartment[]
-  tickets             Ticket[]
-  whatsappInstances   WhatsAppInstance[]
-  flow                DepartmentFlow?
-  scheduleConfig      ScheduleConfig?
-  Schedule            Schedule[]
+  users             UserDepartment[]
+  tickets           Ticket[]
+  whatsappInstances WhatsAppInstance[]
+  flow              DepartmentFlow?
+  scheduleConfig    ScheduleConfig?
+  Schedule          Schedule[]
 
   @@unique([companyId, name])
   @@index([companyId])
@@ -158,23 +160,23 @@ model DepartmentFlow {
 // ============================================
 
 model WhatsAppInstance {
-  id             String           @id @default(uuid())
+  id             String    @id @default(uuid())
   name           String
-  phoneNumber    String?          @unique
-  zapiInstanceId String?          @unique
+  phoneNumber    String?   @unique
+  zapiInstanceId String?   @unique
   zapiToken      String?
-  status         String           @default("DESCONECTADO")
+  status         String    @default("DESCONECTADO")
   qrCode         String?
   lastSeenAt     DateTime?
-  isActive       Boolean          @default(true)
+  isActive       Boolean   @default(true)
   companyId      String
   departmentId   String?
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
-  company     Company      @relation(fields: [companyId], references: [id])
-  department  Department?  @relation(fields: [departmentId], references: [id])
-  tickets     Ticket[]
+  company    Company     @relation(fields: [companyId], references: [id])
+  department Department? @relation(fields: [departmentId], references: [id])
+  tickets    Ticket[]
 
   @@index([companyId])
   @@map("whatsapp_instances")
@@ -206,7 +208,7 @@ model Contact {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  company   Company  @relation(fields: [companyId], references: [id])
+  company   Company    @relation(fields: [companyId], references: [id])
   tickets   Ticket[]
   schedules Schedule[]
 
@@ -223,40 +225,48 @@ enum PlanTier {
 }
 
 model Company {
-  id                  String               @id @default(uuid())
-  name                String
-  plan                PlanTier             @default(STARTER)
-  maxUsers            Int                  @default(3)
-  maxDepartments      Int                  @default(1)
-  maxWhatsApp         Int                  @default(1)
-  expiresAt           DateTime?
-  
-  contacts            Contact[]
-  users               User[]
-  departments         Department[]
-  whatsappInstances   WhatsAppInstance[]
-  tickets             Ticket[]
-  schedules           Schedule[]
-  aiAgents            AIAgent[]
-  evaluations         Evaluation[]
-  integrations        Integration[]
-  tags                Tag[]
-  workflowRules       WorkflowRule[]
-  workflowExecutions  WorkflowExecution[]
-  settings            Setting[]
-  smtpConfigs         SMTPConfig[]
-  auditLogs           AuditLog[]
-  roles               Role[]
-  limitTokens         Int                  @default(100000)
-  logoUrl             String?
-  primaryColor        String               @default("#3B82F6") // Padrão KSZap Blue
-  secondaryColor      String               @default("#1E293B") // Padrão Slate 800
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @updatedAt
+  id             String    @id @default(uuid())
+  name           String
+  plan           PlanTier  @default(STARTER)
+  maxUsers       Int       @default(3)
+  maxDepartments Int       @default(1)
+  maxWhatsApp    Int       @default(1)
+  expiresAt      DateTime?
+
+  contacts           Contact[]
+  users              User[]
+  departments        Department[]
+  whatsappInstances  WhatsAppInstance[]
+  tickets            Ticket[]
+  schedules          Schedule[]
+  aiAgents           AIAgent[]
+  evaluations        Evaluation[]
+  integrations       Integration[]
+  tags               Tag[]
+  workflowRules      WorkflowRule[]
+  workflowExecutions WorkflowExecution[]
+  settings           Setting[]
+  smtpConfigs        SMTPConfig[]
+  auditLogs          AuditLog[]
+  roles              Role[]
+  limitTokens        Int                 @default(100000)
+  limitTokensPerHour Int                 @default(10000)
+  limitTokensPerDay  Int                 @default(100000)
+  logoUrl            String?
+  primaryColor       String              @default("#3B82F6") // Padrão KSZap Blue
+  secondaryColor     String              @default("#1E293B") // Padrão Slate 800
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
 
   // Relações do Hub de Colaboração (Épico 4 e 2.2)
-  internalChats       InternalChat[]
-  savedFilters        SavedFilter[]
+  internalChats InternalChat[]
+  savedFilters  SavedFilter[]
+
+  // Relação Base de Conhecimento (IA)
+  knowledgeBases KnowledgeBase[]
+
+  // Respostas Rápidas (Macros)
+  quickReplies  QuickReply[]
 
   @@map("companies")
 }
@@ -269,7 +279,7 @@ model Ticket {
   id               String         @id @default(uuid())
   contactId        String
   departmentId     String
-  connectionId     String?        // Opcional se usar WhatsAppInstance
+  connectionId     String? // Opcional se usar WhatsAppInstance
   assignedUserId   String?
   status           TicketStatus   @default(OPEN)
   priority         TicketPriority @default(MEDIUM)
@@ -286,11 +296,11 @@ model Ticket {
   lastMessageAt    DateTime?      @default(now())
   summary          String?        @db.Text
 
-  company      Company            @relation(fields: [companyId], references: [id])
+  company Company @relation(fields: [companyId], references: [id])
 
-  contact      Contact            @relation(fields: [contactId], references: [id])
-  department   Department         @relation(fields: [departmentId], references: [id])
-  assignedUser User?              @relation("AssignedUser", fields: [assignedUserId], references: [id])
+  contact          Contact           @relation(fields: [contactId], references: [id])
+  department       Department        @relation(fields: [departmentId], references: [id])
+  assignedUser     User?             @relation("AssignedUser", fields: [assignedUserId], references: [id])
   whatsappInstance WhatsAppInstance? @relation(fields: [connectionId], references: [id])
 
   messages   Message[]
@@ -414,24 +424,101 @@ model TicketTag {
 }
 
 // ============================================
-// IA (AnythingLLM)
+// RESPOSTAS RÁPIDAS (MACROS)
 // ============================================
+
+model QuickReply {
+  id        String   @id @default(uuid())
+  shortcut  String   // Ex: "/ola"
+  content   String   @db.Text
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  company   Company  @relation(fields: [companyId], references: [id])
+  
+  @@unique([companyId, shortcut])
+  @@index([companyId])
+  @@map("quick_replies")
+}
+
+// ============================================
+// IA E RAG NATIVO
+// ============================================
+
+model KnowledgeBase {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  companyId   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company   Company    @relation(fields: [companyId], references: [id])
+  agents    AIAgent[]
+  documents Document[]
+
+  @@index([companyId])
+  @@map("knowledge_bases")
+}
+
+model Document {
+  id              String   @id @default(uuid())
+  knowledgeBaseId String
+  title           String
+  sourceType      String // TEXT, PDF, URL, DOCX
+  contentUrl      String? // Link para arquivo S3 (opcional)
+  rawContent      String?  @db.Text
+  status          String   @default("PENDING") // PENDING, PROCESSING, READY, ERROR
+  chunkCount      Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  knowledgeBase KnowledgeBase   @relation(fields: [knowledgeBaseId], references: [id], onDelete: Cascade)
+  chunks        DocumentChunk[]
+
+  @@index([knowledgeBaseId])
+  @@index([status])
+  @@map("documents")
+}
+
+model DocumentChunk {
+  id         String @id @default(uuid())
+  documentId String
+  content    String @db.Text
+  pageNumber Int?
+  metadata   Json?
+
+  // Embeddings para RAG usando extesão pgvector
+  embedding Unsupported("vector(1536)")?
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId])
+  @@map("document_chunks")
+}
 
 model AIAgent {
   id                     String   @id @default(uuid())
   name                   String
   description            String?
-  anythingllmWorkspaceId String
+  anythingllmWorkspaceId String? // Mantido opcional para retrocompatibilidade
+  prompt                 String?  @db.Text // System Prompt ("Como agir")
+  modelId                String   @default("gpt-4o-mini") // gpt-4o, claude-3-5-sonnet, etc
+  temperature            Float    @default(0.7)
   configuration          Json?
   isActive               Boolean  @default(true)
   companyId              String
+  knowledgeBaseId        String?
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 
-  company     Company      @relation(fields: [companyId], references: [id])
-  departments Department[]
+  company       Company        @relation(fields: [companyId], references: [id])
+  knowledgeBase KnowledgeBase? @relation(fields: [knowledgeBaseId], references: [id])
+  departments   Department[]
 
   @@index([companyId])
+  @@index([knowledgeBaseId])
   @@map("ai_agents")
 }
 
@@ -479,9 +566,9 @@ model WorkflowRule {
   priority    Int      @default(0)
   isActive    Boolean  @default(true)
   isTemplate  Boolean  @default(false)
-  nodes       Json?    // Estrutura de Grafo (Nodes)
-  edges       Json?    // Estrutura de Grafo (Edges)
-  config      Json?    // Configurações avançadas (concurrency, timeout, etc)
+  nodes       Json? // Estrutura de Grafo (Nodes)
+  edges       Json? // Estrutura de Grafo (Edges)
+  config      Json? // Configurações avançadas (concurrency, timeout, etc)
   runCount    Int      @default(0)
   environment String   @default("PRODUCTION") // PRODUCTION, TEST
   version     Int      @default(1)
@@ -501,22 +588,22 @@ model WorkflowRule {
 }
 
 model WorkflowVersion {
-  id             String   @id @default(uuid())
-  workflowId     String
-  version        Int
-  trigger        Json
-  actions        Json
-  nodes          Json?    // Grafo visual — nós
-  edges          Json?    // Grafo visual — arestas
-  description    String?
-  diff           Json?    // JSON Patch da diferença
-  commitMessage  String?  // Comentário obrigatório da versão
-  userId         String?  // Quem criou a versão
-  createdAt      DateTime @default(now())
-  createdBy      String?  // Mantido para compatibilidade ou string livre
+  id            String   @id @default(uuid())
+  workflowId    String
+  version       Int
+  trigger       Json
+  actions       Json
+  nodes         Json? // Grafo visual — nós
+  edges         Json? // Grafo visual — arestas
+  description   String?
+  diff          Json? // JSON Patch da diferença
+  commitMessage String? // Comentário obrigatório da versão
+  userId        String? // Quem criou a versão
+  createdAt     DateTime @default(now())
+  createdBy     String? // Mantido para compatibilidade ou string livre
 
-  workflow       WorkflowRule @relation(fields: [workflowId], references: [id], onDelete: Cascade)
-  user           User?        @relation(fields: [userId], references: [id])
+  workflow WorkflowRule @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  user     User?        @relation(fields: [userId], references: [id])
 
   @@index([workflowId])
   @@map("workflow_rule_versions")
@@ -527,18 +614,18 @@ model WorkflowExecution {
   workflowRuleId String
   entityType     String
   entityId       String
-  status         String   // success, partial, failed
+  status         String // success, partial, failed
   steps          Json
   result         Json?
-  logs           Json?    // Logs estruturados detalhados
-  duration       Int?     // Tempo de execução em ms
+  logs           Json? // Logs estruturados detalhados
+  duration       Int? // Tempo de execução em ms
   retryCount     Int      @default(0)
   correlationId  String?  @unique @default(uuid())
   companyId      String
   executedAt     DateTime @default(now())
 
-  company      Company             @relation(fields: [companyId], references: [id])
-  workflowRule WorkflowRule        @relation(fields: [workflowRuleId], references: [id], onDelete: Cascade)
+  company      Company              @relation(fields: [companyId], references: [id])
+  workflowRule WorkflowRule         @relation(fields: [workflowRuleId], references: [id], onDelete: Cascade)
   suspensions  WorkflowSuspension[]
 
   @@index([companyId])
@@ -550,14 +637,14 @@ model WorkflowExecution {
 }
 
 model WorkflowSuspension {
-  id                  String   @id @default(uuid())
+  id                  String    @id @default(uuid())
   workflowExecutionId String
   stepId              String
   eventName           String
   correlationKey      String?
   timeoutAt           DateTime?
   metadata            Json?
-  createdAt           DateTime @default(now())
+  createdAt           DateTime  @default(now())
 
   execution WorkflowExecution @relation(fields: [workflowExecutionId], references: [id], onDelete: Cascade)
 
@@ -569,7 +656,7 @@ model WorkflowSuspension {
 model WorkflowActionMetric {
   id              String    @id @default(uuid())
   workflowRuleId  String
-  nodeId          String?   // ID do nó no grafo para métricas granulares
+  nodeId          String? // ID do nó no grafo para métricas granulares
   actionType      String
   totalExecutions Int       @default(0)
   totalFailures   Int       @default(0)
@@ -617,7 +704,7 @@ model Schedule {
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
 
-  company    Company            @relation(fields: [companyId], references: [id])
+  company Company @relation(fields: [companyId], references: [id])
 
   contact    Contact            @relation(fields: [contactId], references: [id])
   department Department         @relation(fields: [departmentId], references: [id])
@@ -730,18 +817,19 @@ model SMTPConfig {
   @@index([companyId])
   @@map("smtp_configs")
 }
+
 model Integration {
-  id                String   @id @default(uuid())
-  name              String   // Ex: "Z-API Comercial"
-  provider          String   // "ZAPI"
-  zapiInstanceId    String
-  zapiToken         String
-  zapiClientToken   String?  // Client-Token de segurança da Z-API (Security Token)
-  webhookUrl        String?  // URL do webhook registrada na Z-API
-  isActive          Boolean  @default(true)
-  companyId         String
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id              String   @id @default(uuid())
+  name            String // Ex: "Z-API Comercial"
+  provider        String // "ZAPI"
+  zapiInstanceId  String
+  zapiToken       String
+  zapiClientToken String? // Client-Token de segurança da Z-API (Security Token)
+  webhookUrl      String? // URL do webhook registrada na Z-API
+  isActive        Boolean  @default(true)
+  companyId       String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   company Company @relation(fields: [companyId], references: [id])
 
@@ -772,6 +860,7 @@ model CannedResponse {
   @@index([companyId])
   @@map("canned_responses")
 }
+
 // ============================================
 // MENSAGERIA INTERNA (HUB DE COLABORAÇÃO)
 // ============================================
@@ -783,13 +872,13 @@ enum InternalChatType {
 
 model InternalChat {
   id        String           @id @default(uuid())
-  name      String?          // Nome apenas para grupos
+  name      String? // Nome apenas para grupos
   type      InternalChatType @default(DIRECT)
   companyId String
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
 
-  company  Company              @relation(fields: [companyId], references: [id])
+  company  Company               @relation(fields: [companyId], references: [id])
   members  InternalChatMember[]
   messages InternalChatMessage[]
 
@@ -803,23 +892,23 @@ model InternalChatMember {
   role      String   @default("MEMBER") // ADMIN, MEMBER
   createdAt DateTime @default(now())
 
-  chat      InternalChat @relation(fields: [chatId], references: [id], onDelete: Cascade)
-  user      User         @relation(fields: [userId], references: [id])
+  chat InternalChat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  user User         @relation(fields: [userId], references: [id])
 
   @@unique([chatId, userId])
   @@map("internal_chat_members")
 }
 
 model InternalChatMessage {
-  id          String    @id @default(uuid())
+  id          String      @id @default(uuid())
   chatId      String
   senderId    String
-  content     String?   @db.Text
+  content     String?     @db.Text
   mediaUrl    String?
   type        MessageType @default(TEXT)
-  readAt      Json?     // Mapeamento de { userId: timestamp }
+  readAt      Json? // Mapeamento de { userId: timestamp }
   deliveredAt DateTime?
-  sentAt      DateTime  @default(now())
+  sentAt      DateTime    @default(now())
 
   chat   InternalChat @relation(fields: [chatId], references: [id], onDelete: Cascade)
   sender User         @relation(fields: [senderId], references: [id])
@@ -837,7 +926,7 @@ model Notification {
   id         String    @id @default(uuid())
   userId     String    @map("user_id")
   companyId  String    @map("company_id")
-  type       String    // ticket.assigned | ticket.mention | sla.breach | system
+  type       String // ticket.assigned | ticket.mention | sla.breach | system
   title      String
   body       String?
   entityType String?   @map("entity_type") // ticket | message | schedule
@@ -862,7 +951,7 @@ model SavedFilter {
   name      String
   userId    String
   companyId String
-  filters   Json     // Filtros serializados
+  filters   Json // Filtros serializados
   color     String?  @default("#3B82F6")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

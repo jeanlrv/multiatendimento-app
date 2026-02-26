@@ -6,42 +6,60 @@ RUN apk add --no-cache openssl libc6-compat
 
 WORKDIR /app
 
+# Copiar package files primeiro para cache otimizado
 COPY package*.json ./
-# Usamos legacy-peer-deps para evitar conflitos conhecidos de versões de dependências
+
+# Instalar dependências
 RUN npm install --legacy-peer-deps
 
+# Copiar código fonte
 COPY . .
 
-# Gerar o Prisma Client (usamos env dummy para evitar falhas de validação no build)
-RUN DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy" npx prisma generate
+# Gerar Prisma Client
+RUN npx prisma generate
 
-# Compilar a aplicação NestJS
-RUN npm run build && find /app -name main.js
+# Compilar aplicação
+RUN npm run build
 
 # Stage 2 - Production
 FROM node:22-alpine
 
-# Instalar dependências necessárias para o Prisma em runtime
-RUN apk add --no-cache openssl libc6-compat curl
+# Instalar dependências de runtime
+RUN apk add --no-cache openssl libc6-compat curl netcat-openbsd
 
 WORKDIR /app
 
+# Copiar package files
 COPY package*.json ./
+
+# Instalar dependências de produção
 RUN npm install --omit=dev --legacy-peer-deps
 
-# Copiar artefatos do estágio builder
+# Copiar artefatos do build
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package*.json ./
 
-# Copiar e configurar o entrypoint para rodar migrações
+# Copiar entrypoint
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN sed -i 's/\r$//' /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh
+RUN sed -i 's/\r$//' /usr/local/bin/entrypoint.sh && \
+    chmod +x /usr/local/bin/entrypoint.sh
 
-# A porta será definida pelo Railway via process.env.PORT, mas expomos a 3000 por padrão
+# Configurar permissões
+RUN mkdir -p /app/public/uploads && \
+    chown -R node:node /app
+
+# Executar como usuário não-root
+USER node
+
+# Health check para verificação de saúde
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD node -e "require('http').get('http://localhost:3000/health', (r) => { process.exit(r.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"
+
+# Porta (Railway define PORT via ambiente)
 EXPOSE 3000
 
-ENTRYPOINT ["entrypoint.sh"]
+# Entrypoint e command
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["node", "dist/main.js"]

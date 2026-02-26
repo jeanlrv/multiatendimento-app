@@ -83,9 +83,9 @@ export class CreateWorkflowDto {
     // V2 Graph fields
     @ApiProperty({ required: false })
     @IsOptional()
-    nodes?: Prisma.InputJsonValue;
+    nodes?: any;
 
     @ApiProperty({ required: false })
     @IsOptional()
-    edges?: Prisma.InputJsonValue;
+    edges?: any;
 }

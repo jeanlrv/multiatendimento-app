@@ -6,23 +6,23 @@ import * as crypto from 'crypto';
  * Serviço de criptografia AES-256-GCM para tokens e senhas em repouso.
  *
  * Valores criptografados têm o prefixo `enc:` para distinguir de legado plaintext.
- * Se ENCRYPTION_KEY não estiver configurado, os valores são armazenados em plaintext
- * (retrocompatibilidade) com aviso em log.
+ * Se ENCRYPTION_KEY não estiver configurado, o sistema não deve iniciar (validado em main.ts).
  */
 @Injectable()
 export class CryptoService {
     private readonly logger = new Logger(CryptoService.name);
     private readonly algorithm = 'aes-256-gcm';
-    private readonly key: Buffer | null = null;
+    private readonly key: Buffer;
 
     constructor(private config: ConfigService) {
         const keyStr = config.get<string>('ENCRYPTION_KEY', '');
-        if (keyStr) {
-            // Derivar chave de 32 bytes a partir da string fornecida
-            this.key = crypto.createHash('sha256').update(keyStr).digest();
-        } else {
-            this.logger.warn('ENCRYPTION_KEY não configurado — tokens armazenados em plaintext no banco');
+
+        if (!keyStr || keyStr.length < 32) {
+            throw new Error('ENCRYPTION_KEY deve ser configurado com pelo menos 32 caracteres');
         }
+
+        // Derivar chave de 32 bytes a partir da string fornecida
+        this.key = crypto.createHash('sha256').update(keyStr).digest();
     }
 
     /**

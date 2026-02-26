@@ -1,5 +1,4 @@
 import { IsOptional, IsString, IsBoolean, IsNumber } from 'class-validator';
-import { Prisma } from '@prisma/client';
 
 export class UpdateWorkflowDto {
 
@@ -22,16 +21,16 @@ export class UpdateWorkflowDto {
     // ===== V1 JSON fields =====
 
     @IsOptional()
-    trigger?: Prisma.InputJsonValue;
+    trigger?: any;
 
     @IsOptional()
-    actions?: Prisma.InputJsonValue;
+    actions?: any;
 
     // ===== V2 Graph fields =====
 
     @IsOptional()
-    nodes?: Prisma.InputJsonValue;
+    nodes?: any;
 
     @IsOptional()
-    edges?: Prisma.InputJsonValue;
+    edges?: any;
 }

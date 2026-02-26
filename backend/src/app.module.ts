@@ -35,6 +35,7 @@ import { CryptoModule } from './common/crypto.module';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
 import { TenantGuard } from './modules/auth/guards/tenant.guard';
 import { PermissionsGuard } from './modules/auth/guards/permissions.guard';
+import { QuickRepliesModule } from './modules/quick-replies/quick-replies.module';
 
 @Module({
     imports: [
@@ -122,6 +123,7 @@ import { PermissionsGuard } from './modules/auth/guards/permissions.guard';
             rootPath: join(__dirname, '..', 'public'),
             serveRoot: '/public',
         }),
+        QuickRepliesModule,
     ],
     controllers: [],
     providers: [

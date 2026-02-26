@@ -3,10 +3,19 @@ import * as bcrypt from 'bcryptjs';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 
-// Carregar variáveis de ambiente - Ajustado para a nova localização em src/prisma/seed.ts
+// Carregar variáveis de ambiente
 dotenv.config({ path: path.join(__dirname, '../../../.env') });
 
 const prisma = new PrismaClient();
+
+// Verifica se o seed deve ser executado
+const SEED_ENABLED = process.env.SEED_ON_STARTUP?.toLowerCase() === 'true';
+
+if (!SEED_ENABLED) {
+    console.log('ℹ️  Seed desabilitado (SEED_ON_STARTUP=false)');
+    prisma.$disconnect();
+    process.exit(0);
+}
 
 // ─── Permissões atualizadas (alinhadas com o Permission enum do backend) ───────
 const ALL_PERMISSIONS = [
