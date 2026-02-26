@@ -27,8 +27,8 @@ sudo docker-compose up -d --build
 
 # 4. Rodar Migrações do Banco
 echo "📂 Executando Migrações Prisma..."
-sudo docker-compose exec backend npx prisma migrate deploy
-sudo docker-compose exec backend npx prisma generate
+sudo docker-compose exec backend npx prisma@6 migrate deploy
+sudo docker-compose exec backend npx prisma@6 generate
 
 # 5. Configuração de SSL (Certbot/Nginx)
 # Nota: Requer que o domínio já esteja apontado para o IP do servidor.

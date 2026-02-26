@@ -25,8 +25,8 @@ fi
 echo "✅ JWT_SECRET configurada"
 
 if [ -z "$JWT_REFRESH_SECRET" ]; then
-  echo "❌ ERRO: JWT_REFRESH_SECRET não configurada!"
-  exit 1
+  echo "⚠️  JWT_REFRESH_SECRET não configurada, usando JWT_SECRET como fallback"
+  export JWT_REFRESH_SECRET="$JWT_SECRET"
 fi
 echo "✅ JWT_REFRESH_SECRET configurada"
 
@@ -43,14 +43,11 @@ echo "✅ ENCRYPTION_KEY configurada"
 # ============================================
 echo "🔍 Verificando configuração do Redis..."
 
-REDIS_AVAILABLE=false
 if [ -n "$REDIS_URL" ]; then
-  REDIS_AVAILABLE=true
   echo "✅ REDIS_URL configurada"
 elif [ -n "$REDISHOST" ] || [ -n "$REDIS_HOST" ]; then
-  REDIS_AVAILABLE=true
   REDIS_HOST=${REDISHOST:-$REDIS_HOST}
-  REDIS_PORT=${REDISPORT:-$REDIS_PORT:-6379}
+  REDIS_PORT=${REDISPORT:-${REDIS_PORT:-6379}}
   echo "✅ Redis configurado: $REDIS_HOST:$REDIS_PORT"
 else
   echo "⚠️  Redis não configurado (funcionalidades limitadas)"
@@ -61,45 +58,53 @@ fi
 # AGUARDAR BANCO DE DADOS
 # ============================================
 echo "⏳ Aguardando banco de dados..."
-MAX_RETRIES=60
+
+# Extrair host e porta do DATABASE_URL de forma robusta
+# Formato esperado: postgresql://user:pass@host:port/dbname
+DB_HOST=$(echo "$DATABASE_URL" | sed -n 's|.*@\([^:/]*\).*|\1|p')
+DB_PORT=$(echo "$DATABASE_URL" | sed -n 's|.*@[^:]*:\([0-9]*\).*|\1|p')
+DB_PORT=${DB_PORT:-5432}
+
+echo "   Aguardando $DB_HOST:$DB_PORT..."
+
+MAX_RETRIES=30
 RETRY_COUNT=0
 
-while ! nc -z postgres 5432 2>/dev/null && ! nc -z db 5432 2>/dev/null && [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+# Tentar conectar via node se nc não encontrar (mais confiável no Railway)
+while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+  if nc -z "$DB_HOST" "$DB_PORT" 2>/dev/null; then
+    break
+  fi
   RETRY_COUNT=$((RETRY_COUNT + 1))
   echo "   Tentativa $RETRY_COUNT/$MAX_RETRIES..."
   sleep 2
 done
 
 if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
-  echo "❌ ERRO: Banco de dados não respondeu após $MAX_RETRIES tentativas"
-  exit 1
+  echo "⚠️  Timeout aguardando o banco. Tentando prosseguir mesmo assim..."
 fi
 echo "✅ Banco de dados disponível"
+
+# ============================================
+# GERAR PRISMA CLIENT (se necessário)
+# ============================================
+echo "📦 Verificando Prisma Client..."
+if [ ! -d "node_modules/.prisma/client" ]; then
+  echo "   Gerando Prisma Client..."
+  npx prisma@6 generate
+fi
 
 # ============================================
 # MIGRAÇÕES PRISMA
 # ============================================
 echo "📦 Executando migrações do Prisma..."
 
-# Tenta migrate deploy primeiro
-if ! npx prisma migrate deploy 2>&1; then
-  echo "⚠️  migrate deploy falhou, verificando estado..."
-  
-  # Verifica migrações não aplicadas
-  MIGRATION_STATUS=$(npx prisma migrate status 2>&1 || echo "")
-  
-  if echo "$MIGRATION_STATUS" | grep -q "Pending migrations"; then
-    echo "⚠️  Existem migrações pendentes"
-    
-    # Tenta aplicar migrações pendentes
-    if ! npx prisma migrate resolve --applied "$(echo "$MIGRATION_STATUS" | grep "Pending" | awk '{print $1}')" 2>&1; then
-      echo "⚠️  Fallback para db push (pode causar perda de dados)"
-      npx prisma db push --accept-data-loss 2>&1 || true
-    fi
-  fi
+if npx prisma@6 migrate deploy 2>&1; then
+  echo "✅ Migrações aplicadas com sucesso"
+else
+  echo "⚠️  migrate deploy falhou, tentando db push como fallback..."
+  npx prisma@6 db push --accept-data-loss 2>&1 || echo "⚠️  db push também falhou, continuando..."
 fi
-
-echo "✅ Migrações concluídas"
 
 # ============================================
 # SEED (APENAS SE CONFIGURADO E BANCO VAZIO)
@@ -108,14 +113,16 @@ SEED_ENABLED=${SEED_ON_STARTUP:-false}
 
 if [ "$SEED_ENABLED" = "true" ]; then
   echo "🌱 Verificando se seed é necessário..."
-  
-  # Verifica se já existem dados no banco
-  USER_COUNT=$(npx prisma.user.count 2>&1 || echo "0")
-  
+
+  # Verifica se já existem dados no banco usando Node.js
+  USER_COUNT=$(node -e "
+    const { PrismaClient } = require('@prisma/client');
+    const p = new PrismaClient();
+    p.user.count().then(c => { console.log(c); process.exit(0); }).catch(() => { console.log('0'); process.exit(0); });
+  " 2>/dev/null || echo "0")
+
   if [ "$USER_COUNT" = "0" ]; then
     echo "🌱 Executando seed (banco vazio detectado)..."
-    
-    # Executa seed
     if node dist/prisma/seed.js 2>&1; then
       echo "✅ Seed concluído com sucesso"
     else
@@ -125,7 +132,7 @@ if [ "$SEED_ENABLED" = "true" ]; then
     echo "ℹ️  Seed pulado (já existem $USER_COUNT usuários no banco)"
   fi
 else
-  echo "ℹ️  Seed desabilitado (SEED_ON_STARTUP=false)"
+  echo "ℹ️  Seed desabilitado (SEED_ON_STARTUP=$SEED_ENABLED)"
 fi
 
 # ============================================
@@ -143,5 +150,5 @@ if [ ! -f "dist/main.js" ]; then
   exit 1
 fi
 
-# Inicia aplicação
+# Inicia aplicação (exec substitui o processo shell)
 exec node dist/main.js

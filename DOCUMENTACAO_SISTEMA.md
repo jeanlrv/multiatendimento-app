@@ -26,22 +26,18 @@ Interface "Pixel Perfect" projetada para alta produtividade dos atendentes.
 
 ---
 
-## 🤖 3. Inteligência Artificial (Powered by AnythingLLM)
-O cérebro do KSZap, permitindo automação avançada.
-- **Chatbots de Autoatendimento:** Agentes de IA que respondem com base em uma base de conhecimento (RAG).
-- **Transcrição de Áudio:** Conversão automática de mensagens de voz recebidas em texto (Speech-to-Text).
-- **Resumo de Conversas:** Geração automática de resumos ao encerrar um ticket para consulta rápida futura.
-- **Análise de Sentimento Individual:** Cada interação é classificada (Positiva, Neutra, Negativa) com um score de 0 a 10.
-- **Copilot de Atendimento:** Sugestões de respostas inteligentes durante a conversa humana.
+## 🤖 3. IA Hub Nativo (LangChain)
+O centro de inteligência do KSZap, operando de forma integrada e multimodal.
+- **RAG Avançado**: Agentes de IA que respondem com base em documentos (PDF, DOCX, TXT) e URLs, com armazenamento híbrido (Local/S3).
+- **Vision (Multimodal)**: Análise e descrição de imagens enviadas no chat (GPT-4o/Gemini).
+- **Transcrição de Áudio**: Conversão automática de mensagens de voz recebidas em texto (Speech-to-Text).
+- **Playground de IA**: Ambiente de teste para agentes com histórico de conversas persistente.
+- **Sentiment & Transcription**: Análise de sentimento em tempo real e score automático por interação.
+- **Copilot de Atendimento**: Sugestões de respostas inteligentes baseadas no contexto da base de conhecimento.
 
 ---
 
 ## 📱 4. Conectividade WhatsApp (Z-API)
-Gerenciamento integrado de contas do WhatsApp.
-- **Multi-instâncias:** Possibilidade de conectar múltiplos números de WhatsApp simultaneamente.
-- **Gestão de QR Code:** Interface direta para leitura e vinculação de novos aparelhos.
-- **Saudação Inteligente:** Configuração de mensagens de boas-vindas automáticas por conexão.
-- **Webhook Estável:** Sincronização em tempo real de mensagens e status de entrega/leitura.
 
 ---
 

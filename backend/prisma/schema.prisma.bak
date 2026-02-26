@@ -1,4 +1,4 @@
-﻿// This is your Prisma schema file,
+// This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
@@ -60,7 +60,7 @@ model User {
   internalChatMembers  InternalChatMember[]
   internalChatMessages InternalChatMessage[]
   savedFilters         SavedFilter[]
-  notifications        Notification[]      @relation("NotifiedUser")
+  // notifications        Notification[] @relation("NotifiedUser")
   conversations        Conversation[]
 
   @@index([email])
@@ -182,6 +182,9 @@ model WhatsAppInstance {
   @@index([companyId])
   @@map("whatsapp_instances")
 }
+
+// WhatsAppConnection mantido apenas para referência se necessário ou removido se WhatsAppInstance assumir totalmente
+// Removendo WhatsAppConnection para evitar dualidade
 
 enum ConnectionStatus {
   CONNECTED
@@ -863,24 +866,24 @@ model Conversation {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  company      Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  user         User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  agent        AIAgent               @relation(fields: [agentId], references: [id], onDelete: Cascade)
-  messages     ConversationMessage[]
+  company   Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  agent     AIAgent   @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  messages  ConversationMessage[]
 
-  @@index([companyId])
+  @@index([companyId, userId])
   @@index([userId])
   @@index([agentId])
   @@map("conversations")
 }
 
 model ConversationMessage {
-  id             String   @id @default(uuid())
+  id          String   @id @default(uuid())
   conversationId String
-  role           String   // user, assistant, system
-  content        String   @db.Text
-  metadata       Json?
-  createdAt      DateTime @default(now())
+  role        String // user, assistant
+  content     String   @db.Text
+  metadata    Json?
+  createdAt   DateTime @default(now())
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
@@ -889,27 +892,17 @@ model ConversationMessage {
   @@map("conversation_messages")
 }
 
-model Notification {
-  id         String    @id @default(uuid())
-  userId     String?   @map("user_id")
-  companyId  String    @map("company_id")
-  type       String // INFO, WARNING, ERROR, SUCCESS
-  event      String? // document_processed, document_failed, etc.
-  title      String
-  body       String?
-  data       Json?
-  entityType String?   @map("entity_type") // ticket | message | schedule
-  entityId   String?   @map("entity_id")
-  readAt     DateTime? @map("read_at")
-  createdAt  DateTime  @default(now()) @map("created_at")
 
-  notifiedUser User?   @relation("NotifiedUser", fields: [userId], references: [id], onDelete: Cascade)
-  company      Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+model CannedResponse {
+  id        String   @id @default(uuid())
+  companyId String
+  title     String
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  @@index([userId, readAt])
   @@index([companyId])
-  @@index([createdAt])
-  @@map("notifications")
+  @@map("canned_responses")
 }
 
 // ============================================
@@ -967,6 +960,29 @@ model InternalChatMessage {
   @@index([chatId])
   @@index([senderId])
   @@map("internal_chat_messages")
+}
+
+model Notification {
+  id         String    @id @default(uuid())
+  userId     String?   @map("user_id")
+  companyId  String    @map("company_id")
+  type       String // INFO, WARNING, ERROR, SUCCESS
+  event      String? // document_processed, document_failed, etc.
+  title      String
+  body       String?
+  data       Json?
+  entityType String?   @map("entity_type") // ticket | message | schedule
+  entityId   String?   @map("entity_id")
+  readAt     DateTime? @map("read_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  notifiedUser User?   @relation("NotifiedUser", fields: [userId], references: [id], onDelete: Cascade)
+  company      Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+  @@index([companyId])
+  @@index([createdAt])
+  @@map("notifications")
 }
 
 // ============================================

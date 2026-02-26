@@ -40,13 +40,15 @@ Este documento fornece uma visão técnica e funcional completa de todos os mód
 ## ⚡ 3. Automação e Inteligência
 
 ### [Módulos Backend]
-*   **Workflows (Smart Flow V2)**: Motor de grafos (nós e arestas) para automação de processos via BullMQ.
-*   **AI Service**: Integração com AnythingLLM. Oferece análise de sentimento, transcrição de áudio, resumo de conversas e detecção de intenção.
+*   **Workflows (Smart Flow V2)**: Motor de grafos (nós e arestas) para automação de processos via BullMQ. Suporte a webhooks externos.
+*   **AI Hub Nativo (LangChain)**: Substituiu AnythingLLM. Oferece RAG dinâmico (PDF/DOCX/URL), Visão Multimodal, análise de sentimento, transcrição e cache de embeddings.
+*   **Conversation History**: Persistência de chats do Playground IA.
 *   **Scheduling**: Sistema de filas para tarefas agendadas no futuro.
 
 ### [Frontend]
 *   **Automações (`/dashboard/workflows`)**: Builder visual de fluxos.
-*   **Agentes de IA (`/dashboard/ai-agents`)**: Configuração de personas e prompts.
+*   **AI Hub (`/dashboard/ai-hub`)**: Gestão de Bases de Conhecimento, Agentes e Métricas de uso.
+*   **Playground (`/dashboard/playground`)**: Teste de agentes em tempo real.
 
 ---
 
@@ -54,6 +56,7 @@ Este documento fornece uma visão técnica e funcional completa de todos os mód
 
 ### [Módulos Backend]
 *   **Dashboard**: Agregação de métricas (satisfação, volume, tempo de resposta).
+*   **AI Analytics**: Dashboard de consumo de tokens (Métricas por empresa/agente/modelo).
 *   **Reports**: Geração de relatórios executivos diários via e-mail.
 *   **Evaluations**: Gestão de CSAT e análise sentimental automática.
 
@@ -66,15 +69,15 @@ Este documento fornece uma visão técnica e funcional completa de todos os mód
 ## 🛠️ 5. Infraestrutura
 
 *   **Mail**: Serviço de e-mail via SMTP configurável.
-*   **Notifications**: Sistema de alertas internos (Push/In-app).
-*   **Uploads**: Gestão de arquivos e mídias recebidas.
-*   **Prisma/DB**: Estrutura relacional no PostgreSQL com Redis para cache.
+*   **Notifications**: Sistema de alertas internos via WebSocket (EventEmitter2).
+*   **Uploads**: Gestão híbrida de arquivos (S3 + Multer local).
+*   **Prisma/DB**: Estrutura relacional no PostgreSQL com extensão pgvector e Redis para BullMQ.
 
 ---
 
 ## 🚀 Próximas Melhorias Sugeridas (Roadmap VIP)
 
-1.  **Workflows Externos**: Adicionar nós que disparam Webhooks para sistemas de terceiros (ex: Bling, RD Station).
-2.  **RAG Dinâmico**: Upload de documentos por departamento para treinamento imediato da IA.
-3.  **App Mobile Nativo**: Interface simplificada para atendentes via PWA ou React Native.
-4.  **Dashboard em Tempo Real**: Transformar os contadores do Dashboard em observáveis via Socket.IO.
+1.  **Workflows Generativos**: Uso de IA para criar fluxos de automação a partir de texto.
+2.  **App Mobile Nativo**: Interface simplificada para atendentes via PWA ou React Native.
+3.  **Dashboards Customizáveis**: Widgets Drag & Drop para BI personalizado.
+4.  **Omnicanal Avançado**: Integração direta com Instagram e Facebook Messenger API.

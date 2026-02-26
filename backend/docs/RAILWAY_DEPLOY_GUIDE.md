@@ -1,197 +1,144 @@
 # 🚀 Guia de Deploy para Railway
 
-Este guia completo explica como deployar o MultiAtendimento no Railway.com com configuração otimizada.
+Este guia explica como deployar o **MultiAtendimento** no [Railway.com](https://railway.app) com configuração otimizada e segura.
 
 ---
 
 ## 📋 Pré-requisitos
 
 1. Conta no [Railway](https://railway.app)
-2. Repositório Git público ou privado com o código do projeto
-3. Conhecimento básico de terminal
+2. Repositório Git com o código do projeto
+3. Chaves de segurança geradas (veja seção abaixo)
 
 ---
 
-## 🏗️ Arquitetura Recomendada
+## 🏗️ Arquitetura no Railway
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                      Railway Platform                        │
-├─────────────────────────────────────────────────────────────┤
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │   Backend    │  │   Frontend   │  │    Nginx     │      │
-│  │   (Node.js)  │  │  (Next.js)   │  │   (Proxy)    │      │
-│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘      │
-│         │                 │                 │               │
-│  ┌──────▼─────────────────▼─────────────────▼───────┐      │
-│  │              PostgreSQL (Database)                │      │
-│  └───────────────────────────────────────────────────┘      │
-│  ┌───────────────────────────────────────────────────┐      │
-│  │                   Redis (Optional)                 │      │
-│  │              (Workflows & Queues)                  │      │
-│  └───────────────────────────────────────────────────┘      │
-└─────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────┐
+│                  Railway Platform                  │
+├───────────────────────────────────────────────────┤
+│  ┌──────────────┐        ┌──────────────┐         │
+│  │   Backend    │◄──────►│   Frontend   │         │
+│  │  (NestJS)    │        │  (Next.js)   │         │
+│  └──────┬───────┘        └──────────────┘         │
+│         │                                          │
+│  ┌──────▼───────┐        ┌──────────────┐         │
+│  │  PostgreSQL  │        │    Redis     │         │
+│  │  + pgvector  │        │  (Opcional)  │         │
+│  └──────────────┘        └──────────────┘         │
+└───────────────────────────────────────────────────┘
 ```
+
+> [!IMPORTANT]
+> O Backend usa **Prisma 6** explicitamente (`npx prisma@6`). Não altere a versão do Prisma.
 
 ---
 
-## 📦 Passo a Passo do Deploy
+## 📦 Passo a Passo
 
-### 1. Preparar o Repositório
+### 1. Gerar Chaves de Segurança
+
+Antes de tudo, gere suas chaves. Execute no terminal:
 
 ```bash
-# Certifique-se de que todas as alterações estão commitadas
-git add .
-git commit -m "Otimização para deploy Railway"
-git push origin main
+# Gerar 3 chaves seguras de uma vez
+echo "JWT_SECRET=$(openssl rand -base64 32)"
+echo "JWT_REFRESH_SECRET=$(openssl rand -base64 32)"
+echo "ENCRYPTION_KEY=$(openssl rand -base64 32)"
 ```
 
-### 2. Criar Novo Projeto no Railway
+> [!CAUTION]
+> Salve essas chaves em um local seguro! Você precisará delas no passo 4.
 
-1. Acesse [railway.app](https://railway.app)
-2. Clique em **"New Project"**
-3. Selecione **"Deploy from a Git repository"**
-4. Escolha seu repositório (GitHub/GitLab/Bitbucket)
+### 2. Criar Projeto no Railway
 
-### 3. Adicionar Serviços
+1. Acesse [railway.app](https://railway.app) → **"New Project"**
+2. Selecione **"Deploy from GitHub repo"**
+3. Autorize e escolha seu repositório
 
-#### A. PostgreSQL (Database)
+### 3. Adicionar Serviços de Infraestrutura
 
-1. No seu projeto Railway, clique em **"+ New"**
-2. Selecione **"PostgreSQL"**
-3. O Railway fornecerá automaticamente a variável `DATABASE_URL`
+#### PostgreSQL (Obrigatório)
 
-#### B. Redis (Opcional - para Workflows)
+1. No projeto, clique **"+ New"** → **"PostgreSQL"**
+2. O Railway fornece `DATABASE_URL` automaticamente
+3. O `entrypoint.sh` aguarda o banco ficar disponível antes de rodar migrações
 
-1. Clique em **"+ New"**
-2. Selecione **"Redis"**
-3. O Railway fornecerá automaticamente a variável `REDIS_URL`
+#### Redis (Opcional — para Workflows e Filas)
 
-#### C. Backend Service
+1. Clique **"+ New"** → **"Redis"**
+2. O Railway fornece `REDIS_URL` automaticamente
+3. Sem Redis, Workflows e processamento de fila de IA **não funcionarão**
 
-1. Clique em **"+ New"**
-2. Selecione **"Deploy from Git"**
-3. Escolha seu repositório
-4. Selecione o **backend** como root directory
+### 4. Configurar Serviço Backend
 
-#### D. Frontend Service
+1. Clique **"+ New"** → **"Deploy from GitHub"**
+2. **Root Directory**: `backend`
+3. Railway detectará o `Dockerfile` automaticamente
 
-1. Clique em **"+ New"**
-2. Selecione **"Deploy from Git"**
-3. Escolha seu repositório
-4. Selecione o **frontend** como root directory
+#### Variáveis de Ambiente (Backend)
 
----
+Adicione no painel **Variables** do serviço:
 
-## ⚙️ Configuração de Variáveis de Ambiente
+| Variável | Obrigatório | Valor |
+|:---|:---:|:---|
+| `DATABASE_URL` | ✅ | `${{Postgres.DATABASE_URL}}` (referência automática) |
+| `JWT_SECRET` | ✅ | Chave gerada no passo 1 |
+| `JWT_REFRESH_SECRET` | ✅ | Chave gerada no passo 1 |
+| `ENCRYPTION_KEY` | ✅ | Chave gerada no passo 1 |
+| `REDIS_URL` | ⚠️ | `${{Redis.REDIS_URL}}` (se adicionou Redis) |
+| `NODE_ENV` | ⚠️ | `production` |
+| `SEED_ON_STARTUP` | ⚠️ | `true` (apenas no 1º deploy) |
+| `CORS_ORIGIN` | ⚠️ | `https://seu-frontend.railway.app` |
+| `OPENAI_API_KEY` | ⚠️ | `sk-...` (se usar IA) |
 
-### Backend Variables
+> [!TIP]
+> Use a sintaxe `${{NomeDoServiço.VARIÁVEL}}` para referenciar automaticamente os addons do Railway.
 
-No painel do serviço Backend, adicione as seguintes variáveis:
+### 5. Configurar Serviço Frontend
 
-| Variável | Obrigatório | Valor | Descrição |
-|----------|-------------|-------|-----------|
-| `DATABASE_URL` | ✅ | Automático | Fornecido pelo PostgreSQL addon |
-| `JWT_SECRET` | ✅ | Gerado | Chave JWT (32+ caracteres) |
-| `JWT_REFRESH_SECRET` | ✅ | Gerado | Chave refresh JWT (32+ caracteres) |
-| `ENCRYPTION_KEY` | ✅ | Gerado | Chave criptografia (32+ caracteres) |
-| `REDIS_URL` | ⚠️ | Automático | Fornecido pelo Redis addon (opcional) |
-| `NODE_ENV` | ⚠️ | `production` | Ambiente de produção |
-| `PORT` | ⚠️ | `3000` | Porta da aplicação |
-| `SEED_ON_STARTUP` | ⚠️ | `true` | Executar seed no primeiro deploy |
+1. Clique **"+ New"** → **"Deploy from GitHub"**
+2. **Root Directory**: `frontend`
+3. Railway detectará o `Dockerfile` automaticamente
 
-### Gerar Chaves Seguras
+#### Variáveis de Ambiente (Frontend)
 
-Execute no terminal:
+| Variável | Obrigatório | Valor |
+|:---|:---:|:---|
+| `NEXT_PUBLIC_API_URL` | ✅ | `https://seu-backend.railway.app` |
+| `NEXT_PUBLIC_WS_URL` | ✅ | `wss://seu-backend.railway.app` |
+| `BACKEND_URL` | ✅ | `https://seu-backend.railway.app` |
 
-```bash
-# Gerar JWT_SECRET
-openssl rand -base64 32
-
-# Gerar JWT_REFRESH_SECRET
-openssl rand -base64 32
-
-# Gerar ENCRYPTION_KEY
-openssl rand -base64 32
-```
-
-### Frontend Variables
-
-No painel do serviço Frontend, adicione:
-
-| Variável | Obrigatório | Valor | Descrição |
-|----------|-------------|-------|-----------|
-| `NEXT_PUBLIC_API_URL` | ✅ | `https://seu-backend.railway.app` | URL da API backend |
-| `NEXT_PUBLIC_WS_URL` | ✅ | `wss://seu-backend.railway.app` | URL WebSocket |
-
----
-
-## 🔧 Configuração Avançada
-
-### 1. Configurar Redis para Workflows
-
-Se você deseja usar Workflows avançados:
-
-1. Adicione o addon Redis no Railway
-2. Adicione a variável `REDIS_URL` no serviço Backend
-3. O sistema usará Redis automaticamente para:
-   - Workflows com espera de eventos
-   - Filas de processamento
-   - Rate limiting distribuído
-
-### 2. Configurar Storage S3 (Opcional)
-
-Para armazenamento de documentos da base de conhecimento:
-
-```bash
-# Variáveis opcionais
-AWS_ACCESS_KEY_ID="sua-key"
-AWS_SECRET_ACCESS_KEY="sua-secret"
-AWS_REGION="us-east-1"
-AWS_S3_BUCKET_NAME="seu-bucket"
-```
-
-### 3. Configurar SMTP para Emails
-
-Configure via painel de configurações do sistema após deploy:
-
-1. Acesse o sistema
-2. Vá em **Configurações → Email**
-3. Configure seu servidor SMTP
+> [!WARNING]
+> Variáveis `NEXT_PUBLIC_*` são injetadas no **build time**. Se alterar, faça um **Redeploy** do frontend.
 
 ---
 
 ## 🚀 Primeiro Deploy
 
-### 1. Habilitar Seed (Primeira Vez)
+### Fluxo Automático do Entrypoint
 
-No serviço Backend, defina:
+O `entrypoint.sh` do backend executa automaticamente:
 
-```
-SEED_ON_STARTUP=true
-```
+1. ✅ Valida variáveis obrigatórias (`DATABASE_URL`, `JWT_SECRET`, `ENCRYPTION_KEY`)
+2. ⏳ Aguarda o PostgreSQL ficar disponível (extrai host/porta do `DATABASE_URL`)
+3. 📦 Roda `prisma@6 migrate deploy` (aplica migrações)
+4. 🌱 Executa seed se `SEED_ON_STARTUP=true` e banco está vazio
+5. 🚀 Inicia `node dist/main.js`
 
-Isso criará:
-- Empresa padrão "KSZap Oficial"
-- Usuários admin, supervisor, atendente
-- Departamentos Suporte e Vendas
-- Workflows padrão
-- Tags e configurações iniciais
+### Credenciais do Seed
 
-**Usuários padrão:**
-- `admin@kszap.com` / `Admin@123`
-- `supervisor@kszap.com` / `Admin@123`
-- `atendente@kszap.com` / `Admin@123`
+O seed cria automaticamente:
 
-### 2. Desabilitar Seed (Após Primeira Vez)
+| Usuário | Email | Senha |
+|:---|:---|:---|
+| Admin | `admin@kszap.com` | `Admin@123` |
+| Supervisor | `supervisor@kszap.com` | `Admin@123` |
+| Atendente | `atendente@kszap.com` | `Admin@123` |
 
-Após o primeiro deploy bem-sucedido:
-
-```
-SEED_ON_STARTUP=false
-```
-
-Isso evita que dados sejam recriados em cada deploy.
+> [!CAUTION]
+> Após o primeiro deploy, altere `SEED_ON_STARTUP` para `false` e **troque as senhas** imediatamente.
 
 ---
 
@@ -199,139 +146,95 @@ Isso evita que dados sejam recriados em cada deploy.
 
 ### Health Check
 
-Acesse: `https://seu-backend.railway.app/health`
+```
+GET https://seu-backend.railway.app/health
+```
 
 Resposta esperada:
 ```json
-{
-  "status": "ok",
-  "timestamp": "2026-02-26T14:30:00.000Z"
-}
+{ "status": "ok", "timestamp": "2026-02-26T..." }
 ```
 
-### Logs
+### Logs do Railway
 
-No painel Railway, acesse **"Logs"** para ver:
-- Inicialização do entrypoint
-- Migrações do Prisma
-- Execução do seed (se habilitado)
-- Início da aplicação
+No painel do serviço → **"Logs"**, você verá:
+```
+==========================================
+🚀 MultiAtendimento - Railway Entrypoint
+==========================================
+🔍 Validando variáveis de ambiente...
+✅ DATABASE_URL configurada
+✅ JWT_SECRET configurada
+✅ ENCRYPTION_KEY configurada
+⏳ Aguardando banco de dados...
+✅ Banco de dados disponível
+📦 Executando migrações do Prisma...
+✅ Migrações aplicadas com sucesso
+🌱 Executando seed (banco vazio detectado)...
+✅ Seed concluído com sucesso
+🚀 Iniciando aplicação...
+```
 
 ---
 
 ## 🐛 Troubleshooting
 
-### Problema: "DATABASE_URL não configurada"
+### "Banco de dados não respondeu"
 
-**Solução:**
-1. Verifique se o addon PostgreSQL foi adicionado
-2. Verifique se a variável `DATABASE_URL` está presente no serviço Backend
+O entrypoint tenta conectar por 60 segundos. Se falhar, ele prossegue mesmo assim (a aplicação pode reconectar). Isso pode acontecer no primeiro deploy enquanto o PostgreSQL ainda está provisionando.
 
-### Problema: "JWT_SECRET não configurada"
+**Solução**: Redeploy o serviço após o PostgreSQL estar ativo.
 
-**Solução:**
-1. Gere uma chave segura: `openssl rand -base64 32`
-2. Adicione como variável `JWT_SECRET` no serviço Backend
+### "migrate deploy falhou"
 
-### Problema: "ENCRYPTION_KEY não configurada"
+O entrypoint automaticamente faz fallback para `db push` se as migrações falharem. Isso é seguro para o primeiro deploy. Para deploys subsequentes, verifique se há migrações pendentes no repositório.
 
-**Solução:**
-1. Gere uma chave segura: `openssl rand -base64 32`
-2. Adicione como variável `ENCRYPTION_KEY` no serviço Backend
+### "CORS bloqueado"
 
-### Problema: "Seed não executa"
+**Solução**: Configure `CORS_ORIGIN` com a URL exata do frontend:
+```
+CORS_ORIGIN=https://seu-frontend.railway.app
+```
 
-**Solução:**
-1. Verifique se `SEED_ON_STARTUP=true`
-2. Verifique se o banco está vazio (sem usuários)
-3. Verifique os logs do serviço Backend
+### "Variáveis NEXT_PUBLIC não funcionam"
 
-### Problema: "Workflows não funcionam"
-
-**Solução:**
-1. Adicione o addon Redis no Railway
-2. Adicione a variável `REDIS_URL` no serviço Backend
-3. Reinicie o serviço Backend
+Variáveis `NEXT_PUBLIC_*` são embutidas no build. Após alterar:
+1. Vá ao serviço Frontend no Railway
+2. Clique **"Redeploy"** (não apenas restart)
 
 ---
 
-## 📊 Monitoramento
+## 🔐 Segurança em Produção
 
-### Métricas Disponíveis
-
-- **Logs:** Painel Railway → Logs
-- **Métricas:** Railway → Metrics (CPU, Memory, Requests)
-- **Database:** Railway → PostgreSQL → Query Editor
-
-### Configurar Alertas
-
-1. Railway → Settings → Alerts
-2. Configure notificações para:
-   - Deploy failures
-   - Service errors
-   - Resource limits
+- ✅ HTTPS automático pelo Railway (SSL/TLS grátis)
+- ✅ Execução como usuário não-root no container
+- ✅ Healthcheck configurado no Docker
+- ✅ Validação obrigatória de chaves fortes no entrypoint
+- ⚠️ Altere as senhas padrão do seed imediatamente
+- ⚠️ Configure `CORS_ORIGIN` para aceitar apenas seu domínio
 
 ---
 
-## 🔐 Segurança
+## 🔄 Atualizações Futuras
 
-### Variáveis Sensíveis
-
-NUNCA comite no Git:
-- `.env` (com senhas reais)
-- Chaves de API
-- Tokens de autenticação
-
-### HTTPS
-
-O Railway fornece automaticamente:
-- Certificados SSL/TLS
-- Redirecionamento HTTP → HTTPS
-- Headers de segurança
-
-### Firewall
-
-Configure no Railway:
-- Permitir apenas IPs confiáveis (se necessário)
-- Rate limiting para endpoints sensíveis
-
----
-
-## 🔄 Atualizações
-
-### Deploy Contínuo
-
-O Railway faz deploy automático quando:
-- Novo commit é pushado no branch principal
-- Novo tag é criado
+O Railway faz deploy automático em cada push no branch principal.
 
 ### Rollback
-
-Se um deploy falhar:
-1. Railway → Deployments
+1. Railway → **Deployments**
 2. Selecione uma versão anterior
-3. Clique em **"Redeploy"**
+3. Clique **"Redeploy"**
 
 ---
 
 ## 💰 Estimativa de Custos
 
-### Plano Starter (Grátis)
-- 500 horas/mês
-- 512 MB RAM
-- 2 GB storage
-
-### Plano Professional
-- $5/mês por serviço
-- 2 GB RAM
-- 25 GB storage
-
-### Estimativa para Produção
-- Backend: $5/mês
-- Frontend: $5/mês
-- PostgreSQL: $5/mês
-- Redis: $5/mês
-- **Total: ~$20/mês**
+| Serviço | Custo Estimado |
+|:---|:---|
+| Backend | ~$5/mês |
+| Frontend | ~$5/mês |
+| PostgreSQL | ~$5/mês |
+| Redis | ~$5/mês |
+| **Total** | **~$20/mês** |
 
 ---
 
@@ -339,7 +242,6 @@ Se um deploy falhar:
 
 - [Documentação Railway](https://docs.railway.app)
 - [GitHub Issues](https://github.com/jeanlrv/multiatendimento-app/issues)
-- [Documentação do Sistema](./DOCUMENTACAO_SISTEMA.md)
 
 ---
 

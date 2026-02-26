@@ -8,9 +8,8 @@ generator client {
 }
 
 datasource db {
-  provider   = "postgresql"
-  url        = env("DATABASE_URL")
-  extensions = [vector]
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 // ============================================
@@ -490,7 +489,7 @@ model DocumentChunk {
   metadata   Json?
 
   // Embeddings para RAG usando extesão pgvector
-  embedding Unsupported("vector(1536)")?
+  // embedding Unsupported("vector(1536)")?
 
   document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
 

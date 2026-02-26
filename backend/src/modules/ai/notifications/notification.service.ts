@@ -1,8 +1,9 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
-import type { Queue, Job } from 'bullmq';
+import { Queue, Job, QueueEvents } from 'bullmq';
 import type { PrismaService } from '../../../database/prisma.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { ConfigService } from '@nestjs/config';
 
 /**
  * Serviço de notificações via WebSocket para eventos do sistema.
@@ -12,29 +13,33 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 export class NotificationService implements OnModuleInit {
     private readonly logger = new Logger(NotificationService.name);
 
-    // Cache de notificações pendentes por usuário
+    private queueEvents: QueueEvents;
     private pendingNotifications = new Map<string, any[]>();
 
     constructor(
         private prisma: PrismaService,
         private eventEmitter: EventEmitter2,
+        private configService: ConfigService,
         @InjectQueue('knowledge-processing') private knowledgeQueue: Queue,
     ) { }
 
     async onModuleInit() {
         this.logger.log('NotificationService inicializado');
 
-        // Escutar eventos de conclusão de processamento
-        this.knowledgeQueue.on('completed', (job: Job) => this.handleJobCompleted(job));
-        this.knowledgeQueue.on('failed', (job: Job, error: Error) => this.handleJobFailed(job, error));
+        // Configurar listener para eventos da fila
+        const redisOptions = {
+            host: this.configService.get<string>('REDIS_HOST', 'localhost'),
+            port: this.configService.get<number>('REDIS_PORT', 6379),
+        };
 
-        // Emitir evento de processamento iniciado
-        this.knowledgeQueue.on('progress', (jobId: string, progress: any) => this.handleJobProgress(jobId, progress));
+        this.queueEvents = new QueueEvents('knowledge-processing', { connection: redisOptions });
+
+        // Escutar eventos de conclusão de processamento
+        this.queueEvents.on('completed', ({ jobId }: { jobId: string }) => this.handleJobCompleted(jobId));
+        this.queueEvents.on('failed', ({ jobId, failedReason }: { jobId: string; failedReason: string }) => this.handleJobFailed(jobId, failedReason));
+        this.queueEvents.on('progress', ({ jobId, data }: { jobId: string; data: any }) => this.handleJobProgress(jobId, data));
     }
 
-    /**
-     * Lidar com progresso do job
-     */
     private async handleJobProgress(jobId: string, progress: any) {
         // Buscar detalhes do job para obter companyId
         const job = await this.knowledgeQueue.getJob(jobId);
@@ -56,8 +61,9 @@ export class NotificationService implements OnModuleInit {
     /**
      * Lidar com conclusão bem-sucedida de job
      */
-    private async handleJobCompleted(job: Job) {
-        if (job.name === 'process-document') {
+    private async handleJobCompleted(jobId: string) {
+        const job = await this.knowledgeQueue.getJob(jobId);
+        if (job && job.name === 'process-document') {
             const { documentId, companyId } = job.data as { documentId: string; companyId: string };
 
             this.logger.log(`Documento processado com sucesso: ${documentId}`);
@@ -69,7 +75,7 @@ export class NotificationService implements OnModuleInit {
                 timestamp: new Date(),
             });
 
-            // Notificar via WebSocket (se Redis estiver disponível)
+            // Notificar via WebSocket
             await this.notifyUser(companyId, 'document_processed', {
                 documentId,
                 message: 'Documento processado com sucesso',
@@ -80,17 +86,18 @@ export class NotificationService implements OnModuleInit {
     /**
      * Lidar com falha no job
      */
-    private async handleJobFailed(job: Job, error: Error) {
-        if (job.name === 'process-document') {
+    private async handleJobFailed(jobId: string, error: string) {
+        const job = await this.knowledgeQueue.getJob(jobId);
+        if (job && job.name === 'process-document') {
             const { documentId, companyId } = job.data as { documentId: string; companyId: string };
 
-            this.logger.error(`Documento falhou no processamento: ${documentId} - ${error.message}`);
+            this.logger.error(`Documento falhou no processamento: ${documentId} - ${error}`);
 
             // Emitir evento via EventEmitter2
             this.eventEmitter.emit('document.failed', {
                 documentId,
                 companyId,
-                error: error.message,
+                error,
                 timestamp: new Date(),
             });
 
@@ -98,7 +105,7 @@ export class NotificationService implements OnModuleInit {
             await this.notifyUser(companyId, 'document_failed', {
                 documentId,
                 message: 'Erro ao processar documento',
-                error: error.message,
+                error,
             });
         }
     }
