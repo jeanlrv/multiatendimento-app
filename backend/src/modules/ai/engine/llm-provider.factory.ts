@@ -15,6 +15,31 @@ export interface LLMProviderConfig {
 }
 
 /**
+ * Lista de modelos que suportam multimodal (Vision).
+ */
+export const MULTIMODAL_MODELS = [
+    // OpenAI
+    'gpt-4o',
+    'gpt-4o-mini',
+    'gpt-4.1',
+    'gpt-4.1-mini',
+    'o3-mini',
+    // Gemini
+    'gemini-2.0-flash',
+    'gemini-2.0-flash-lite',
+    'gemini-1.5-flash',
+    'gemini-1.5-pro',
+];
+
+/**
+ * Verifica se um modelo suporta multimodal (Vision).
+ */
+export function isMultimodalModel(modelId: string): boolean {
+    const cleanModelId = modelId.split(':').pop() || modelId;
+    return MULTIMODAL_MODELS.includes(cleanModelId);
+}
+
+/**
  * Registry de todos os providers suportados.
  */
 export const LLM_PROVIDERS: LLMProviderConfig[] = [
@@ -113,6 +138,8 @@ export class LLMProviderFactory {
      * Cria uma instância do modelo LLM correto baseado no modelId.
      * O modelId pode usar prefixos como "groq:", "openrouter:", "ollama:" 
      * para providers OpenAI-compat, ou nomes diretos como "gpt-4o", "claude-*", "gemini-*".
+     * 
+     * Para multimodal, use createMultimodalModel() em vez disso.
      */
     createModel(modelId: string, temperature: number = 0.7): BaseChatModel {
         const provider = this.detectProvider(modelId);
@@ -225,7 +252,7 @@ export class LLMProviderFactory {
     /**
      * Retorna todos os providers e modelos disponíveis (baseado nas env vars configuradas).
      */
-    getAvailableModels(): { provider: string; providerName: string; models: { id: string; name: string }[] }[] {
+    getAvailableModels(): { provider: string; providerName: string; models: { id: string; name: string; multimodal?: boolean }[] }[] {
         return LLM_PROVIDERS
             .filter(p => {
                 if (p.id === 'ollama') return !!this.configService.get<string>(p.envKey);
@@ -234,7 +261,10 @@ export class LLMProviderFactory {
             .map(p => ({
                 provider: p.id,
                 providerName: p.name,
-                models: p.models,
+                models: p.models.map(m => ({
+                    ...m,
+                    multimodal: MULTIMODAL_MODELS.includes(m.id),
+                })),
             }));
     }
 }

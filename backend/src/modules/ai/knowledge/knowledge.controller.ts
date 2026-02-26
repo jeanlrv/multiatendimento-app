@@ -1,10 +1,10 @@
-import { Controller, Get, Post, Body, Param, Delete, UseGuards, Req, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Param, Delete, UseGuards, Req, UseInterceptors, UploadedFile } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { KnowledgeService } from './knowledge.service';
 import { CreateKnowledgeBaseDto } from './dto/create-knowledge.dto';
 import { AddDocumentDto } from './dto/add-document.dto';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
 
 @ApiTags('AI Knowledge')
 @Controller('ai/knowledge')
@@ -70,5 +70,41 @@ export class KnowledgeController {
     @ApiOperation({ summary: 'Reprocessar documento com erro' })
     reprocessDocument(@Req() req: any, @Param('id') id: string) {
         return this.knowledgeService.reprocessDocument(req.user.companyId, id);
+    }
+
+    // ========== Edição de Bases de Conhecimento ==========
+
+    @Patch('bases/:id')
+    @ApiOperation({ summary: 'Atualizar base de conhecimento' })
+    @ApiBody({
+        schema: {
+            type: 'object',
+            properties: {
+                name: { type: 'string', example: 'Base de Conhecimento Atualizada' },
+                description: { type: 'string', example: 'Descrição atualizada' },
+                language: { type: 'string', example: 'pt-BR' }
+            }
+        }
+    })
+    updateBase(@Req() req: any, @Param('id') id: string, @Body() data: { name?: string; description?: string; language?: string }) {
+        return this.knowledgeService.updateBase(req.user.companyId, id, data);
+    }
+
+    @Patch('bases/:id/description')
+    @ApiOperation({ summary: 'Atualizar descrição da base' })
+    updateBaseDescription(@Req() req: any, @Param('id') id: string, @Body('description') description: string) {
+        return this.knowledgeService.updateBaseDescription(req.user.companyId, id, description);
+    }
+
+    @Patch('bases/:id/language')
+    @ApiOperation({ summary: 'Atualizar idioma da base' })
+    updateBaseLanguage(@Req() req: any, @Param('id') id: string, @Body('language') language: string) {
+        return this.knowledgeService.updateBaseLanguage(req.user.companyId, id, language);
+    }
+
+    @Get('bases/:id/stats')
+    @ApiOperation({ summary: 'Obter estatísticas da base de conhecimento' })
+    getBaseStats(@Req() req: any, @Param('id') id: string) {
+        return this.knowledgeService.getBaseStats(req.user.companyId, id);
     }
 }

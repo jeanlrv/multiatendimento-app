@@ -173,11 +173,129 @@ export class AIService {
     }
 
     /**
+     * Chat multimodal com suporte a imagens
+     */
+    async chatMultimodal(
+        companyId: string,
+        agentId: string,
+        message: string,
+        imageUrls: string[] = [],
+        history: any[] = []
+    ) {
+        // 1. Validação de entrada
+        if (!message || message.trim().length === 0) {
+            throw new Error('Mensagem não pode ser vazia');
+        }
+
+        // Limitar tamanho da mensagem (4000 caracteres)
+        if (message.length > 4000) {
+            message = message.substring(0, 4000);
+        }
+
+        // Limitar histórico a 20 mensagens
+        if (history.length > 20) {
+            history = history.slice(-20);
+        }
+
+        // Limitar imagens a 5 por requisição
+        if (imageUrls.length > 5) {
+            throw new Error('Máximo de 5 imagens por requisição');
+        }
+
+        const agent = await this.findOneAgent(companyId, agentId);
+        if (!agent || !agent.isActive) {
+            throw new Error('Agente não encontrado ou inativo');
+        }
+
+        // 2. Verificação de Limite de Tokens (Rate Limiting)
+        const company = await (this.prisma as any).company.findUnique({
+            where: { id: companyId },
+            select: { limitTokens: true, limitTokensPerHour: true, limitTokensPerDay: true }
+        });
+
+        // Verificar limites por hora e por dia
+        const now = new Date();
+        const startOfHour = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), 0, 0, 0);
+        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+
+        const hourlyUsage = await (this.prisma as any).aIUsage.aggregate({
+            where: {
+                companyId,
+                createdAt: {
+                    gte: startOfHour
+                }
+            },
+            _sum: { tokens: true }
+        });
+
+        const dailyUsage = await (this.prisma as any).aIUsage.aggregate({
+            where: {
+                companyId,
+                createdAt: {
+                    gte: startOfDay
+                }
+            },
+            _sum: { tokens: true }
+        });
+
+        const totalTokens = await (this.prisma as any).aIUsage.aggregate({
+            where: { companyId },
+            _sum: { tokens: true }
+        });
+
+        const hourlyTokens = hourlyUsage._sum.tokens || 0;
+        const dailyTokens = dailyUsage._sum.tokens || 0;
+        const totalTokensUsed = totalTokens._sum.tokens || 0;
+
+        // Verificar limites
+        if (company && company.limitTokensPerHour > 0 && hourlyTokens >= company.limitTokensPerHour) {
+            throw new ForbiddenException(`Limite de tokens por hora atingido (${company.limitTokensPerHour}). Tente novamente mais tarde.`);
+        }
+
+        if (company && company.limitTokensPerDay > 0 && dailyTokens >= company.limitTokensPerDay) {
+            throw new ForbiddenException(`Limite de tokens por dia atingido (${company.limitTokensPerDay}). Tente novamente amanhã.`);
+        }
+
+        if (company && company.limitTokens > 0 && totalTokensUsed >= company.limitTokens) {
+            throw new ForbiddenException(`Limite total de tokens de IA atingido (${company.limitTokens}). Entre em contato com o suporte.`);
+        }
+
+        try {
+            this.logger.log(`Chat multimodal com agente "${agent.name}" usando modelo: ${agent.modelId || 'gpt-4o-mini'}`);
+
+            const response = await this.llmService.generateMultimodalResponse(
+                agent.modelId || 'gpt-4o-mini',
+                agent.prompt || 'Você é um assistente virtual prestativo.',
+                message,
+                imageUrls,
+                history.map(h => ({
+                    role: h.role === 'user' || h.role === 'client' ? 'user' : 'assistant',
+                    content: h.content
+                })),
+                agent.temperature || 0.7
+            );
+
+            // Registrar uso de tokens (estimativa maior para multimodal)
+            try {
+                await this.trackTokenUsage(companyId, response, imageUrls.length);
+            } catch (e) {
+                this.logger.warn(`Falha ao registrar uso de tokens: ${e.message}`);
+            }
+
+            return response;
+        } catch (error) {
+            this.logger.error(`Erro no chat multimodal: ${error.message}`);
+            throw error;
+        }
+    }
+
+    /**
      * Registra uso de tokens na tabela AIUsage
      */
-    private async trackTokenUsage(companyId: string, response: string) {
+    private async trackTokenUsage(companyId: string, response: string, imageCount: number = 0) {
         // Estimativa simples de tokens: ~4 chars por token
-        const estimatedTokens = Math.ceil(response.length / 4);
+        // Multimodal usa mais tokens (imagens)
+        const estimatedTokens = Math.ceil(response.length / 4) + (imageCount * 100);
         await (this.prisma as any).aIUsage.create({
             data: {
                 companyId,

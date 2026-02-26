@@ -1,7 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { SystemMessage, HumanMessage, AIMessage } from '@langchain/core/messages';
-import { LLMProviderFactory } from './llm-provider.factory';
+import { SystemMessage, HumanMessage, AIMessage, BaseMessage } from '@langchain/core/messages';
+import { LLMProviderFactory, isMultimodalModel } from './llm-provider.factory';
+import { ChatOpenAI } from '@langchain/openai';
 
 @Injectable()
 export class LLMService {
@@ -62,6 +63,74 @@ export class LLMService {
             return response.content.toString();
         } catch (error) {
             this.logger.error(`Erro ao gerar resposta LLM (${modelId}): ${error.message}`);
+            throw error;
+        }
+    }
+
+    /**
+     * Gera resposta multimodal (com suporte a imagens).
+     * @param modelId ID do modelo (deve ser multimodal: gpt-4o, gemini-2.0-flash, etc)
+     * @param systemPrompt O prompt de sistema
+     * @param userMessage A mensagem do usuário
+     * @param imageUrls Array de URLs de imagens para processar (base64 ou HTTP)
+     * @param history Histórico de mensagens
+     * @param temperature Temperatura da IA
+     */
+    async generateMultimodalResponse(
+        modelId: string,
+        systemPrompt: string,
+        userMessage: string,
+        imageUrls: string[] = [],
+        history: { role: 'user' | 'assistant' | 'system', content: string }[] = [],
+        temperature: number = 0.7,
+    ): Promise<string> {
+        try {
+            // Verifica se o modelo suporta multimodal
+            if (!isMultimodalModel(modelId)) {
+                this.logger.warn(`Modelo ${modelId} não suporta multimodal. Usando fallback para texto.`);
+                return this.generateResponse(modelId, systemPrompt, userMessage, history, temperature);
+            }
+
+            const chat = this.providerFactory.createModel(modelId, temperature);
+
+            const messages: BaseMessage[] = [];
+
+            // 1. Prompt de Sistema
+            messages.push(new SystemMessage(systemPrompt || 'Você é um assistente multimodal capaz de analisar imagens.'));
+
+            // 2. Adiciona histórico
+            for (const msg of history) {
+                if (msg.role === 'user') {
+                    messages.push(new HumanMessage(msg.content));
+                } else if (msg.role === 'assistant') {
+                    messages.push(new AIMessage(msg.content));
+                }
+            }
+
+            // 3. Constrói mensagem multimodal (texto + imagens)
+            const content: Array<{ type: string; text?: string; image_url?: { url: string } }> = [];
+
+            // Adiciona texto
+            if (userMessage) {
+                content.push({ type: 'text', text: userMessage });
+            }
+
+            // Adiciona imagens
+            for (const imageUrl of imageUrls) {
+                content.push({
+                    type: 'image_url',
+                    image_url: { url: imageUrl }
+                });
+            }
+
+            // Adiciona mensagem multimodal
+            messages.push(new HumanMessage(content));
+
+            const response = await chat.invoke(messages);
+
+            return response.content.toString();
+        } catch (error) {
+            this.logger.error(`Erro ao gerar resposta multimodal (${modelId}): ${error.message}`);
             throw error;
         }
     }

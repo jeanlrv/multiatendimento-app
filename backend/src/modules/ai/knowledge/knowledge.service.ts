@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../../database/prisma.service';
 import { CreateKnowledgeBaseDto } from './dto/create-knowledge.dto';
 import { AddDocumentDto } from './dto/add-document.dto';
@@ -194,5 +194,77 @@ export class KnowledgeService {
         await this.enqueueProcessing(documentId, companyId);
 
         return { message: 'Documento enviado para reprocessamento' };
+    }
+
+    // ========== Edição de Bases de Conhecimento ==========
+
+    async updateBase(companyId: string, id: string, data: { name?: string; description?: string; language?: string }) {
+        // Verifica se a base pertence à empresa
+        const base = await this.findOneBase(companyId, id);
+
+        // Validações
+        if (data.name && data.name.length < 2) {
+            throw new BadRequestException('Nome deve ter pelo menos 2 caracteres');
+        }
+        if (data.name && data.name.length > 100) {
+            throw new BadRequestException('Nome não pode exceder 100 caracteres');
+        }
+
+        return (this.prisma as any).knowledgeBase.update({
+            where: { id },
+            data
+        });
+    }
+
+    async updateBaseDescription(companyId: string, id: string, description: string) {
+        const base = await this.findOneBase(companyId, id);
+
+        return (this.prisma as any).knowledgeBase.update({
+            where: { id },
+            data: { description }
+        });
+    }
+
+    async updateBaseLanguage(companyId: string, id: string, language: string) {
+        const base = await this.findOneBase(companyId, id);
+        const validLanguages = ['pt-BR', 'en-US', 'es-ES', 'fr-FR', 'de-DE', 'ja-JP', 'zh-CN'];
+
+        if (!validLanguages.includes(language)) {
+            throw new BadRequestException(`Idioma inválido. Use: ${validLanguages.join(', ')}`);
+        }
+
+        return (this.prisma as any).knowledgeBase.update({
+            where: { id },
+            data: { language }
+        });
+    }
+
+    async getBaseStats(companyId: string, id: string) {
+        const base = await this.findOneBase(companyId, id);
+
+        // Contagem de documentos por status
+        const documentsByStatus = await (this.prisma as any).document.groupBy({
+            by: ['status'],
+            where: { knowledgeBaseId: id },
+            _count: true
+        });
+
+        // Total de chunks
+        const totalChunks = await (this.prisma as any).documentChunk.aggregate({
+            where: { knowledgeBaseId: id },
+            _count: true
+        });
+
+        // Total de tokens estimados (150 chars por chunk)
+        const totalTokens = totalChunks._count * 150;
+
+        return {
+            id: base.id,
+            name: base.name,
+            totalDocuments: base._count.documents,
+            documentsByStatus,
+            totalChunks: totalChunks._count,
+            estimatedTokens: totalTokens
+        };
     }
 }

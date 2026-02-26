@@ -3,11 +3,12 @@ import { ConfigModule } from '@nestjs/config';
 import { LLMService } from './llm.service';
 import { VectorStoreService } from './vector-store.service';
 import { LLMProviderFactory } from './llm-provider.factory';
+import { EmbeddingCacheService } from './embedding-cache.service';
 import { DatabaseModule } from '../../../database/database.module';
 
 @Module({
     imports: [ConfigModule, DatabaseModule],
-    providers: [LLMService, VectorStoreService, LLMProviderFactory],
-    exports: [LLMService, VectorStoreService, LLMProviderFactory],
+    providers: [LLMService, VectorStoreService, LLMProviderFactory, EmbeddingCacheService],
+    exports: [LLMService, VectorStoreService, LLMProviderFactory, EmbeddingCacheService],
 })
 export class AIEngineModule { }

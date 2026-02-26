@@ -3,7 +3,7 @@ import { AIService } from './ai.service';
 import { CreateAIAgentDto } from './dto/create-ai-agent.dto';
 import { UpdateAIAgentDto } from './dto/update-ai-agent.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
 import { LLMProviderFactory } from './engine/llm-provider.factory';
 import { ChatRequestDto } from './dto/chat-request.dto';
 import { Observable } from 'rxjs';
@@ -82,5 +82,35 @@ export class AIController {
     @ApiOperation({ summary: 'Obter métricas detalhadas de uso da IA' })
     async getMetrics(@Req() req: any) {
         return await this.aiService.getDetailedMetrics(req.user.companyId);
+    }
+
+    // ========== Multimodal Chat ==========
+
+    @Post('agents/:id/chat-multimodal')
+    @ApiOperation({ summary: 'Interagir com o agente de IA (suporte a imagens)' })
+    @ApiBody({
+        schema: {
+            type: 'object',
+            properties: {
+                message: { type: 'string', example: 'O que você vê nesta imagem?' },
+                imageUrls: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    example: ['data:image/png;base64,iVBORw0KGgo...', 'https://example.com/image.jpg']
+                },
+                history: {
+                    type: 'array',
+                    items: { type: 'object' },
+                    example: [{ role: 'user', content: 'Olá' }]
+                }
+            }
+        }
+    })
+    chatMultimodal(@Req() req: any, @Param('id') id: string, @Body() body: {
+        message: string;
+        imageUrls: string[];
+        history?: { role: 'user' | 'assistant' | 'system', content: string }[];
+    }) {
+        return this.aiService.chatMultimodal(req.user.companyId, id, body.message, body.imageUrls, body.history || []);
     }
 }
