@@ -29,10 +29,12 @@ Error: ERROR: type "vector" does not exist
 **Solução:**
 1. Criada nova migração para habilitar a extensão `pgvector` no PostgreSQL
 2. Mantido apenas `postgresqlExtensions` no previewFeatures (o previewFeature `pgvector` não é suportado na versão do Prisma 6.19.2)
+3. Renomeada a migração para ter timestamp anterior (`20260219000000`) para garantir que seja aplicada antes das outras migrações
 
 **Arquivos Criados/Modificados:**
-- `backend/prisma/migrations/20260226000001_enable_pgvector_extension/migration.sql` (novo)
+- `backend/prisma/migrations/20260219000000_enable_pgvector_extension/migration.sql` (novo)
 - `backend/prisma/schema.prisma` (atualizado)
+- `backend/prisma/migrations/migration_lock.toml` (atualizado)
 
 ## PreviewFeatures Correto
 
@@ -48,6 +50,20 @@ generator client {
 
 A extensão `pgvector` é habilitada via SQL na migração, não via previewFeature.
 
+## Ordem das Migrações
+
+A migração `pgvector` deve ser a primeira para garantir que a extensão esteja disponível antes de qualquer tabela que use o tipo `vector`:
+
+```
+20260219000000_enable_pgvector_extension    ← PRIMEIRO (habilita pgvector)
+20260220142556_init_enterprise
+20260221000001_add_nodes_edges_to_workflow_version
+20260222000001_sync_schema_roles_collaboration
+20260222000002_users_roleid_not_null
+20260222000003_indexes_columns_fixes
+20260225000001_notifications
+```
+
 ## Migrações Necessárias
 
 Para aplicar as correções localmente:
@@ -62,7 +78,7 @@ npx prisma generate
 
 Após fazer o push das alterações, o Railway irá:
 
-1. Executar a migração `20260226000001_enable_pgvector_extension` que habilita a extensão `pgvector`
+1. Executar a migração `20260219000000_enable_pgvector_extension` que habilita a extensão `pgvector`
 2. Aplicar as demais migrações existentes
 3. Executar o seed do banco de dados
 4. Iniciar a aplicação NestJS
