@@ -27,12 +27,26 @@ Error: ERROR: type "vector" does not exist
 **Causa:** O schema Prisma usa o tipo `vector(1536)` para embeddings na tabela `document_chunks`, mas a extensão `pgvector` não estava habilitada no PostgreSQL do Railway.
 
 **Solução:**
-1. Criada nova migração para habilitar a extensão `pgvector`
-2. Atualizado `schema.prisma` com o previewFeature `pgvector`
+1. Criada nova migração para habilitar a extensão `pgvector` no PostgreSQL
+2. Mantido apenas `postgresqlExtensions` no previewFeatures (o previewFeature `pgvector` não é suportado na versão do Prisma 6.19.2)
 
 **Arquivos Criados/Modificados:**
 - `backend/prisma/migrations/20260226000001_enable_pgvector_extension/migration.sql` (novo)
 - `backend/prisma/schema.prisma` (atualizado)
+
+## PreviewFeatures Correto
+
+O previewFeature `pgvector` não é conhecido na versão do Prisma 6.19.2. Use apenas:
+
+```prisma
+generator client {
+  provider        = "prisma-client-js"
+  binaryTargets   = ["native", "linux-musl-openssl-3.0.x"]
+  previewFeatures = ["postgresqlExtensions"]
+}
+```
+
+A extensão `pgvector` é habilitada via SQL na migração, não via previewFeature.
 
 ## Migrações Necessárias
 
