@@ -268,6 +268,8 @@ model Company {
   // Respostas Rápidas (Macros)
   quickReplies  QuickReply[]
 
+  apiKeys APIKey[]
+
   @@map("companies")
 }
 
@@ -356,9 +358,12 @@ model Message {
   deliveredAt   DateTime?
   readAt        DateTime?
   transcription String?       @db.Text
-
-  ticket    Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
-  deletedBy User?  @relation("DeletedBy", fields: [deletedById], references: [id])
+  quotedMessageId String?
+  
+  ticket        Ticket    @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  deletedBy     User?     @relation("DeletedBy", fields: [deletedById], references: [id])
+  quotedMessage Message?  @relation("MessageReplies", fields: [quotedMessageId], references: [id])
+  replies       Message[] @relation("MessageReplies")
 
   @@index([ticketId])
   @@index([externalId])
@@ -522,10 +527,56 @@ model AIAgent {
   departments   Department[]
   conversations Conversation[]
 
+  // ── Widget Embed ───────────────────────────────────────
+  embedId             String?   @unique   // UUID público para embedding
+  embedEnabled        Boolean   @default(false)
+  embedBrandColor     String    @default("#4F46E5")
+  embedBrandLogo      String?   // URL da logo da empresa
+  embedAgentName      String?   // Nome exibido no widget (default: agent.name)
+  embedWelcomeMsg     String?   // Mensagem de boas-vindas
+  embedPlaceholder    String    @default("Digite sua mensagem...")
+  embedPosition       String    @default("bottom-right") // bottom-right | bottom-left
+  embedAllowedDomains String[]  @default([])  // vazio = qualquer domínio
+  embedRateLimit      Int       @default(20)  // msgs por 10min por sessão
+
+  apiKeys       APIKey[]
+
   @@index([companyId])
   @@index([knowledgeBaseId])
   @@map("ai_agents")
 }
+
+model EmbedChatSession {
+  id        String   @id @default(uuid())
+  embedId   String
+  sessionId String   // UUID gerado no cliente (localStorage)
+  messages  Json     @default("[]") // [{role, content, ts}]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([embedId, sessionId])
+  @@unique([embedId, sessionId])
+  @@map("embed_chat_sessions")
+}
+
+model APIKey {
+  id          String    @id @default(uuid())
+  name        String
+  keyHash     String    @unique  // SHA-256 do token
+  keyPrefix   String             // primeiros 12 chars para exibição (ex: "kszap_xxxxxxxx")
+  companyId   String
+  agentId     String?            // null = acesso a todos os agentes da empresa
+  isActive    Boolean   @default(true)
+  lastUsedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  company Company  @relation(fields: [companyId], references: [id])
+  agent   AIAgent? @relation(fields: [agentId], references: [id])
+
+  @@index([companyId])
+  @@map("api_keys")
+}
+
 
 // ============================================
 // AVALIAÇÕES

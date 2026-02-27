@@ -55,7 +55,14 @@ export class WorkflowOrchestrator {
             // 4. Executar lógica com Timeout
             const timeoutMs = node.config?.timeoutMs || 30000;
 
-            const actionPromise = executor.execute(context, node.data['params'] || node.data);
+            // Para condition nodes as condições ficam em node.data.conditions (não em params)
+            // Mesclamos ambos para garantir que o executor receba tudo
+            const rawParams = node.data['params'] || {};
+            const paramsForExecutor = node.type === 'condition'
+                ? { ...rawParams, conditions: node.data['conditions'] || rawParams['conditions'] || [] }
+                : (node.data['params'] || node.data);
+
+            const actionPromise = executor.execute(context, paramsForExecutor);
             const timeoutPromise = new Promise<ActionResult>((_, reject) =>
                 setTimeout(() => reject(new Error('Action timed out')), timeoutMs)
             );

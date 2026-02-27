@@ -46,7 +46,7 @@ export class ChatController {
     sendMessage(
         @Param('ticketId') ticketId: string,
         @Company() companyId: string,
-        @Body() body: { content: string, type?: string, mediaUrl?: string },
+        @Body() body: { content: string, type?: string, mediaUrl?: string, quotedMessageId?: string },
     ) {
         return this.chatService.sendMessage(
             ticketId,
@@ -55,6 +55,8 @@ export class ChatController {
             body.type,
             body.mediaUrl,
             companyId,
+            'AGENT',
+            body.quotedMessageId
         );
     }
 

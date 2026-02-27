@@ -12,9 +12,21 @@ export interface AIAgent {
     knowledgeBaseId?: string;
     embeddingProvider?: string;
     embeddingModel?: string;
+    // Embed configuration
+    embedId?: string;
+    embedEnabled?: boolean;
+    embedBrandColor?: string;
+    embedBrandLogo?: string | null;
+    embedAgentName?: string | null;
+    embedWelcomeMsg?: string | null;
+    embedPlaceholder?: string;
+    embedPosition?: string;
+    embedAllowedDomains?: string[];
+    embedRateLimit?: number;
     createdAt: string;
     updatedAt: string;
 }
+
 
 export interface AIModelOption {
     id: string;
@@ -72,4 +84,20 @@ export const AIAgentsService = {
         const response = await api.get('/ai/metrics');
         return response.data;
     },
+
+    // API Keys
+    listApiKeys: async () => {
+        const response = await api.get('/ai/api-keys');
+        return response.data;
+    },
+
+    createApiKey: async (data: { name: string; agentId?: string }) => {
+        const response = await api.post('/ai/api-keys', data);
+        return response.data;
+    },
+
+    revokeApiKey: async (id: string) => {
+        await api.delete(`/ai/api-keys/${id}`);
+    },
 };
+

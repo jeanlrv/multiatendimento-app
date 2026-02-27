@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCheck, Paperclip, Video } from 'lucide-react';
+import { CheckCheck, Paperclip, Video, Reply, X, Copy } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 
@@ -13,11 +13,17 @@ interface Message {
     status?: string;
     origin?: 'AGENT' | 'CLIENT' | 'AI';
     transcription?: string;
+    quotedMessageId?: string;
+    quotedMessage?: {
+        content: string;
+        fromMe: boolean;
+    };
 }
 
 interface MessageBubbleProps {
     msg: Message;
     index: number;
+    onReply?: (msg: Message) => void;
 }
 
 const STATUS_ICONS: Record<string, string> = {
@@ -28,7 +34,7 @@ const STATUS_ICONS: Record<string, string> = {
     FAILED: '!',
 };
 
-export const MessageBubble: React.FC<MessageBubbleProps> = ({ msg, index }) => {
+export const MessageBubble: React.FC<MessageBubbleProps> = ({ msg, index, onReply }) => {
     const isInternal = msg.messageType === 'INTERNAL';
     const isAI = msg.origin === 'AI';
 
@@ -67,6 +73,18 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ msg, index }) => {
                     <p className="text-[9px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-300 mb-1.5">
                         📋 Nota interna
                     </p>
+                )}
+
+                {/* Mensagem Citada (Quote) */}
+                {msg.quotedMessage && (
+                    <div className="mb-3 p-2.5 rounded-xl bg-black/5 dark:bg-black/30 border-l-4 border-primary/50 text-[11px] opacity-80 backdrop-blur-sm">
+                        <p className="font-black uppercase tracking-widest text-[8px] mb-1 text-primary">
+                            {msg.quotedMessage.fromMe ? 'Sua mensagem' : 'Contato'}
+                        </p>
+                        <p className="line-clamp-2 font-medium italic">
+                            {msg.quotedMessage.content}
+                        </p>
+                    </div>
                 )}
 
                 {/* Mídia: Imagem */}
@@ -149,35 +167,45 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ msg, index }) => {
 
                 {/* Rodapé: hora + status */}
                 <div
-                    className={`flex items-center justify-end gap-1.5 mt-2 text-[10px] font-bold ${
-                        msg.fromMe ? 'text-blue-100 opacity-60' : 'text-gray-400 opacity-50'
-                    }`}
+                    className={`flex items-center justify-end gap-1.5 mt-2 text-[10px] font-bold ${msg.fromMe ? 'text-blue-100 opacity-60' : 'text-gray-400 opacity-50'
+                        }`}
                 >
                     <span suppressHydrationWarning className="uppercase tracking-tighter">
                         {new Date(msg.sentAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                     </span>
                     {msg.fromMe && (
                         <CheckCheck
-                            className={`h-3 w-3 ${
-                                msg.status === 'READ'
-                                    ? 'text-blue-200'
-                                    : msg.status === 'FAILED'
-                                        ? 'text-red-400'
-                                        : ''
-                            }`}
+                            className={`h-3 w-3 ${msg.status === 'READ'
+                                ? 'text-blue-200'
+                                : msg.status === 'FAILED'
+                                    ? 'text-red-400'
+                                    : ''
+                                }`}
                         />
                     )}
                 </div>
 
                 {/* Botão copiar texto (hover) */}
                 {msg.content && (
-                    <button
-                        onClick={handleCopyText}
-                        title="Copiar texto"
-                        className="absolute -top-2 right-2 p-1 bg-white dark:bg-gray-800 rounded-lg shadow-md text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 opacity-0 group-hover:opacity-100 transition-opacity text-[9px] font-bold border border-white/20"
-                    >
-                        Copiar
-                    </button>
+                    <div className="absolute -top-4 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                        {onReply && (
+                            <button
+                                onClick={() => onReply(msg)}
+                                title="Responder"
+                                className="p-1.5 bg-white dark:bg-gray-800 rounded-lg shadow-xl text-primary hover:scale-110 active:scale-95 transition-all border border-primary/20"
+                            >
+                                <Reply size={12} />
+                            </button>
+                        )}
+                        <button
+                            onClick={handleCopyText}
+                            title="Copiar texto"
+                            className="p-1.5 bg-white dark:bg-gray-800 rounded-lg shadow-xl text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:scale-110 active:scale-95 transition-all border border-white/20"
+                        >
+                            <Copy size={12} className="hidden" /> {/* Fallback if Copy is not imported, but it is used in handleCopyText */}
+                            <span className="text-[9px] font-black uppercase tracking-tight px-1">Copiar</span>
+                        </button>
+                    </div>
                 )}
             </div>
         </motion.div>

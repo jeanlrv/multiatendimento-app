@@ -7,7 +7,7 @@ import { getSocket } from '@/lib/socket';
 import { api } from '@/services/api';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trash2, Send, Phone, User, Clock, CheckCheck, Paperclip, MoreVertical, ArrowRightLeft, Smile, Search, SlidersHorizontal, MessageSquare, Bot, Sparkles, AlertTriangle, Plus, X, Mic, Tag as TagIcon, Info, Calendar, ArrowLeft, Copy } from 'lucide-react';
+import { Trash2, Send, Phone, User, Clock, CheckCheck, Paperclip, MoreVertical, ArrowRightLeft, Smile, Search, SlidersHorizontal, MessageSquare, Bot, Sparkles, AlertTriangle, Plus, X, Mic, Tag as TagIcon, Info, Calendar, ArrowLeft, Copy, Edit3, CornerUpLeft, UploadCloud, ChevronDown } from 'lucide-react';
 import { AudioRecorder } from '@/components/chat/AudioRecorder';
 import { toast } from 'sonner';
 import { io, Socket } from 'socket.io-client';
@@ -32,6 +32,11 @@ interface Message {
     messageType: 'TEXT' | 'IMAGE' | 'AUDIO' | 'VIDEO' | 'DOCUMENT' | 'STICKER' | 'INTERNAL';
     mediaUrl?: string;
     transcription?: string;
+    quotedMessageId?: string;
+    quotedMessage?: {
+        content: string;
+        fromMe: boolean;
+    };
 }
 
 interface Ticket {
@@ -98,6 +103,13 @@ export default function TicketsPage() {
     const [showTransferModal, setShowTransferModal] = useState(false);
     const [isTyping, setIsTyping] = useState<{ userId: string, userName: string } | null>(null);
     const [socket, setSocket] = useState<Socket | null>(null);
+    const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+    const [isSearching, setIsSearching] = useState(false);
+    const [messageSearch, setMessageSearch] = useState('');
+    const [isResolving, setIsResolving] = useState(false);
+    const [isPausing, setIsPausing] = useState(false);
+    const [isTransferring, setIsTransferring] = useState(false);
+    const [isAssigning, setIsAssigning] = useState(false);
     const [isRecording, setIsRecording] = useState(false);
     const [isInternal, setIsInternal] = useState(false);
     const [showScheduleModal, setShowScheduleModal] = useState(false);
@@ -105,6 +117,11 @@ export default function TicketsPage() {
     const [showCopilot, setShowCopilot] = useState(false);
     const [sending, setSending] = useState(false);
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+
+    // Anexos
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [isDragging, setIsDragging] = useState(false);
+    const [uploadingFile, setUploadingFile] = useState(false);
 
     // Quick Replies (Macros) & Autocomplete
     const [macros, setMacros] = useState<{ id: string, shortcut: string, content: string }[]>([]);
@@ -123,6 +140,8 @@ export default function TicketsPage() {
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const [selectedTicketIndex, setSelectedTicketIndex] = useState(0);
+    const [showScrollBottom, setShowScrollBottom] = useState(false);
+    const messagesContainerRef = useRef<HTMLDivElement>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [advancedFilters, setAdvancedFilters] = useState({
         priority: '',
@@ -239,7 +258,7 @@ export default function TicketsPage() {
         setLoadingHistory(true);
         try {
             const response = await api.get(`/tickets?contactId=${contactId}&status=RESOLVED`);
-            setContactHistory(response.data.tickets || []);
+            setContactHistory(response.data?.data || response.data || []);
         } catch (error) {
             console.error('Erro ao carregar histórico:', error);
         } finally {
@@ -300,10 +319,12 @@ export default function TicketsPage() {
             await api.post(`/chat/${selectedTicket.id}/send`, {
                 content: newMessage,
                 type: isInternal ? 'INTERNAL' : 'TEXT',
+                quotedMessageId: replyingTo?.id || undefined,
             });
             setNewMessage('');
             localStorage.removeItem(`draft_${selectedTicket.id}`);
             setIsInternal(false);
+            setReplyingTo(null);
         } catch (error) {
             console.error('Erro ao enviar mensagem:', error);
             toast.error('Não foi possível enviar a mensagem.');
@@ -318,12 +339,10 @@ export default function TicketsPage() {
             const formData = new FormData();
             formData.append('file', blob, 'audio.webm');
 
-            // 1. Upload do arquivo
             const uploadRes = await api.post('/uploads', formData, {
-                headers: { 'Content-Type': 'multipart/form-Type' },
+                headers: { 'Content-Type': 'multipart/form-data' },
             });
 
-            // 2. Enviar mensagem com a URL do áudio
             await api.post(`/chat/${selectedTicket.id}/send`, {
                 content: 'Áudio enviado',
                 type: 'AUDIO',
@@ -333,6 +352,65 @@ export default function TicketsPage() {
         } catch (error) {
             console.error('Erro ao enviar áudio:', error);
             toast.error('Erro ao enviar áudio');
+        }
+    };
+
+    const uploadAndSendFile = async (file: File) => {
+        if (!selectedTicket || uploadingFile) return;
+        try {
+            setUploadingFile(true);
+            const formData = new FormData();
+            formData.append('file', file);
+
+            const uploadRes = await api.post('/uploads', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+            });
+
+            // Determinar o tipo aproximado com base no mimetype
+            let type = 'DOCUMENT';
+            if (file.type.startsWith('image/')) type = 'IMAGE';
+            else if (file.type.startsWith('video/')) type = 'VIDEO';
+            else if (file.type.startsWith('audio/')) type = 'AUDIO';
+
+            await api.post(`/chat/${selectedTicket.id}/send`, {
+                content: file.name,
+                type: type,
+                mediaUrl: uploadRes.data.url,
+            });
+            toast.success('Arquivo enviado com sucesso!');
+        } catch (error) {
+            console.error('Erro ao enviar arquivo:', error);
+            toast.error('Erro ao enviar o arquivo.');
+        } finally {
+            setUploadingFile(false);
+        }
+    };
+
+    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            uploadAndSendFile(file);
+        }
+        if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+
+    const onDragOver = (e: React.DragEvent) => {
+        e.preventDefault();
+        if (selectedTicket) setIsDragging(true);
+    };
+
+    const onDragLeave = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(false);
+    };
+
+    const onDrop = async (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(false);
+        if (!selectedTicket) return;
+        const file = e.dataTransfer.files?.[0];
+        if (file) {
+            await uploadAndSendFile(file);
         }
     };
 
@@ -553,6 +631,22 @@ export default function TicketsPage() {
         };
     }, [selectedTicket?.id, socket]);
 
+    // Carrega histórico do contato sempre que o painel é aberto ou o ticket muda
+    useEffect(() => {
+        if (showContactHistory && selectedTicket) {
+            const contactId = selectedTicket.contactId || selectedTicket.contact?.id;
+            if (contactId) fetchContactHistory(contactId);
+        }
+    }, [showContactHistory, selectedTicket?.id]);
+
+    // Fecha emoji picker ao clicar fora
+    useEffect(() => {
+        if (!showEmojiPicker) return;
+        const handler = (e: MouseEvent) => { setShowEmojiPicker(false); };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [showEmojiPicker]);
+
     useEffect(() => {
         scrollToBottom();
     }, [messages]);
@@ -616,34 +710,37 @@ export default function TicketsPage() {
                         </button>
                     </div>
 
-                    {/* Filtros Rápidos de Setor */}
-                    {(user?.role === 'ADMIN' || user?.role === 'SUPERVISOR' || (user?.departments && user.departments.length > 1)) && (
-                        <div className="mb-4 space-y-2">
-                            <p className="text-[10px] font-bold uppercase tracking-widest opacity-60">Filtrar Setores</p>
-                            <div className="flex flex-wrap gap-2">
-                                {/* Se for Admin, mostra TODOS os departamentos carregados. Senão, apenas os do usuário. */}
-                                {(user?.role === 'ADMIN' || user?.role === 'SUPERVISOR' ? departments : user?.departments || []).map(dep => (
-                                    <button
-                                        key={dep.id}
-                                        onClick={() => {
-                                            setAdvancedFilters(prev => ({
-                                                ...prev,
-                                                departments: prev.departments.includes(dep.id)
-                                                    ? prev.departments.filter(id => id !== dep.id)
-                                                    : [...prev.departments, dep.id]
-                                            }));
-                                        }}
-                                        className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest border transition-all ${advancedFilters.departments.includes(dep.id)
-                                            ? 'bg-primary/20 border-primary/30 text-primary shadow-[0_0_15px_rgba(56,189,248,0.2)]'
-                                            : 'bg-white/50 border-slate-200 dark:bg-white/5 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:border-primary/20 hover:text-primary dark:hover:border-white/20'
-                                            }`}
-                                    >
-                                        {dep.name}
-                                    </button>
-                                ))}
+                    {/* Filtros Rápidos de Setor — sempre visível */}
+                    {(() => {
+                        const visibleDepts = (user?.role === 'ADMIN' || user?.role === 'SUPERVISOR') ? departments : (user?.departments || []);
+                        if (visibleDepts.length === 0) return null;
+                        return (
+                            <div className="mb-4 space-y-2">
+                                <p className="text-[10px] font-bold uppercase tracking-widest opacity-60">Setores</p>
+                                <div className="flex flex-wrap gap-2">
+                                    {visibleDepts.map((dep: any) => (
+                                        <button
+                                            key={dep.id}
+                                            onClick={() => {
+                                                setAdvancedFilters(prev => ({
+                                                    ...prev,
+                                                    departments: prev.departments.includes(dep.id)
+                                                        ? prev.departments.filter((id: string) => id !== dep.id)
+                                                        : [...prev.departments, dep.id]
+                                                }));
+                                            }}
+                                            className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest border transition-all ${advancedFilters.departments.includes(dep.id)
+                                                ? 'bg-primary/20 border-primary/30 text-primary shadow-[0_0_15px_rgba(56,189,248,0.2)]'
+                                                : 'bg-white/50 border-slate-200 dark:bg-white/5 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:border-primary/20 hover:text-primary dark:hover:border-white/20'
+                                                }`}
+                                        >
+                                            {dep.name}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
-                        </div>
-                    )}
+                        );
+                    })()}
 
                     {/* Filtros Avançados Expansíveis */}
                     <AnimatePresence>
@@ -678,6 +775,67 @@ export default function TicketsPage() {
                                     </select>
                                 </div>
 
+                                {/* Filtro por Agente Responsável */}
+                                <select
+                                    value={advancedFilters.assignedUserId}
+                                    onChange={(e) => setAdvancedFilters(prev => ({ ...prev, assignedUserId: e.target.value }))}
+                                    className="w-full bg-slate-100/50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl p-2 text-[10px] font-black uppercase tracking-widest outline-none"
+                                >
+                                    <option value="">Responsável</option>
+                                    {mentionableUsers.map(u => (
+                                        <option key={u.id} value={u.id}>{u.name}</option>
+                                    ))}
+                                </select>
+
+                                {/* Filtro por Tags */}
+                                {availableTags.length > 0 && (
+                                    <div>
+                                        <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Tags</div>
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {availableTags.map(tag => {
+                                                const isSelected = advancedFilters.tags?.includes(tag.id);
+                                                return (
+                                                    <button
+                                                        key={tag.id}
+                                                        onClick={() => setAdvancedFilters(prev => ({
+                                                            ...prev,
+                                                            tags: isSelected
+                                                                ? (prev.tags || []).filter((t: string) => t !== tag.id)
+                                                                : [...(prev.tags || []), tag.id]
+                                                        }))}
+                                                        className={`px-2 py-1 rounded-lg text-[9px] font-black border transition-all ${isSelected ? 'bg-primary/20 border-primary/30 text-primary' : 'bg-white/50 dark:bg-white/5 border-slate-200 dark:border-white/10 hover:border-primary/20'}`}
+                                                        style={{ color: isSelected ? undefined : tag.color }}
+                                                    >
+                                                        {tag.name}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Filtro por Datas */}
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">De</div>
+                                        <input
+                                            type="date"
+                                            value={advancedFilters.startDate || ''}
+                                            onChange={(e) => setAdvancedFilters(prev => ({ ...prev, startDate: e.target.value }))}
+                                            className="w-full bg-slate-100/50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl p-2 text-[10px] font-bold outline-none"
+                                        />
+                                    </div>
+                                    <div>
+                                        <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">Até</div>
+                                        <input
+                                            type="date"
+                                            value={advancedFilters.endDate || ''}
+                                            onChange={(e) => setAdvancedFilters(prev => ({ ...prev, endDate: e.target.value }))}
+                                            className="w-full bg-slate-100/50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl p-2 text-[10px] font-bold outline-none"
+                                        />
+                                    </div>
+                                </div>
+
                                 <div className="flex items-center justify-between">
                                     <button
                                         onClick={resetFilters}
@@ -701,7 +859,7 @@ export default function TicketsPage() {
                                     : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
                                     }`}
                             >
-                                {s === 'OPEN' ? 'Novos' : s === 'IN_PROGRESS' ? 'Sala' : s === 'PAUSED' ? 'Pausa' : 'Fim'}
+                                {s === 'OPEN' ? 'Abertos' : s === 'IN_PROGRESS' ? 'Em Atend.' : s === 'PAUSED' ? 'Pausados' : 'Finalizados'}
                             </button>
                         ))}
                     </div>
@@ -840,13 +998,36 @@ export default function TicketsPage() {
                                     </div>
                                 </div>
                             </motion.button>
-                        ))}
+                        ))
                     )}
                 </div>
             </div>
 
             {/* Conversa - Direita */}
-            <div className={`flex-1 w-full flex flex-col liquid-glass md:rounded-[2.5rem] overflow-hidden border border-slate-200 dark:border-white/10 shadow-2xl relative transition-all duration-300 ${!selectedTicket ? 'hidden md:flex' : 'flex absolute inset-0 md:relative z-20 md:z-auto bg-slate-50 dark:bg-gray-900 md:bg-transparent dark:md:bg-transparent'}`}>
+            <div
+                onDragOver={onDragOver}
+                onDragLeave={onDragLeave}
+                onDrop={onDrop}
+                className={`flex-1 w-full flex flex-col liquid-glass md:rounded-[2.5rem] overflow-hidden border border-slate-200 dark:border-white/10 shadow-2xl relative transition-all duration-300 ${!selectedTicket ? 'hidden md:flex' : 'flex absolute inset-0 md:relative z-20 md:z-auto bg-slate-50 dark:bg-gray-900 md:bg-transparent dark:md:bg-transparent'}`}
+            >
+                {/* Overlay de Drag and Drop */}
+                <AnimatePresence>
+                    {isDragging && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="absolute inset-0 z-50 flex items-center justify-center bg-primary/90 backdrop-blur-sm rounded-[2.5rem] border-4 border-dashed border-white"
+                        >
+                            <div className="flex flex-col items-center justify-center text-white">
+                                <UploadCloud className="h-20 w-20 mb-4 animate-bounce" />
+                                <h3 className="text-2xl font-black uppercase tracking-widest">Solte o arquivo aqui</h3>
+                                <p className="text-sm font-medium opacity-80 mt-2">O documento será enviado imediatamente para o chat.</p>
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
                 {!selectedTicket ? (
                     <div className="flex-1 hidden md:flex flex-col items-center justify-center text-center p-12 aurora">
                         <div className="h-40 w-40 bg-primary/10 rounded-full flex items-center justify-center mb-10 shadow-inner">
@@ -897,21 +1078,25 @@ export default function TicketsPage() {
                                                 </div>
                                             ) : (
                                                 <button
+                                                    disabled={isAssigning}
                                                     onClick={async () => {
                                                         try {
+                                                            setIsAssigning(true);
                                                             await ticketsService.assign(selectedTicket.id, user!.id);
                                                             setSelectedTicket(prev => prev ? { ...prev, assignedUser: user as any } : null);
                                                             fetchTickets();
                                                             toast.success("Você assumiu este chamado!");
                                                         } catch (error) {
                                                             toast.error("Erro ao assumir chamado");
+                                                        } finally {
+                                                            setIsAssigning(false);
                                                         }
                                                     }}
-                                                    className="flex items-center gap-1.5 bg-amber-50 dark:bg-amber-500/10 px-2.5 py-1 rounded-xl border border-amber-100 dark:border-amber-500/20 hover:bg-amber-100 dark:hover:bg-amber-500/20 transition-all active:scale-95"
+                                                    className="flex items-center gap-1.5 bg-amber-50 dark:bg-amber-500/10 px-2.5 py-1 rounded-xl border border-amber-100 dark:border-amber-500/20 hover:bg-amber-100 dark:hover:bg-amber-500/20 transition-all active:scale-95 disabled:opacity-50"
                                                 >
-                                                    <User size={10} className="text-amber-600 dark:text-amber-400" />
+                                                    <User size={10} className={`text-amber-600 dark:text-amber-400 ${isAssigning ? 'animate-spin' : ''}`} />
                                                     <span className="text-[9px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-widest leading-none">
-                                                        Não atribuído — Atender
+                                                        {isAssigning ? 'Atendendo...' : 'Não atribuído — Atender'}
                                                     </span>
                                                 </button>
                                             )}
@@ -971,6 +1156,28 @@ export default function TicketsPage() {
                                 </div>
                             </div>
                             <div className="flex items-center gap-3">
+                                <div className="flex items-center gap-2">
+                                    <div className={`flex items-center transition-all ${isSearching ? 'w-48 opacity-100' : 'w-0 opacity-0 overflow-hidden'}`}>
+                                        <input
+                                            type="text"
+                                            placeholder="Buscar na conversa..."
+                                            value={messageSearch}
+                                            onChange={(e) => setMessageSearch(e.target.value)}
+                                            className="bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-1.5 text-xs w-full focus:ring-2 focus:ring-primary/20 outline-none"
+                                            autoFocus
+                                        />
+                                    </div>
+                                    <button
+                                        onClick={() => {
+                                            setIsSearching(!isSearching);
+                                            if (isSearching) setMessageSearch('');
+                                        }}
+                                        className={`p-3 rounded-2xl transition-all ${isSearching ? 'bg-primary text-white shadow-lg' : 'bg-white/50 dark:bg-white/5 text-slate-400 hover:text-primary'}`}
+                                        title="Buscar mensagens"
+                                    >
+                                        {isSearching ? <X size={18} /> : <Search size={18} />}
+                                    </button>
+                                </div>
                                 <button
                                     onClick={() => setShowContactHistory(!showContactHistory)}
                                     className={`p-2 rounded-xl transition-all ${showContactHistory ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5'}`}
@@ -996,41 +1203,8 @@ export default function TicketsPage() {
                                     </button>
                                 )}
 
-                                {/* Seletor de Prioridade */}
-                                <div className="flex items-center bg-slate-100/50 dark:bg-white/5 p-1 rounded-2xl border border-white/50 dark:border-white/5 backdrop-blur-md shadow-sm">
-                                    {(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const).map((p) => (
-                                        <button
-                                            key={p}
-                                            onClick={async () => {
-                                                try {
-                                                    await ticketsService.update(selectedTicket.id, { priority: p });
-                                                    setSelectedTicket(prev => prev ? { ...prev, priority: p } : null);
-                                                    fetchTickets();
-                                                    toast.success(`Prioridade alterada para ${p}`);
-                                                } catch (error) {
-                                                    toast.error("Erro ao alterar prioridade");
-                                                }
-                                            }}
-                                            className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-tighter transition-all ${selectedTicket.priority === p
-                                                ? p === 'CRITICAL' ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/30' :
-                                                    p === 'HIGH' ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/30' :
-                                                        p === 'MEDIUM' ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30' :
-                                                            'bg-slate-500 text-white shadow-lg shadow-slate-500/30'
-                                                : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'
-                                                }`}
-                                        >
-                                            {p === 'CRITICAL' ? 'Crítico' : p === 'HIGH' ? 'Alta' : p === 'MEDIUM' ? 'Média' : 'Baixa'}
-                                        </button>
-                                    ))}
-                                </div>
-
-                                {selectedTicket.evaluation && (
-                                    <SentimentIndicator
-                                        sentiment={selectedTicket.evaluation.sentiment}
-                                        score={selectedTicket.evaluation.score}
-                                    />
-                                )}
-                                <div className="flex items-center bg-slate-100/50 dark:bg-white/5 p-1 rounded-2xl border border-white/50 dark:border-white/5 backdrop-blur-md">
+                                {/* Modo IA / Humano */}
+                                <div className="flex items-center bg-slate-100/50 dark:bg-white/5 p-1 rounded-2xl border border-white/50 dark:border-white/5 backdrop-blur-md shrink-0">
                                     {['AI', 'HUMANO'].map((m) => (
                                         <button
                                             key={m}
@@ -1043,7 +1217,7 @@ export default function TicketsPage() {
                                                     toast.error('Erro ao alternar modo');
                                                 }
                                             }}
-                                            className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${selectedTicket.mode === m
+                                            className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${selectedTicket.mode === m
                                                 ? 'bg-white dark:bg-primary text-black shadow-md'
                                                 : 'text-slate-400 hover:text-slate-600 dark:hover:text-white'
                                                 }`}
@@ -1053,115 +1227,230 @@ export default function TicketsPage() {
                                     ))}
                                 </div>
 
-                                <div className="flex items-center bg-slate-100/50 dark:bg-white/5 p-1 rounded-2xl border border-white/50 dark:border-white/5 backdrop-blur-md">
-                                    <button
-                                        onClick={async () => {
-                                            try {
-                                                await api.post(`/tickets/${selectedTicket.id}/pause`, {});
-                                                fetchTickets();
-                                                fetchMessages(selectedTicket.id);
-                                            } catch (error) {
-                                                console.error('Erro ao pausar:', error);
-                                            }
-                                        }}
-                                        className="px-4 py-2 hover:bg-white dark:hover:bg-white/10 text-amber-600 dark:text-amber-400 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
-                                    >
-                                        Pausar
-                                    </button>
-                                    <button
-                                        onClick={async () => {
-                                            if (!confirm('Deseja realmente finalizar este atendimento?')) return;
-                                            try {
-                                                await api.post(`/tickets/${selectedTicket.id}/resolve`, {});
-                                                setSelectedTicket(null);
-                                                fetchTickets();
-                                            } catch (error) {
-                                                console.error('Erro ao finalizar:', error);
-                                            }
-                                        }}
-                                        className="px-4 py-2 hover:bg-rose-500 hover:text-white dark:hover:bg-rose-600 text-rose-600 dark:text-rose-400 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
-                                    >
-                                        Finalizar
-                                    </button>
-                                </div>
-                                <button
-                                    onClick={() => setShowTransferModal(true)}
-                                    className="p-2 glass hover:bg-white/50 dark:hover:bg-white/5 rounded-xl transition-all"
-                                >
-                                    <ArrowRightLeft className="h-5 w-5 text-gray-600 dark:text-gray-400" />
-                                </button>
-                                <div className="flex items-center gap-2">
-                                    <button className="flex items-center gap-2 px-4 py-2 bg-gray-50 dark:bg-white/5 hover:bg-white/50 dark:hover:bg-white/10 rounded-xl transition-all border border-gray-100 dark:border-white/5 group relative">
-                                        <TagIcon className="h-4 w-4 text-gray-400 group-hover:text-blue-500" />
-                                        <span className="text-xs font-bold text-gray-700 dark:text-gray-300">Categorizar</span>
-
-                                        <div className="absolute top-full right-0 mt-2 w-48 glass shadow-xl rounded-2xl p-2 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-all z-50">
-                                            {availableTags.map(tag => (
-                                                <button
-                                                    key={tag.id}
-                                                    className="w-full flex items-center gap-2 p-2 hover:bg-gray-100 dark:hover:bg-white/5 rounded-xl transition-all text-left"
-                                                >
-                                                    <div className="h-2 w-2 rounded-full" style={{ backgroundColor: tag.color }} />
-                                                    <span className="text-xs font-medium dark:text-gray-300">{tag.name}</span>
-                                                </button>
-                                            ))}
-                                            {availableTags.length === 0 && (
-                                                <div className="p-2 text-[10px] text-gray-400 italic text-center">Nenhuma tag cadastrada</div>
-                                            )}
-                                        </div>
-                                    </button>
-                                    <button className="p-2 glass hover:bg-white/50 dark:hover:bg-white/5 rounded-xl transition-all">
-                                        <MoreVertical className="h-5 w-5 text-gray-600 dark:text-gray-400" />
-                                    </button>
-                                </div>
-                                <button
-                                    onClick={() => setShowCopilot(!showCopilot)}
-                                    className={`p-2 rounded-xl transition-all ${showCopilot ? 'bg-blue-600 text-white shadow-lg' : 'glass hover:bg-white/50 dark:hover:bg-white/5 text-gray-600 dark:text-gray-400'}`}
-                                    title="Alternar IA Copilot"
-                                >
-                                    <Bot className="h-5 w-5" />
-                                </button>
-
-                                {selectedTicket.contact?.information && (
-                                    <div className="relative group">
-                                        <button
-                                            onClick={() => {
-                                                navigator.clipboard.writeText(selectedTicket.contact.information!);
-                                                toast.success("Info copiada!");
-                                            }}
-                                            className="p-2 glass hover:bg-blue-500 hover:text-white rounded-xl transition-all group-hover:scale-110"
-                                            title="Copiar Informação Técnica"
-                                        >
-                                            <Info className="h-5 w-5" />
-                                        </button>
-                                        <div className="absolute top-full right-0 mt-3 w-64 p-4 glass-heavy rounded-2xl opacity-0 translate-y-2 pointer-events-none group-hover:opacity-100 group-hover:translate-y-0 transition-all z-[100] border border-white/20 shadow-2xl">
-                                            <p className="text-[10px] font-black uppercase tracking-widest text-primary mb-2">Informação Técnica</p>
-                                            <p className="text-xs font-medium text-slate-700 dark:text-slate-300 line-clamp-4">
-                                                {selectedTicket.contact.information}
-                                            </p>
-                                            <div className="mt-2 text-[8px] font-bold text-gray-400 italic">Clique no ícone para copiar</div>
-                                        </div>
+                                {/* Indicador de sentimento */}
+                                {selectedTicket.evaluation && (
+                                    <div className="shrink-0">
+                                        <SentimentIndicator evaluation={selectedTicket.evaluation} compact />
                                     </div>
                                 )}
+
+                                {/* Menu de Ações Secundárias */}
+                                <div className="relative group/actions shrink-0">
+                                    <button className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 rounded-xl transition-all border border-slate-200 dark:border-white/5">
+                                        <SlidersHorizontal className="h-4 w-4 text-slate-500" />
+                                        <span className="text-[10px] font-black uppercase tracking-widest">Opções</span>
+                                    </button>
+
+                                    {/* Dropdown Flutuante */}
+                                    <div className="absolute top-full right-0 mt-2 w-64 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border border-slate-200 dark:border-white/10 shadow-2xl rounded-2xl p-2 opacity-0 pointer-events-none group-hover/actions:opacity-100 group-hover/actions:pointer-events-auto transition-all z-50 transform origin-top-right scale-95 group-hover/actions:scale-100 flex flex-col gap-1">
+
+                                        {/* Pausar */}
+                                        <button
+                                            disabled={isPausing}
+                                            onClick={async () => {
+                                                try {
+                                                    setIsPausing(true);
+                                                    await api.post(`/tickets/${selectedTicket.id}/status`, { status: 'PAUSED' });
+                                                    toast.success("Atendimento pausado");
+                                                    setSelectedTicket(null);
+                                                    fetchTickets();
+                                                } catch (error) {
+                                                    toast.error("Erro ao pausar atendimento");
+                                                } finally {
+                                                    setIsPausing(false);
+                                                }
+                                            }}
+                                            className="w-full flex items-center gap-3 p-3 hover:bg-amber-50 dark:hover:bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-xl transition-all disabled:opacity-50 text-left"
+                                        >
+                                            <Clock className="h-4 w-4" />
+                                            <span className="text-[10px] font-black uppercase tracking-widest">{isPausing ? 'Pausando...' : 'Pausar Atendimento'}</span>
+                                        </button>
+
+                                        {/* Transferir */}
+                                        <button
+                                            onClick={() => setShowTransferModal(true)}
+                                            className="w-full flex items-center gap-3 p-3 hover:bg-blue-50 dark:hover:bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-xl transition-all text-left"
+                                        >
+                                            <ArrowRightLeft className="h-4 w-4" />
+                                            <span className="text-[10px] font-black uppercase tracking-widest">Transferir Ticket</span>
+                                        </button>
+
+                                        <div className="h-[1px] w-full bg-slate-100 dark:bg-white/5 my-1" />
+
+                                        {/* Prioridade */}
+                                        <div className="px-3 py-2">
+                                            <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">Prioridade</div>
+                                            <div className="grid grid-cols-2 gap-1">
+                                                {(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const).map((p) => (
+                                                    <button
+                                                        key={p}
+                                                        onClick={async () => {
+                                                            try {
+                                                                await ticketsService.update(selectedTicket.id, { priority: p });
+                                                                setSelectedTicket(prev => prev ? { ...prev, priority: p } : null);
+                                                                fetchTickets();
+                                                                toast.success(`Prioridade alterada!`);
+                                                            } catch (error) {
+                                                                toast.error("Erro ao alterar prioridade");
+                                                            }
+                                                        }}
+                                                        className={`px-2 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-tighter transition-all text-center ${selectedTicket.priority === p
+                                                            ? p === 'CRITICAL' ? 'bg-rose-500 text-white shadow-md' :
+                                                                p === 'HIGH' ? 'bg-amber-500 text-white shadow-md' :
+                                                                    p === 'MEDIUM' ? 'bg-blue-500 text-white shadow-md' :
+                                                                        'bg-slate-500 text-white shadow-md'
+                                                            : 'bg-slate-100 dark:bg-white/5 text-slate-500 hover:bg-slate-200 dark:hover:bg-white/10'
+                                                            }`}
+                                                    >
+                                                        {p === 'CRITICAL' ? 'Crítico' : p === 'HIGH' ? 'Alta' : p === 'MEDIUM' ? 'Média' : 'Baixa'}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        <div className="h-[1px] w-full bg-slate-100 dark:bg-white/5 my-1" />
+
+                                        {/* Tags / Categorias */}
+                                        <div className="px-3 py-2">
+                                            <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">Categorizar (Tags)</div>
+                                            <div className="max-h-32 overflow-y-auto custom-scrollbar flex flex-col gap-1">
+                                                {availableTags.map(tag => {
+                                                    const currentTagIds = selectedTicket.tags?.map((t: any) => t.tag?.id || t.id) || [];
+                                                    const isApplied = currentTagIds.includes(tag.id);
+                                                    return (
+                                                        <button
+                                                            key={tag.id}
+                                                            onClick={async () => {
+                                                                const newTagIds = isApplied
+                                                                    ? currentTagIds.filter((id: string) => id !== tag.id)
+                                                                    : [...currentTagIds, tag.id];
+                                                                try {
+                                                                    const updated = await ticketsService.update(selectedTicket.id, { tagIds: newTagIds });
+                                                                    setSelectedTicket((prev: any) => prev ? { ...prev, tags: updated.tags ?? prev.tags } : prev);
+                                                                    setTickets((prev: any[]) => prev.map((t: any) => t.id === selectedTicket.id ? { ...t, tags: updated.tags ?? t.tags } : t));
+                                                                } catch {
+                                                                    toast.error('Erro ao atualizar tags');
+                                                                }
+                                                            }}
+                                                            className={`w-full flex items-center gap-2 p-2 rounded-lg transition-all text-left border ${isApplied ? 'bg-primary/10 border-primary/30' : 'hover:bg-slate-100 dark:hover:bg-white/5 border-transparent'}`}
+                                                        >
+                                                            <div className="h-2 w-2 rounded-full shadow-sm flex-shrink-0" style={{ backgroundColor: tag.color }} />
+                                                            <span className="text-[10px] font-bold text-slate-700 dark:text-gray-300 truncate flex-1">{tag.name}</span>
+                                                            {isApplied && <span className="text-[9px] text-primary font-black">✓</span>}
+                                                        </button>
+                                                    );
+                                                })}
+                                                {availableTags.length === 0 && (
+                                                    <div className="p-2 text-[9px] text-gray-400 italic text-center">Nenhuma tag</div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Ações Rápidas em Destaque */}
+                                <div className="flex items-center gap-1 bg-slate-100/50 dark:bg-white/5 p-1 rounded-2xl border border-white/50 dark:border-white/5 backdrop-blur-md shrink-0">
+                                    {/* Copilot: botão oculto até feature estar pronta */}
+                                    {false && (
+                                        <button
+                                            onClick={() => setShowCopilot(!showCopilot)}
+                                            className={`p-2 rounded-xl transition-all ${showCopilot ? 'bg-blue-600 text-white shadow-lg' : 'hover:bg-white/50 dark:hover:bg-white/5 text-gray-500 dark:text-gray-400'}`}
+                                            title="Alternar IA Copilot"
+                                        >
+                                            <Bot className="h-4 w-4" />
+                                        </button>
+                                    )}
+
+                                    {selectedTicket.contact?.information && (
+                                        <div className="relative group/info">
+                                            <button
+                                                onClick={() => {
+                                                    navigator.clipboard.writeText(selectedTicket.contact.information!);
+                                                    toast.success("Info copiada!");
+                                                }}
+                                                className="p-2 hover:bg-blue-50 dark:hover:bg-blue-500/20 hover:text-blue-500 text-gray-500 rounded-xl transition-all"
+                                                title="Informação Técnica"
+                                            >
+                                                <Info className="h-4 w-4" />
+                                            </button>
+                                            <div className="absolute top-full right-0 mt-3 w-64 p-4 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border border-slate-200 dark:border-white/10 rounded-2xl opacity-0 translate-y-2 pointer-events-none group-hover/info:opacity-100 group-hover/info:translate-y-0 transition-all z-50 shadow-2xl">
+                                                <p className="text-[10px] font-black uppercase tracking-widest text-primary mb-2">Informação Técnica</p>
+                                                <p className="text-xs font-medium text-slate-700 dark:text-slate-300 line-clamp-4">
+                                                    {selectedTicket.contact.information}
+                                                </p>
+                                                <div className="mt-2 text-[8px] font-bold text-gray-400 italic">Clique no ícone para copiar</div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <div className="w-[1px] h-6 bg-slate-200 dark:bg-white/10 mx-1" />
+
+                                    {/* Finalizar (Principal) */}
+                                                    <button
+                                                        disabled={isResolving}
+                                                        onClick={() => {
+                                                            const ticketId = selectedTicket.id;
+                                                            toast('Finalizar este atendimento?', {
+                                                                action: {
+                                                                    label: 'Confirmar',
+                                                                    onClick: async () => {
+                                                                        try {
+                                                                            setIsResolving(true);
+                                                                            await api.post(`/tickets/${ticketId}/resolve`, {});
+                                                                            toast.success("Atendimento finalizado!");
+                                                                            setSelectedTicket(null);
+                                                                            fetchTickets();
+                                                                        } catch (error) {
+                                                                            toast.error("Erro ao finalizar atendimento");
+                                                                        } finally {
+                                                                            setIsResolving(false);
+                                                                        }
+                                                                    }
+                                                                },
+                                                                cancel: { label: 'Cancelar', onClick: () => {} },
+                                                                duration: 5000,
+                                                            });
+                                                        }}
+                                                        className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl shadow-lg shadow-emerald-500/20 transition-all disabled:opacity-50 active:scale-95 group"
+                                                    >
+                                                        <CheckCheck className="h-4 w-4 group-hover:scale-110 transition-transform" />
+                                                        <span className="text-[10px] font-black uppercase tracking-widest hidden sm:block">
+                                                            {isResolving ? 'Finalizando...' : 'Finalizar Atendimento'}
+                                                        </span>
+                                                    </button>
+                                </div>
                             </div>
                         </div>
 
                         <div className="flex-1 flex overflow-hidden">
                             {/* Mensagens (agora dentro de uma div flex) */}
                             <div className="flex-1 flex flex-col overflow-hidden relative">
-                                <div className="flex-1 overflow-y-auto custom-scrollbar p-4 md:p-6 space-y-4">
+                                <div
+                                    ref={messagesContainerRef}
+                                    onScroll={(e) => {
+                                        const el = e.currentTarget;
+                                        setShowScrollBottom(el.scrollTop + el.clientHeight < el.scrollHeight - 250);
+                                    }}
+                                    className="flex-1 overflow-y-auto custom-scrollbar p-4 md:p-6 space-y-4"
+                                >
                                     {loadingMessages ? (
                                         <div className="flex items-center justify-center h-full">
                                             <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600"></div>
                                         </div>
                                     ) : (
                                         <>
-                                            {messages.map((msg: any, idx) => (
+                                            {messages.filter(m => m.content?.toLowerCase().includes(messageSearch.toLowerCase()) || m.transcription?.toLowerCase().includes(messageSearch.toLowerCase())).length === 0 && messageSearch && (
+                                                <div className="flex flex-col items-center justify-center h-full opacity-40">
+                                                    <Search size={48} className="mb-4" />
+                                                    <p className="text-sm font-black uppercase tracking-widest">Nenhuma mensagem encontrada</p>
+                                                </div>
+                                            )}
+                                            {messages.filter(m => m.content?.toLowerCase().includes(messageSearch.toLowerCase()) || m.transcription?.toLowerCase().includes(messageSearch.toLowerCase())).map((msg: any, idx) => (
                                                 <motion.div
                                                     key={msg.id}
                                                     initial={{ opacity: 0, x: msg.fromMe ? 20 : -20 }}
                                                     animate={{ opacity: 1, x: 0 }}
-                                                    transition={{ delay: idx * 0.05 }}
+                                                    transition={{ delay: idx > messages.length - 6 ? (idx - Math.max(0, messages.length - 6)) * 0.05 : 0 }}
                                                     className={`flex ${msg.fromMe ? 'justify-end' : 'justify-start'}`}
                                                 >
                                                     <div className={`max-w-[70%] ${msg.messageType === 'INTERNAL'
@@ -1178,20 +1467,40 @@ export default function TicketsPage() {
                                                             </div>
                                                         )}
 
+                                                        {msg.quotedMessageId && (
+                                                            <div className="mb-2 p-3 bg-slate-100 dark:bg-black/40 rounded-xl border-l-4 border-primary">
+                                                                <p className="text-[10px] font-black uppercase tracking-widest text-primary mb-1">
+                                                                    {msg.fromMe ? 'Você respondeu' : 'Contato respondeu'}
+                                                                </p>
+                                                                <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-1 italic">
+                                                                    {messages.find(m => m.id === msg.quotedMessageId)?.content || '[Mensagem original]'}
+                                                                </p>
+                                                            </div>
+                                                        )}
+
                                                         {msg.messageType === 'INTERNAL' || msg.messageType === 'TEXT' ? (
                                                             <p className={`text-sm font-medium leading-relaxed ${msg.fromMe && msg.messageType !== 'INTERNAL' ? 'text-white' : 'text-slate-900 dark:text-white'}`}>
                                                                 {msg.content}
                                                             </p>
-                                                        ) : msg.messageType === 'IMAGE' ? (
+                                                                        ) : msg.messageType === 'IMAGE' ? (
                                                             <div className="space-y-2">
                                                                 <img src={msg.mediaUrl} alt="Imagem" className="rounded-xl max-w-full shadow-sm cursor-pointer hover:opacity-95 transition-opacity" onClick={() => window.open(msg.mediaUrl, '_blank')} />
                                                                 <a href={msg.mediaUrl} download target="_blank" className={`flex items-center gap-1 text-[10px] font-black uppercase tracking-tighter ${msg.fromMe ? 'text-white/70 hover:text-white' : 'text-primary hover:text-primary/80'} transition-colors`}>
                                                                     📥 Baixar Mídia
                                                                 </a>
                                                             </div>
+                                                        ) : msg.messageType === 'STICKER' ? (
+                                                            <img src={msg.mediaUrl} alt="Sticker" className="max-w-[150px] max-h-[150px] object-contain" />
+                                                        ) : msg.messageType === 'VIDEO' ? (
+                                                            <div className="space-y-2">
+                                                                <video src={msg.mediaUrl} controls className="rounded-xl max-w-full shadow-sm max-h-64" preload="metadata" />
+                                                                <a href={msg.mediaUrl} download target="_blank" className={`flex items-center gap-1 text-[10px] font-black uppercase tracking-tighter ${msg.fromMe ? 'text-white/70 hover:text-white' : 'text-primary hover:text-primary/80'} transition-colors`}>
+                                                                    📥 Baixar Vídeo
+                                                                </a>
+                                                            </div>
                                                         ) : msg.messageType === 'AUDIO' ? (
                                                             <div className="space-y-3 min-w-[280px]">
-                                                                <audio src={msg.mediaUrl} controls className={`w-full h-10 ${msg.fromMe ? 'filter invert brightness-200 contrast-150' : ''}`} />
+                                                                <audio src={msg.mediaUrl} controls className="w-full h-10" />
                                                                 {msg.transcription && (
                                                                     <motion.div
                                                                         initial={{ opacity: 0, y: 5 }}
@@ -1209,8 +1518,8 @@ export default function TicketsPage() {
                                                                     <Paperclip size={18} />
                                                                 </div>
                                                                 <div className="flex-1 min-w-0">
-                                                                    <p className="text-xs font-black truncate uppercase tracking-widest">{msg.messageType}</p>
-                                                                    <a href={msg.mediaUrl} download target="_blank" className="text-[10px] font-bold opacity-60 hover:opacity-100">Click para baixar</a>
+                                                                    <p className="text-xs font-black truncate uppercase tracking-widest">{msg.content || msg.messageType}</p>
+                                                                    <a href={msg.mediaUrl} download target="_blank" className="text-[10px] font-bold opacity-60 hover:opacity-100">Clique para baixar</a>
                                                                 </div>
                                                             </div>
                                                         )}
@@ -1221,6 +1530,13 @@ export default function TicketsPage() {
                                                             {msg.fromMe && (
                                                                 <CheckCheck className={`h-3 w-3 ${msg.status === 'READ' ? 'text-sky-400' : (msg.status === 'DELIVERED' ? 'text-white/80' : 'text-white/40')}`} />
                                                             )}
+                                                            <button
+                                                                onClick={() => setReplyingTo(msg)}
+                                                                className={`p-1 rounded-full transition-all opacity-0 group-hover:opacity-100 ${msg.fromMe ? 'text-white/60 hover:bg-white/20' : 'text-slate-400 hover:bg-slate-200 dark:hover:bg-white/10'}`}
+                                                                title="Responder"
+                                                            >
+                                                                <CornerUpLeft size={12} />
+                                                            </button>
                                                         </div>
                                                     </div>
                                                 </motion.div>
@@ -1251,6 +1567,22 @@ export default function TicketsPage() {
                                     )}
                                 </div>
 
+                                {/* Botão flutuante scroll ao fim */}
+                                <AnimatePresence>
+                                    {showScrollBottom && (
+                                        <motion.button
+                                            initial={{ opacity: 0, scale: 0.8 }}
+                                            animate={{ opacity: 1, scale: 1 }}
+                                            exit={{ opacity: 0, scale: 0.8 }}
+                                            onClick={scrollToBottom}
+                                            className="absolute bottom-4 right-4 z-20 p-2 rounded-full bg-primary shadow-lg shadow-primary/30 text-white hover:bg-primary/90 transition-all"
+                                            title="Ir ao final"
+                                        >
+                                            <ChevronDown className="h-4 w-4" />
+                                        </motion.button>
+                                    )}
+                                </AnimatePresence>
+
                                 {isRecording ? (
                                     <div className="p-6 bg-white dark:bg-gray-900 border-t border-gray-100 dark:border-white/5">
                                         <div className="max-w-5xl mx-auto">
@@ -1263,233 +1595,272 @@ export default function TicketsPage() {
                                 ) : (
                                     <div className="p-4 bg-white/60 dark:bg-black/40 border-t border-white/40 dark:border-white/5 backdrop-blur-2xl">
                                         <div className="flex items-end gap-5 max-w-6xl mx-auto relative z-10">
-                                            <div className="flex-1 glass-heavy rounded-[2rem] p-3 flex items-center gap-3 border border-white/80 dark:border-white/10 shadow-2xl focus-within:ring-4 focus-within:ring-primary/20 transition-all group/input">
-                                                <button className="p-4 text-slate-400 hover:text-primary transition-all hover:scale-110">
-                                                    <Paperclip className="h-6 w-6" />
-                                                </button>
-
-                                                {/* Toggle Nota Interna */}
-                                                <button
-                                                    onClick={() => setIsInternal(!isInternal)}
-                                                    className={`p-2 rounded-xl transition-all flex items-center gap-2 border ${isInternal
-                                                        ? 'bg-amber-100 dark:bg-amber-900/40 border-amber-300 dark:border-amber-700/50 text-amber-600 dark:text-amber-400'
-                                                        : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 border-transparent'
-                                                        }`}
-                                                    title="Alternar Nota Interna"
-                                                >
-                                                    <Bot size={18} />
-                                                    <span className="text-[9px] font-black uppercase tracking-widest hidden lg:block">Privado</span>
-                                                </button>
-
-                                                {/* Popover de Macros */}
-                                                <AnimatePresence>
-                                                    {showMacroMenu && (
-                                                        <motion.div
-                                                            initial={{ opacity: 0, y: 10 }}
-                                                            animate={{ opacity: 1, y: 0 }}
-                                                            exit={{ opacity: 0, y: 10 }}
-                                                            className="absolute bottom-full left-0 mb-2 w-96 max-h-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl shadow-2xl overflow-y-auto z-50 custom-scrollbar p-2"
+                                            <div className="flex-1 min-w-0 bg-white/50 dark:bg-white/5 rounded-[2.5rem] p-2 border border-slate-200 dark:border-white/10 relative">
+                                                {/* Preview de Citação (Reply) */}
+                                                {replyingTo && (
+                                                    <div className="mx-4 mt-2 mb-2 p-3 bg-slate-100 dark:bg-black/40 rounded-2xl border-l-4 border-primary flex items-start justify-between group/reply animate-in slide-in-from-bottom-2 duration-300">
+                                                        <div className="min-w-0">
+                                                            <p className="text-[10px] font-black uppercase tracking-widest text-primary mb-1">
+                                                                Respondendo a {replyingTo.fromMe ? 'sua mensagem' : 'contato'}
+                                                            </p>
+                                                            <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-1 italic">
+                                                                {replyingTo.content || '[Mídia]'}
+                                                            </p>
+                                                        </div>
+                                                        <button
+                                                            onClick={() => setReplyingTo(null)}
+                                                            className="p-1 hover:bg-slate-200 dark:hover:bg-white/10 rounded-full transition-colors"
                                                         >
-                                                            <div className="text-[10px] font-black uppercase text-slate-400 mb-2 px-2 sticky top-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm z-10 py-1">
-                                                                Respostas Rápidas (Use setas para navegar)
-                                                            </div>
-                                                            {macros.filter(m => m.shortcut.toLowerCase().includes(macroFilter.toLowerCase())).length === 0 ? (
-                                                                <div className="p-3 text-xs text-slate-500 text-center italic">
-                                                                    Nenhuma resposta rápida encontrada para "{macroFilter}"
+                                                            <X size={14} className="text-slate-400" />
+                                                        </button>
+                                                    </div>
+                                                )}
+
+                                                <div className="flex items-center">
+                                                    <input
+                                                        type="file"
+                                                        hidden
+                                                        ref={fileInputRef}
+                                                        onChange={handleFileSelect}
+                                                    />
+                                                    <button
+                                                        onClick={() => fileInputRef.current?.click()}
+                                                        disabled={uploadingFile}
+                                                        className={`p-4 transition-all hover:scale-110 ${uploadingFile ? 'text-primary animate-pulse' : 'text-slate-400 hover:text-primary'} disabled:opacity-50`}
+                                                        title="Anexar arquivo"
+                                                    >
+                                                        {uploadingFile ? <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /> : <Paperclip className="h-6 w-6" />}
+                                                    </button>
+
+                                                    {/* Toggle Nota Interna */}
+                                                    <button
+                                                        onClick={() => setIsInternal(!isInternal)}
+                                                        className={`p-2 rounded-xl transition-all flex items-center gap-2 border ${isInternal
+                                                            ? 'bg-amber-100 dark:bg-amber-900/40 border-amber-300 dark:border-amber-700/50 text-amber-600 dark:text-amber-400'
+                                                            : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 border-transparent'
+                                                            }`}
+                                                        title="Alternar Nota Interna"
+                                                    >
+                                                        <Bot size={18} />
+                                                        <span className="text-[9px] font-black uppercase tracking-widest hidden lg:block">Privado</span>
+                                                    </button>
+
+                                                    {/* Popover de Macros */}
+                                                    <AnimatePresence>
+                                                        {showMacroMenu && (
+                                                            <motion.div
+                                                                initial={{ opacity: 0, y: 10 }}
+                                                                animate={{ opacity: 1, y: 0 }}
+                                                                exit={{ opacity: 0, y: 10 }}
+                                                                className="absolute bottom-full left-0 mb-2 w-96 max-h-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl shadow-2xl overflow-y-auto z-50 custom-scrollbar p-2"
+                                                            >
+                                                                <div className="text-[10px] font-black uppercase text-slate-400 mb-2 px-2 sticky top-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm z-10 py-1">
+                                                                    Respostas Rápidas (Use setas para navegar)
                                                                 </div>
-                                                            ) : (
-                                                                macros.filter(m => m.shortcut.toLowerCase().includes(macroFilter.toLowerCase())).map((macro, idx) => (
-                                                                    <button
-                                                                        key={macro.id}
-                                                                        type="button"
-                                                                        className={`w-full text-left p-3 rounded-xl transition-all ${idx === macroSelectedIndex ? 'bg-primary/10 border-primary/20 scale-[0.98]' : 'hover:bg-slate-50 dark:hover:bg-white/5 border-transparent'} border`}
-                                                                        onClick={() => {
+                                                                {macros.filter(m => m.shortcut.toLowerCase().includes(macroFilter.toLowerCase())).length === 0 ? (
+                                                                    <div className="p-3 text-xs text-slate-500 text-center italic">
+                                                                        Nenhuma resposta rápida encontrada para "{macroFilter}"
+                                                                    </div>
+                                                                ) : (
+                                                                    macros.filter(m => m.shortcut.toLowerCase().includes(macroFilter.toLowerCase())).map((macro, idx) => (
+                                                                        <button
+                                                                            key={macro.id}
+                                                                            type="button"
+                                                                            className={`w-full text-left p-3 rounded-xl transition-all ${idx === macroSelectedIndex ? 'bg-primary/10 border-primary/20 scale-[0.98]' : 'hover:bg-slate-50 dark:hover:bg-white/5 border-transparent'} border`}
+                                                                            onClick={() => {
+                                                                                const lastSlashIndex = newMessage.lastIndexOf('/');
+                                                                                const beforeSlash = newMessage.slice(0, lastSlashIndex);
+                                                                                const newText = beforeSlash + macro.content;
+                                                                                setNewMessage(newText);
+                                                                                if (selectedTicket) localStorage.setItem(`draft_${selectedTicket.id}`, newText);
+                                                                                setShowMacroMenu(false);
+                                                                            }}
+                                                                        >
+                                                                            <div className="flex items-center gap-2 mb-1">
+                                                                                <Bot className="h-4 w-4 text-primary" />
+                                                                                <span className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-wider">{macro.shortcut}</span>
+                                                                            </div>
+                                                                            <p className="text-[10px] text-slate-500 line-clamp-2 leading-relaxed">{macro.content}</p>
+                                                                        </button>
+                                                                    ))
+                                                                )}
+                                                            </motion.div>
+                                                        )}
+                                                    </AnimatePresence>
+
+                                                    {/* Popover de Menções */}
+                                                    <AnimatePresence>
+                                                        {showMentionMenu && (
+                                                            <motion.div
+                                                                initial={{ opacity: 0, y: 10 }}
+                                                                animate={{ opacity: 1, y: 0 }}
+                                                                exit={{ opacity: 0, y: 10 }}
+                                                                className="absolute bottom-full left-0 mb-2 w-72 max-h-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl shadow-2xl overflow-y-auto z-50 custom-scrollbar p-2"
+                                                            >
+                                                                <div className="text-[10px] font-black uppercase text-slate-400 mb-2 px-2 sticky top-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm z-10 py-1">
+                                                                    Mencionar Agente
+                                                                </div>
+                                                                {mentionableUsers.filter(u => u.name.toLowerCase().includes(mentionFilter.toLowerCase()) || u.email.toLowerCase().includes(mentionFilter.toLowerCase())).length === 0 ? (
+                                                                    <div className="p-3 text-xs text-slate-500 text-center italic">
+                                                                        Nenhum agente encontrado
+                                                                    </div>
+                                                                ) : (
+                                                                    mentionableUsers.filter(u => u.name.toLowerCase().includes(mentionFilter.toLowerCase()) || u.email.toLowerCase().includes(mentionFilter.toLowerCase())).map((mUser, idx) => (
+                                                                        <button
+                                                                            key={mUser.id}
+                                                                            type="button"
+                                                                            className={`w-full text-left p-3 rounded-xl transition-all flex items-center gap-3 ${idx === mentionSelectedIndex ? 'bg-primary/10 border-primary/20 scale-[0.98]' : 'hover:bg-slate-50 dark:hover:bg-white/5 border-transparent'} border`}
+                                                                            onClick={() => {
+                                                                                const lastAtIndex = newMessage.lastIndexOf('@');
+                                                                                const beforeAt = newMessage.slice(0, lastAtIndex);
+                                                                                const newText = beforeAt + '@' + mUser.name + ' ';
+                                                                                setNewMessage(newText);
+                                                                                if (selectedTicket) localStorage.setItem(`draft_${selectedTicket.id}`, newText);
+                                                                                setShowMentionMenu(false);
+                                                                            }}
+                                                                        >
+                                                                            <div className="h-8 w-8 rounded-lg bg-primary/20 flex items-center justify-center text-primary font-black text-xs">
+                                                                                {mUser.avatar ? <img src={mUser.avatar} className="h-full w-full object-cover rounded-lg" /> : mUser.name.charAt(0)}
+                                                                            </div>
+                                                                            <div className="flex-1">
+                                                                                <span className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-wider block">{mUser.name}</span>
+                                                                                <span className="text-[9px] text-slate-500 uppercase tracking-tight">{mUser.email}</span>
+                                                                            </div>
+                                                                        </button>
+                                                                    ))
+                                                                )}
+                                                            </motion.div>
+                                                        )}
+                                                    </AnimatePresence>
+
+                                                    <div className="flex-1 flex flex-col relative">
+                                                        <textarea
+                                                            value={newMessage}
+                                                            onChange={(e) => handleMessageChange(e.target.value)}
+                                                            onKeyDown={(e) => {
+                                                                if (showMacroMenu) {
+                                                                    const filteredMacros = macros.filter(m => m.shortcut.toLowerCase().includes(macroFilter.toLowerCase()));
+                                                                    if (e.key === 'ArrowDown') {
+                                                                        e.preventDefault();
+                                                                        setMacroSelectedIndex(prev => Math.min(prev + 1, Math.max(0, filteredMacros.length - 1)));
+                                                                        return;
+                                                                    }
+                                                                    if (e.key === 'ArrowUp') {
+                                                                        e.preventDefault();
+                                                                        setMacroSelectedIndex(prev => Math.max(prev - 1, 0));
+                                                                        return;
+                                                                    }
+                                                                    if (e.key === 'Enter') {
+                                                                        e.preventDefault();
+                                                                        if (filteredMacros[macroSelectedIndex]) {
+                                                                            const macro = filteredMacros[macroSelectedIndex];
                                                                             const lastSlashIndex = newMessage.lastIndexOf('/');
                                                                             const beforeSlash = newMessage.slice(0, lastSlashIndex);
                                                                             const newText = beforeSlash + macro.content;
                                                                             setNewMessage(newText);
                                                                             if (selectedTicket) localStorage.setItem(`draft_${selectedTicket.id}`, newText);
                                                                             setShowMacroMenu(false);
-                                                                        }}
-                                                                    >
-                                                                        <div className="flex items-center gap-2 mb-1">
-                                                                            <Bot className="h-4 w-4 text-primary" />
-                                                                            <span className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-wider">{macro.shortcut}</span>
-                                                                        </div>
-                                                                        <p className="text-[10px] text-slate-500 line-clamp-2 leading-relaxed">{macro.content}</p>
-                                                                    </button>
-                                                                ))
-                                                            )}
-                                                        </motion.div>
-                                                    )}
-                                                </AnimatePresence>
+                                                                        }
+                                                                        return;
+                                                                    }
+                                                                    if (e.key === 'Escape') {
+                                                                        setShowMacroMenu(false);
+                                                                        return;
+                                                                    }
+                                                                }
 
-                                                {/* Popover de Menções */}
-                                                <AnimatePresence>
-                                                    {showMentionMenu && (
-                                                        <motion.div
-                                                            initial={{ opacity: 0, y: 10 }}
-                                                            animate={{ opacity: 1, y: 0 }}
-                                                            exit={{ opacity: 0, y: 10 }}
-                                                            className="absolute bottom-full left-0 mb-2 w-72 max-h-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl shadow-2xl overflow-y-auto z-50 custom-scrollbar p-2"
-                                                        >
-                                                            <div className="text-[10px] font-black uppercase text-slate-400 mb-2 px-2 sticky top-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm z-10 py-1">
-                                                                Mencionar Agente
-                                                            </div>
-                                                            {mentionableUsers.filter(u => u.name.toLowerCase().includes(mentionFilter.toLowerCase()) || u.email.toLowerCase().includes(mentionFilter.toLowerCase())).length === 0 ? (
-                                                                <div className="p-3 text-xs text-slate-500 text-center italic">
-                                                                    Nenhum agente encontrado
-                                                                </div>
-                                                            ) : (
-                                                                mentionableUsers.filter(u => u.name.toLowerCase().includes(mentionFilter.toLowerCase()) || u.email.toLowerCase().includes(mentionFilter.toLowerCase())).map((mUser, idx) => (
-                                                                    <button
-                                                                        key={mUser.id}
-                                                                        type="button"
-                                                                        className={`w-full text-left p-3 rounded-xl transition-all flex items-center gap-3 ${idx === mentionSelectedIndex ? 'bg-primary/10 border-primary/20 scale-[0.98]' : 'hover:bg-slate-50 dark:hover:bg-white/5 border-transparent'} border`}
-                                                                        onClick={() => {
+                                                                if (showMentionMenu) {
+                                                                    const filteredUsers = mentionableUsers.filter(u => u.name.toLowerCase().includes(mentionFilter.toLowerCase()) || u.email.toLowerCase().includes(mentionFilter.toLowerCase()));
+                                                                    if (e.key === 'ArrowDown') {
+                                                                        e.preventDefault();
+                                                                        setMentionSelectedIndex(prev => Math.min(prev + 1, Math.max(0, filteredUsers.length - 1)));
+                                                                        return;
+                                                                    }
+                                                                    if (e.key === 'ArrowUp') {
+                                                                        e.preventDefault();
+                                                                        setMentionSelectedIndex(prev => Math.max(prev - 1, 0));
+                                                                        return;
+                                                                    }
+                                                                    if (e.key === 'Enter') {
+                                                                        e.preventDefault();
+                                                                        if (filteredUsers[mentionSelectedIndex]) {
+                                                                            const mUser = filteredUsers[mentionSelectedIndex];
                                                                             const lastAtIndex = newMessage.lastIndexOf('@');
                                                                             const beforeAt = newMessage.slice(0, lastAtIndex);
                                                                             const newText = beforeAt + '@' + mUser.name + ' ';
                                                                             setNewMessage(newText);
                                                                             if (selectedTicket) localStorage.setItem(`draft_${selectedTicket.id}`, newText);
                                                                             setShowMentionMenu(false);
-                                                                        }}
-                                                                    >
-                                                                        <div className="h-8 w-8 rounded-lg bg-primary/20 flex items-center justify-center text-primary font-black text-xs">
-                                                                            {mUser.avatar ? <img src={mUser.avatar} className="h-full w-full object-cover rounded-lg" /> : mUser.name.charAt(0)}
-                                                                        </div>
-                                                                        <div className="flex-1">
-                                                                            <span className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-wider block">{mUser.name}</span>
-                                                                            <span className="text-[9px] text-slate-500 uppercase tracking-tight">{mUser.email}</span>
-                                                                        </div>
-                                                                    </button>
-                                                                ))
-                                                            )}
-                                                        </motion.div>
-                                                    )}
-                                                </AnimatePresence>
-
-                                                <textarea
-                                                    value={newMessage}
-                                                    onChange={(e) => handleMessageChange(e.target.value)}
-                                                    onKeyDown={(e) => {
-                                                        if (showMacroMenu) {
-                                                            const filteredMacros = macros.filter(m => m.shortcut.toLowerCase().includes(macroFilter.toLowerCase()));
-                                                            if (e.key === 'ArrowDown') {
-                                                                e.preventDefault();
-                                                                setMacroSelectedIndex(prev => Math.min(prev + 1, Math.max(0, filteredMacros.length - 1)));
-                                                                return;
-                                                            }
-                                                            if (e.key === 'ArrowUp') {
-                                                                e.preventDefault();
-                                                                setMacroSelectedIndex(prev => Math.max(prev - 1, 0));
-                                                                return;
-                                                            }
-                                                            if (e.key === 'Enter') {
-                                                                e.preventDefault();
-                                                                if (filteredMacros[macroSelectedIndex]) {
-                                                                    const macro = filteredMacros[macroSelectedIndex];
-                                                                    const lastSlashIndex = newMessage.lastIndexOf('/');
-                                                                    const beforeSlash = newMessage.slice(0, lastSlashIndex);
-                                                                    const newText = beforeSlash + macro.content;
-                                                                    setNewMessage(newText);
-                                                                    if (selectedTicket) localStorage.setItem(`draft_${selectedTicket.id}`, newText);
-                                                                    setShowMacroMenu(false);
+                                                                        }
+                                                                        return;
+                                                                    }
+                                                                    if (e.key === 'Escape') {
+                                                                        setShowMentionMenu(false);
+                                                                        return;
+                                                                    }
                                                                 }
-                                                                return;
-                                                            }
-                                                            if (e.key === 'Escape') {
-                                                                setShowMacroMenu(false);
-                                                                return;
-                                                            }
-                                                        }
 
-                                                        if (showMentionMenu) {
-                                                            const filteredUsers = mentionableUsers.filter(u => u.name.toLowerCase().includes(mentionFilter.toLowerCase()) || u.email.toLowerCase().includes(mentionFilter.toLowerCase()));
-                                                            if (e.key === 'ArrowDown') {
-                                                                e.preventDefault();
-                                                                setMentionSelectedIndex(prev => Math.min(prev + 1, Math.max(0, filteredUsers.length - 1)));
-                                                                return;
-                                                            }
-                                                            if (e.key === 'ArrowUp') {
-                                                                e.preventDefault();
-                                                                setMentionSelectedIndex(prev => Math.max(prev - 1, 0));
-                                                                return;
-                                                            }
-                                                            if (e.key === 'Enter') {
-                                                                e.preventDefault();
-                                                                if (filteredUsers[mentionSelectedIndex]) {
-                                                                    const mUser = filteredUsers[mentionSelectedIndex];
-                                                                    const lastAtIndex = newMessage.lastIndexOf('@');
-                                                                    const beforeAt = newMessage.slice(0, lastAtIndex);
-                                                                    const newText = beforeAt + '@' + mUser.name + ' ';
-                                                                    setNewMessage(newText);
-                                                                    if (selectedTicket) localStorage.setItem(`draft_${selectedTicket.id}`, newText);
-                                                                    setShowMentionMenu(false);
+                                                                if (e.key === 'Enter' && !e.shiftKey) {
+                                                                    e.preventDefault();
+                                                                    handleSendMessage();
                                                                 }
-                                                                return;
-                                                            }
-                                                            if (e.key === 'Escape') {
-                                                                setShowMentionMenu(false);
-                                                                return;
-                                                            }
-                                                        }
-
-                                                        if (e.key === 'Enter' && !e.shiftKey) {
-                                                            e.preventDefault();
-                                                            handleSendMessage();
-                                                        }
-                                                        if (e.key === 'Tab') {
-                                                            // Tab key behavior can be standard now
-                                                        }
-                                                    }}
-                                                    placeholder={isInternal ? "Sua nota privada (interna)..." : "Inicie sua transmissão Aero..."}
-                                                    className={`flex-1 bg-transparent outline-none resize-none text-sm font-black tracking-tight ${isInternal ? 'text-amber-700 dark:text-amber-300' : 'text-slate-900 dark:text-white'} placeholder:text-slate-400/60 min-h-[56px] py-4`}
-                                                    rows={1}
-                                                />
-                                                <div className="flex items-center gap-1">
-                                                    <button
-                                                        onClick={() => setShowScheduleModal(true)}
-                                                        className="p-4 text-emerald-500 hover:text-emerald-600 transition-all hover:scale-110"
-                                                        title="Agendar Compromisso"
-                                                    >
-                                                        <Calendar className="h-6 w-6" />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => setIsRecording(true)}
-                                                        className="p-4 text-slate-400 hover:text-red-500 transition-all hover:scale-110"
-                                                    >
-                                                        <Mic className="h-6 w-6" />
-                                                    </button>
-                                                    <div className="relative flex items-center">
-                                                        <button
-                                                            type="button"
-                                                            onClick={(e) => {
-                                                                e.preventDefault();
-                                                                setShowEmojiPicker(!showEmojiPicker);
+                                                                if (e.key === 'Tab') {
+                                                                    // Tab key behavior can be standard now
+                                                                }
                                                             }}
-                                                            className={`p-4 transition-all hover:scale-110 ${showEmojiPicker ? 'text-primary' : 'text-slate-400 hover:text-primary'}`}
+                                                            placeholder={isInternal ? "Sua nota privada (interna)..." : "Inicie sua transmissão Aero..."}
+                                                            className={`w-full bg-transparent outline-none resize-none text-sm font-black tracking-tight ${isInternal ? 'text-amber-700 dark:text-amber-300' : 'text-slate-900 dark:text-white'} placeholder:text-slate-400/60 min-h-[56px] py-4`}
+                                                            rows={1}
+                                                            maxLength={2000}
+                                                        />
+                                                        <div className={`absolute bottom-1 right-0 text-[9px] font-black uppercase tracking-tighter ${newMessage.length > 2000 * 0.9 ? 'text-rose-500' : 'text-slate-400 opacity-40 hover:opacity-100 transition-opacity'}`}>
+                                                            {newMessage.length}/2000
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-1">
+                                                        <button
+                                                            onClick={() => setShowScheduleModal(true)}
+                                                            className="p-4 text-emerald-500 hover:text-emerald-600 transition-all hover:scale-110"
+                                                            title="Agendar Compromisso"
                                                         >
-                                                            <Smile className="h-6 w-6" />
+                                                            <Calendar className="h-6 w-6" />
                                                         </button>
+                                                        <button
+                                                            onClick={() => setIsRecording(true)}
+                                                            className="p-4 text-slate-400 hover:text-red-500 transition-all hover:scale-110"
+                                                        >
+                                                            <Mic className="h-6 w-6" />
+                                                        </button>
+                                                        <div className="relative flex items-center">
+                                                            <button
+                                                                type="button"
+                                                                onClick={(e) => {
+                                                                    e.preventDefault();
+                                                                    setShowEmojiPicker(!showEmojiPicker);
+                                                                }}
+                                                                className={`p-4 transition-all hover:scale-110 ${showEmojiPicker ? 'text-primary' : 'text-slate-400 hover:text-primary'}`}
+                                                            >
+                                                                <Smile className="h-6 w-6" />
+                                                            </button>
 
-                                                        <AnimatePresence>
-                                                            {showEmojiPicker && (
-                                                                <motion.div
-                                                                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                                                                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                                                                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                                                                    className="absolute bottom-full right-0 mb-4 z-50 shadow-2xl rounded-[2rem] overflow-hidden border border-slate-200 dark:border-white/10"
-                                                                >
-                                                                    <EmojiPicker
-                                                                        onEmojiClick={(emojiData) => {
-                                                                            setNewMessage(prev => prev + emojiData.emoji);
-                                                                        }}
-                                                                        theme={'auto' as any}
-                                                                    />
-                                                                </motion.div>
-                                                            )}
-                                                        </AnimatePresence>
+                                                            <AnimatePresence>
+                                                                {showEmojiPicker && (
+                                                                    <motion.div
+                                                                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                                        className="absolute bottom-full right-0 mb-4 z-50 shadow-2xl rounded-[2rem] overflow-hidden border border-slate-200 dark:border-white/10"
+                                                                    >
+                                                                        <EmojiPicker
+                                                                            onEmojiClick={(emojiData) => {
+                                                                                setNewMessage(prev => prev + emojiData.emoji);
+                                                                            }}
+                                                                            theme={'auto' as any}
+                                                                        />
+                                                                    </motion.div>
+                                                                )}
+                                                            </AnimatePresence>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
@@ -1508,11 +1879,9 @@ export default function TicketsPage() {
                                     </div>
                                 )}
                             </div>
-
                         </div>
                     </>
                 )}
-
                 {/* Painel Lateral de Informações do Contato */}
                 <AnimatePresence>
                     {showContactHistory && selectedTicket && (
@@ -1546,7 +1915,7 @@ export default function TicketsPage() {
                                         <div className="flex items-center justify-between mb-2">
                                             <p className="text-[9px] font-black uppercase tracking-widest text-amber-600/60 dark:text-amber-400/40">Notas de Atendimento</p>
                                             {!isEditingNotes && (
-                                                <button 
+                                                <button
                                                     onClick={() => {
                                                         setEditedNotes(selectedTicket.notes || '');
                                                         setIsEditingNotes(true);
@@ -1557,7 +1926,7 @@ export default function TicketsPage() {
                                                 </button>
                                             )}
                                         </div>
-                                        
+
                                         {isEditingNotes ? (
                                             <div className="space-y-2">
                                                 <textarea
@@ -1568,13 +1937,13 @@ export default function TicketsPage() {
                                                     placeholder="Adicione observações importantes sobre este cliente..."
                                                 />
                                                 <div className="flex items-center gap-2 justify-end">
-                                                    <button 
+                                                    <button
                                                         onClick={() => setIsEditingNotes(false)}
                                                         className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 transition-all"
                                                     >
                                                         Cancelar
                                                     </button>
-                                                    <button 
+                                                    <button
                                                         onClick={() => handleUpdateTicketInfo({ notes: editedNotes })}
                                                         disabled={updatingInfo}
                                                         className="px-3 py-1.5 bg-amber-500 text-white rounded-lg text-[10px] font-black uppercase tracking-widest shadow-lg shadow-amber-500/20 hover:bg-amber-600 active:scale-95 transition-all disabled:opacity-50"
@@ -1630,45 +1999,44 @@ export default function TicketsPage() {
                 </AnimatePresence>
             </div>
 
-                {/* Modais */}
-                <CreateTicketModal
-                    isOpen={isCreateModalOpen}
-                    onClose={() => setIsCreateModalOpen(false)}
+            {/* Modais */}
+            <CreateTicketModal
+                isOpen={isCreateModalOpen}
+                onClose={() => setIsCreateModalOpen(false)}
+                onSuccess={() => {
+                    fetchTickets();
+                    setIsCreateModalOpen(false);
+                }}
+            />
+
+            {selectedTicket && (
+                <TransferTicketModal
+                    isOpen={showTransferModal}
+                    onClose={() => setShowTransferModal(false)}
+                    ticketId={selectedTicket.id}
                     onSuccess={() => {
+                        setShowTransferModal(false);
                         fetchTickets();
-                        setIsCreateModalOpen(false);
+                        if (selectedTicket) {
+                            fetchMessages(selectedTicket.id);
+                        }
                     }}
                 />
+            )}
 
-                {selectedTicket && (
-                    <TransferTicketModal
-                        isOpen={showTransferModal}
-                        onClose={() => setShowTransferModal(false)}
-                        ticketId={selectedTicket.id}
-                        onSuccess={() => {
-                            setShowTransferModal(false);
-                            fetchTickets();
-                            if (selectedTicket) {
-                                fetchMessages(selectedTicket.id);
-                            }
-                        }}
-                    />
-                )}
-
-                {selectedTicket && (
-                    <CreateScheduleModal
-                        isOpen={showScheduleModal}
-                        onClose={() => setShowScheduleModal(false)}
-                        contactId={selectedTicket.contactId || selectedTicket.contact?.id || ''}
-                        contactName={selectedTicket.contact.name}
-                        departmentId={selectedTicket.department.id}
-                        onSuccess={() => {
-                            setShowScheduleModal(false);
-                            // Pode disparar reload adicional se necessário!
-                        }}
-                    />
-                )}
-            </div>
+            {selectedTicket && (
+                <CreateScheduleModal
+                    isOpen={showScheduleModal}
+                    onClose={() => setShowScheduleModal(false)}
+                    contactId={selectedTicket.contactId || selectedTicket.contact?.id || ''}
+                    contactName={selectedTicket.contact.name}
+                    departmentId={selectedTicket.department.id}
+                    onSuccess={() => {
+                        setShowScheduleModal(false);
+                        // Pode disparar reload adicional se necessário!
+                    }}
+                />
+            )}
             <BulkActionBar
                 selectedIds={selectedTicketIds}
                 onClear={() => setSelectedTicketIds([])}
@@ -1677,6 +2045,6 @@ export default function TicketsPage() {
                     fetchTickets();
                 }}
             />
-        </div >
+        </div>
     );
 }

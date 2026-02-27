@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { AIKnowledgeService, KnowledgeBase, AIDocument } from '@/services/ai-knowledge';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Database, Plus, Trash2, FileText, Globe, FileUp, Loader2, CheckCircle, Activity, ChevronRight, Save, Zap, FileCode, UploadCloud, RefreshCw, Music, Youtube, Github, FileSpreadsheet, Presentation, BookOpen, Braces, AlignLeft } from 'lucide-react';
+import { Database, Plus, Trash2, FileText, Globe, FileUp, Loader2, CheckCircle, Activity, ChevronRight, Save, Zap, FileCode, UploadCloud, RefreshCw, Music, Youtube, Github, FileSpreadsheet, Presentation, BookOpen, Braces, AlignLeft, X } from 'lucide-react';
 
 // Mapeamento de sourceType → ícone e cor
 const SOURCE_TYPE_META: Record<string, { icon: React.ElementType; color: string; label: string }> = {
@@ -35,83 +35,20 @@ function DocTypeIcon({ sourceType, size = 20 }: { sourceType: string; size?: num
     return <div className={`p-3 rounded-xl ${meta.color}`}><Icon size={size} /></div>;
 }
 
-// Grupos para o seletor
-const SOURCE_TYPE_GROUPS = [
-    {
-        label: 'Texto',
-        types: [
-            { value: 'TEXT',  label: 'Texto Livre' },
-            { value: 'TXT',   label: 'Arquivo TXT' },
-            { value: 'MD',    label: 'Markdown (.md)' },
-            { value: 'RTF',   label: 'RTF' },
-        ],
-    },
-    {
-        label: 'Office / Documentos',
-        types: [
-            { value: 'PDF',  label: 'PDF' },
-            { value: 'DOCX', label: 'Word (.docx)' },
-            { value: 'XLSX', label: 'Excel (.xlsx / .xls)' },
-            { value: 'PPTX', label: 'PowerPoint (.pptx)' },
-            { value: 'EPUB', label: 'EPUB (livro digital)' },
-        ],
-    },
-    {
-        label: 'Dados',
-        types: [
-            { value: 'CSV',  label: 'CSV' },
-            { value: 'JSON', label: 'JSON' },
-            { value: 'YAML', label: 'YAML / YML' },
-            { value: 'XML',  label: 'XML' },
-        ],
-    },
-    {
-        label: 'Código-Fonte',
-        types: [
-            { value: 'CODE', label: 'Código (.js, .ts, .py, .java, .go…)' },
-        ],
-    },
-    {
-        label: 'Mídia (transcrição automática)',
-        types: [
-            { value: 'AUDIO', label: 'Áudio (.mp3, .wav, .mp4, .ogg…) — Whisper' },
-        ],
-    },
-    {
-        label: 'Web',
-        types: [
-            { value: 'URL',     label: 'Website / URL' },
-            { value: 'YOUTUBE', label: 'YouTube (transcrição automática)' },
-            { value: 'GITHUB',  label: 'Repositório GitHub / GitLab' },
-            { value: 'HTML',    label: 'Arquivo HTML' },
-        ],
-    },
-];
-
-// Tipos que requerem upload de arquivo
-const FILE_UPLOAD_TYPES = new Set(['PDF', 'DOCX', 'XLSX', 'XLS', 'PPTX', 'EPUB', 'TXT', 'MD', 'RTF', 'CSV', 'JSON', 'YAML', 'XML', 'CODE', 'HTML', 'AUDIO']);
-
-// Tipos que precisam de URL
+// Tipos que precisam de URL (não upload de arquivo)
 const URL_INPUT_TYPES = new Set(['URL', 'YOUTUBE', 'GITHUB']);
 
-// Mapa de tipo → accept attribute
-const ACCEPT_BY_TYPE: Record<string, string> = {
-    PDF:   '.pdf',
-    DOCX:  '.doc,.docx',
-    XLSX:  '.xls,.xlsx',
-    PPTX:  '.ppt,.pptx',
-    EPUB:  '.epub',
-    TXT:   '.txt',
-    MD:    '.md,.mdx,.markdown',
-    RTF:   '.rtf',
-    CSV:   '.csv',
-    JSON:  '.json',
-    YAML:  '.yaml,.yml',
-    XML:   '.xml',
-    CODE:  '.js,.ts,.jsx,.tsx,.py,.java,.go,.rb,.php,.cs,.cpp,.c,.rs,.swift,.kt,.sh,.sql',
-    HTML:  '.html,.htm',
-    AUDIO: '.mp3,.wav,.mp4,.ogg,.webm,.m4a',
-};
+// Accept string cobrindo todos os tipos de arquivo suportados
+const ALL_FILE_ACCEPT = '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.epub,.txt,.md,.mdx,.markdown,.rtf,.csv,.json,.yaml,.yml,.xml,.html,.htm,.js,.ts,.jsx,.tsx,.py,.java,.go,.rb,.php,.cs,.cpp,.c,.rs,.swift,.kt,.sh,.sql,.mp3,.wav,.mp4,.ogg,.webm,.m4a';
+
+// Tipos que exigem entrada de URL ou texto (não upload de arquivo)
+const WEB_TYPES = [
+    { value: 'TEXT',    label: 'Texto Livre' },
+    { value: 'URL',     label: 'Website / URL' },
+    { value: 'YOUTUBE', label: 'YouTube (transcrição automática)' },
+    { value: 'GITHUB',  label: 'Repositório GitHub / GitLab' },
+    { value: 'HTML',    label: 'Arquivo HTML (colar código)' },
+];
 
 function autoDetectSourceType(filename: string): string {
     const ext = filename.split('.').pop()?.toLowerCase() || '';
@@ -147,6 +84,8 @@ export default function AIKnowledgePage() {
         file: null
     });
     const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null);
+    const [docMode, setDocMode] = useState<'files' | 'web'>('files');
+    const [uploadFiles, setUploadFiles] = useState<File[]>([]);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -253,8 +192,9 @@ export default function AIKnowledgePage() {
         try {
             setSubmitting(true);
 
-            if (FILE_UPLOAD_TYPES.has(newDoc.sourceType) && newDoc.file) {
-                await AIKnowledgeService.uploadDocument(selectedBase.id, newDoc.file);
+            if (docMode === 'files') {
+                // Upload todos os arquivos selecionados (em paralelo)
+                await Promise.all(uploadFiles.map(file => AIKnowledgeService.uploadDocument(selectedBase.id, file)));
             } else {
                 await AIKnowledgeService.addDocument(selectedBase.id, {
                     title: newDoc.title,
@@ -266,6 +206,7 @@ export default function AIKnowledgePage() {
 
             setIsDocModalOpen(false);
             fetchDocuments(selectedBase.id);
+            setUploadFiles([]);
             setNewDoc({ title: '', sourceType: 'TEXT', rawContent: '', file: null });
         } catch (error) {
             console.error('Erro ao adicionar documento:', error);
@@ -285,15 +226,14 @@ export default function AIKnowledgePage() {
     };
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files && e.target.files[0]) {
-            const file = e.target.files[0];
-            const detected = autoDetectSourceType(file.name);
-            setNewDoc({
-                ...newDoc,
-                file,
-                title: newDoc.title || file.name,
-                sourceType: detected,
+        if (e.target.files && e.target.files.length > 0) {
+            setUploadFiles(prev => {
+                const existing = new Set(prev.map(f => f.name));
+                const added = Array.from(e.target.files!).filter(f => !existing.has(f.name));
+                return [...prev, ...added];
             });
+            // Reset input para permitir re-seleção do mesmo arquivo
+            e.target.value = '';
         }
     };
 
@@ -383,12 +323,14 @@ export default function AIKnowledgePage() {
                                 </div>
                                 <button
                                     onClick={() => {
-                                        setNewDoc({ title: '', sourceType: 'PDF', rawContent: '', file: null });
+                                        setDocMode('files');
+                                        setUploadFiles([]);
+                                        setNewDoc({ title: '', sourceType: 'TEXT', rawContent: '', file: null });
                                         setIsDocModalOpen(true);
                                     }}
                                     className="px-6 py-3 bg-white dark:bg-white/10 text-primary font-bold text-xs uppercase tracking-widest rounded-xl hover:bg-primary hover:text-white transition-all shadow-md flex items-center gap-2"
                                 >
-                                    <Plus size={16} /> Enxertar Conhecimento
+                                    <Plus size={16} /> Inserir Conhecimento
                                 </button>
                             </div>
 
@@ -481,43 +423,31 @@ export default function AIKnowledgePage() {
                 {isDocModalOpen && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
                         <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-md" onClick={() => setIsDocModalOpen(false)} />
-                        <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="relative bg-white dark:bg-slate-900 p-10 rounded-[2.5rem] w-full max-w-2xl shadow-2xl border border-white/10">
-                            <h3 className="text-2xl font-black mb-6 italic uppercase tracking-tighter">Enxertar <span className="text-primary">Conhecimento</span></h3>
-                            <form onSubmit={handleAddDocument} className="space-y-6">
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Tag de Identificação</label>
-                                        <input required value={newDoc.title} onChange={e => setNewDoc({ ...newDoc, title: e.target.value })} placeholder="Nome do documento..." className="w-full p-4 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 font-bold text-sm" />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Tipo de Fonte</label>
-                                        <select value={newDoc.sourceType} onChange={e => setNewDoc({ ...newDoc, sourceType: e.target.value, file: null })} className="w-full p-4 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 font-bold text-sm">
-                                            {SOURCE_TYPE_GROUPS.map(group => (
-                                                <optgroup key={group.label} label={group.label}>
-                                                    {group.types.map(t => (
-                                                        <option key={t.value} value={t.value}>{t.label}</option>
-                                                    ))}
-                                                </optgroup>
-                                            ))}
-                                        </select>
-                                    </div>
-                                </div>
+                        <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="relative bg-white dark:bg-slate-900 p-10 rounded-[2.5rem] w-full max-w-2xl shadow-2xl border border-white/10 max-h-[90vh] overflow-y-auto">
+                            <h3 className="text-2xl font-black mb-6 italic uppercase tracking-tighter">Inserir <span className="text-primary">Conhecimento</span></h3>
 
-                                {newDoc.sourceType === 'TEXT' ? (
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Conteúdo</label>
-                                        <textarea required value={newDoc.rawContent} onChange={e => setNewDoc({ ...newDoc, rawContent: e.target.value })} className="w-full p-6 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 font-medium text-sm h-48 resize-none italic" placeholder="Cole aqui o conhecimento que a IA deve dominar..." />
-                                    </div>
-                                ) : URL_INPUT_TYPES.has(newDoc.sourceType) ? (
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                                            {newDoc.sourceType === 'YOUTUBE' ? 'URL do YouTube' : newDoc.sourceType === 'GITHUB' ? 'URL do Repositório GitHub' : 'URL'}
-                                        </label>
-                                        <input required value={newDoc.contentUrl} onChange={e => setNewDoc({ ...newDoc, contentUrl: e.target.value })} placeholder={newDoc.sourceType === 'YOUTUBE' ? 'https://youtube.com/watch?v=...' : newDoc.sourceType === 'GITHUB' ? 'https://github.com/owner/repo' : 'https://...'} className="w-full p-4 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 font-bold text-sm" />
-                                    </div>
-                                ) : (
-                                    <div className="space-y-4">
-                                        <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block">Upload de Arquivo</label>
+                            {/* Tab switcher */}
+                            <div className="flex gap-2 mb-6 p-1 bg-slate-100 dark:bg-white/5 rounded-2xl">
+                                <button
+                                    type="button"
+                                    onClick={() => setDocMode('files')}
+                                    className={`flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${docMode === 'files' ? 'bg-white dark:bg-primary text-primary dark:text-white shadow-md' : 'text-slate-400 hover:text-slate-600 dark:hover:text-white'}`}
+                                >
+                                    Arquivos
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setDocMode('web')}
+                                    className={`flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${docMode === 'web' ? 'bg-white dark:bg-primary text-primary dark:text-white shadow-md' : 'text-slate-400 hover:text-slate-600 dark:hover:text-white'}`}
+                                >
+                                    Web / Texto
+                                </button>
+                            </div>
+
+                            <form onSubmit={handleAddDocument} className="space-y-6">
+                                {docMode === 'files' ? (
+                                    <>
+                                        {/* Zona de upload — aceita todos os tipos, múltiplos arquivos */}
                                         <div
                                             onClick={() => fileInputRef.current?.click()}
                                             className="border-2 border-dashed border-slate-200 dark:border-white/10 rounded-3xl p-10 flex flex-col items-center justify-center cursor-pointer hover:bg-primary/5 transition-all group"
@@ -526,27 +456,129 @@ export default function AIKnowledgePage() {
                                                 type="file"
                                                 ref={fileInputRef}
                                                 onChange={handleFileChange}
-                                                accept={ACCEPT_BY_TYPE[newDoc.sourceType] || '*'}
+                                                accept={ALL_FILE_ACCEPT}
+                                                multiple
                                                 className="hidden"
                                             />
                                             <div className="h-14 w-14 bg-primary/10 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
                                                 <UploadCloud className="text-primary" size={28} />
                                             </div>
                                             <p className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tighter text-center">
-                                                {newDoc.file ? newDoc.file.name : `Clique: ${SOURCE_TYPE_META[newDoc.sourceType]?.label || newDoc.sourceType}`}
+                                                Clique para selecionar arquivos
                                             </p>
-                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2 italic">
-                                                {ACCEPT_BY_TYPE[newDoc.sourceType] || 'qualquer arquivo'} · Max: 50MB
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2 italic text-center">
+                                                PDF, Word, Excel, PowerPoint, TXT, CSV, JSON, Áudio e mais · Múltiplos arquivos · Max 50MB cada
                                             </p>
                                         </div>
-                                    </div>
+
+                                        {/* Lista de arquivos selecionados */}
+                                        {uploadFiles.length > 0 && (
+                                            <div className="space-y-2">
+                                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">{uploadFiles.length} arquivo{uploadFiles.length > 1 ? 's' : ''} selecionado{uploadFiles.length > 1 ? 's' : ''}</p>
+                                                <div className="max-h-48 overflow-y-auto space-y-2 pr-1">
+                                                    {uploadFiles.map((file, idx) => {
+                                                        const detectedType = autoDetectSourceType(file.name);
+                                                        const meta = SOURCE_TYPE_META[detectedType] || SOURCE_TYPE_META.TEXT;
+                                                        const Icon = meta.icon;
+                                                        return (
+                                                            <div key={idx} className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-100 dark:border-white/10">
+                                                                <div className={`p-2 rounded-xl ${meta.color} flex-shrink-0`}><Icon size={14} /></div>
+                                                                <div className="flex-1 min-w-0">
+                                                                    <p className="text-xs font-bold text-slate-800 dark:text-white truncate">{file.name}</p>
+                                                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{meta.label} · {(file.size / 1024 / 1024).toFixed(1)} MB</p>
+                                                                </div>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setUploadFiles(prev => prev.filter((_, i) => i !== idx))}
+                                                                    className="p-1 hover:text-rose-500 transition-all flex-shrink-0"
+                                                                >
+                                                                    <X size={14} />
+                                                                </button>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </>
+                                ) : (
+                                    <>
+                                        {/* Tipo de fonte (apenas URL/texto) */}
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Tipo de Fonte</label>
+                                            <select
+                                                value={newDoc.sourceType}
+                                                onChange={e => setNewDoc({ ...newDoc, sourceType: e.target.value, rawContent: '', contentUrl: '' })}
+                                                className="w-full p-4 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 font-bold text-sm"
+                                            >
+                                                {WEB_TYPES.map(t => (
+                                                    <option key={t.value} value={t.value}>{t.label}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        {/* Título */}
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Nome / Identificação</label>
+                                            <input
+                                                required
+                                                value={newDoc.title}
+                                                onChange={e => setNewDoc({ ...newDoc, title: e.target.value })}
+                                                placeholder="Ex: FAQ de Suporte, Site Institucional..."
+                                                className="w-full p-4 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 font-bold text-sm"
+                                            />
+                                        </div>
+
+                                        {/* Input de conteúdo conforme tipo */}
+                                        {newDoc.sourceType === 'TEXT' || newDoc.sourceType === 'HTML' ? (
+                                            <div className="space-y-2">
+                                                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                                                    {newDoc.sourceType === 'HTML' ? 'Código HTML' : 'Conteúdo'}
+                                                </label>
+                                                <textarea
+                                                    required
+                                                    value={newDoc.rawContent}
+                                                    onChange={e => setNewDoc({ ...newDoc, rawContent: e.target.value })}
+                                                    className="w-full p-6 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 font-medium text-sm h-48 resize-none"
+                                                    placeholder={newDoc.sourceType === 'HTML' ? '<html>...</html>' : 'Cole aqui o conteúdo que a IA deve aprender...'}
+                                                />
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-2">
+                                                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                                                    {newDoc.sourceType === 'YOUTUBE' ? 'URL do YouTube' : newDoc.sourceType === 'GITHUB' ? 'URL do Repositório' : 'URL'}
+                                                </label>
+                                                <input
+                                                    required
+                                                    value={newDoc.contentUrl}
+                                                    onChange={e => setNewDoc({ ...newDoc, contentUrl: e.target.value })}
+                                                    placeholder={
+                                                        newDoc.sourceType === 'YOUTUBE' ? 'https://youtube.com/watch?v=...' :
+                                                        newDoc.sourceType === 'GITHUB' ? 'https://github.com/owner/repo' :
+                                                        'https://...'
+                                                    }
+                                                    className="w-full p-4 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 font-bold text-sm"
+                                                />
+                                            </div>
+                                        )}
+                                    </>
                                 )}
+
                                 <button
-                                    disabled={submitting || (FILE_UPLOAD_TYPES.has(newDoc.sourceType) && !newDoc.file) || (URL_INPUT_TYPES.has(newDoc.sourceType) && !newDoc.contentUrl)}
+                                    disabled={
+                                        submitting ||
+                                        (docMode === 'files' && uploadFiles.length === 0) ||
+                                        (docMode === 'web' && !newDoc.title) ||
+                                        (docMode === 'web' && URL_INPUT_TYPES.has(newDoc.sourceType) && !newDoc.contentUrl) ||
+                                        (docMode === 'web' && (newDoc.sourceType === 'TEXT' || newDoc.sourceType === 'HTML') && !newDoc.rawContent)
+                                    }
                                     type="submit"
                                     className="w-full py-4 bg-primary text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-primary/20 flex items-center justify-center gap-2 disabled:opacity-50"
                                 >
-                                    {submitting ? <Loader2 size={16} className="animate-spin" /> : <Zap size={16} />} Fundir Inteligência
+                                    {submitting ? <Loader2 size={16} className="animate-spin" /> : <Zap size={16} />}
+                                    {docMode === 'files'
+                                        ? (uploadFiles.length > 1 ? `Inserir ${uploadFiles.length} Arquivos` : 'Inserir Arquivo')
+                                        : 'Inserir Conhecimento'}
                                 </button>
                             </form>
                         </motion.div>

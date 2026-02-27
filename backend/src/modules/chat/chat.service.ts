@@ -35,7 +35,7 @@ export class ChatService {
         return ticket;
     }
 
-    async sendMessage(ticketId: string, content: string, fromMe: boolean, type: string = 'TEXT', mediaUrl?: string, companyId?: string, origin: 'AGENT' | 'CLIENT' | 'AI' = 'AGENT') {
+    async sendMessage(ticketId: string, content: string, fromMe: boolean, type: string = 'TEXT', mediaUrl?: string, companyId?: string, origin: 'AGENT' | 'CLIENT' | 'AI' = 'AGENT', quotedMessageId?: string) {
         this.logger.log(`Processando mensagem para o ticket: ${ticketId} (${origin})`);
 
         return await this.prisma.$transaction(async (tx) => {
@@ -49,6 +49,7 @@ export class ChatService {
                     mediaUrl,
                     status: 'PENDING',
                     sentAt: new Date(),
+                    quotedMessageId,
                 },
             });
 
@@ -260,6 +261,9 @@ export class ChatService {
             where: { ticketId },
             orderBy: { sentAt: 'desc' },
             take: takeValue,
+            include: {
+                quotedMessage: true
+            }
         }).then(messages => messages.reverse());
     }
 
@@ -270,7 +274,10 @@ export class ChatService {
             take: Number(limit),
             skip: cursor ? 1 : 0,
             cursor: cursor ? { id: cursor } : undefined,
-            orderBy: { sentAt: 'desc' }
+            orderBy: { sentAt: 'desc' },
+            include: {
+                quotedMessage: true
+            }
         });
     }
 

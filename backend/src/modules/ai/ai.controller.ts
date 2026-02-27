@@ -10,6 +10,9 @@ import { ChatRequestDto } from './dto/chat-request.dto';
 import { Observable } from 'rxjs';
 import { ConversationHistoryService } from './conversation-history.service';
 import { NotificationService } from './notifications/notification.service';
+import { Public } from '../../common/decorators/public.decorator';
+import { ApiKeyGuard } from './api-keys/api-key.guard';
+import { UnauthorizedException } from '@nestjs/common';
 
 @ApiTags('AI')
 @Controller('ai')
@@ -25,6 +28,7 @@ export class AIController {
     ) { }
 
     // ========== Agent CRUD ==========
+
 
     @Post('agents')
     @ApiOperation({ summary: 'Criar um novo agente de IA' })
@@ -63,6 +67,22 @@ export class AIController {
     chat(@Req() req: any, @Param('id') id: string, @Body() chatRequest: ChatRequestDto) {
         return this.aiService.chat(req.user.companyId, id, chatRequest.message, chatRequest.history || []);
     }
+
+    @Public()
+    @UseGuards(ApiKeyGuard)
+    @Post('agents/:id/chat-public')
+    @ApiOperation({ summary: 'Interagir com o agente de IA via API Key' })
+    chatPublic(@Req() req: any, @Param('id') id: string, @Body() chatRequest: ChatRequestDto) {
+        const companyId = req.apiKeyCompanyId;
+        const agentId = req.apiKeyAgentId || id;
+
+        if (req.apiKeyAgentId && req.apiKeyAgentId !== id) {
+            throw new UnauthorizedException('Esta API Key não tem acesso a este agente específico.');
+        }
+
+        return this.aiService.chat(companyId, agentId, chatRequest.message, chatRequest.history || []);
+    }
+
 
     @Sse('agents/:id/stream')
     @ApiOperation({ summary: 'Streaming de respostas da IA' })

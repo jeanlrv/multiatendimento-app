@@ -33,11 +33,12 @@ export type WorkflowEvent =
 // ========================================
 
 export type WorkflowOperator =
+    | '='
+    | '!='
     | '>'
     | '<'
     | '>='
     | '<='
-    | '='
     | 'contains';
 
 export interface WorkflowCondition {

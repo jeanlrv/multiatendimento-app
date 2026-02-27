@@ -224,12 +224,29 @@ export class TicketsService {
                 ...(updateTicketDto.departmentId && { departmentId: updateTicketDto.departmentId }),
                 ...(updateTicketDto.subject && { subject: updateTicketDto.subject }),
                 ...(updateTicketDto.mode && { mode: updateTicketDto.mode }),
+                // Se estiver reabrindo, limpa datas de fechamento
+                ...(updateTicketDto.status === TicketStatus.OPEN && {
+                    closedAt: null,
+                    resolvedAt: null
+                }),
+                // Sync de tags: substitui todas as tags existentes
+                ...(updateTicketDto.tagIds !== undefined && {
+                    tags: {
+                        deleteMany: {},
+                        ...(updateTicketDto.tagIds.length > 0 && {
+                            create: updateTicketDto.tagIds.map(tagId => ({
+                                tag: { connect: { id: tagId } }
+                            }))
+                        })
+                    }
+                }),
             },
             include: {
                 contact: true,
                 department: true,
                 whatsappInstance: true,
                 assignedUser: true,
+                tags: { include: { tag: true } },
             }
         });
 

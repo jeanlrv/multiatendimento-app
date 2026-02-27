@@ -117,7 +117,19 @@ async function bootstrap() {
             res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
         });
 
+        // CORS for Embed endpoints (Permitir * para widgets externos)
+        app.use('/api/embed', (req, res, next) => {
+            res.header('Access-Control-Allow-Origin', '*');
+            res.header('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+            res.header('Access-Control-Allow-Headers', 'Content-Type, Origin, Accept');
+            if (req.method === 'OPTIONS') {
+                return res.sendStatus(200);
+            }
+            next();
+        });
+
         const port = process.env.PORT || 3000;
+
         // Railway requer binding em 0.0.0.0 para acessibilidade pública e privada
         await app.listen(port, '0.0.0.0');
 

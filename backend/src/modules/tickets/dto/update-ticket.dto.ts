@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsEnum, IsUUID } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsUUID, IsArray } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { TicketStatus, TicketPriority } from '@prisma/client';
 
@@ -34,4 +34,9 @@ export class UpdateTicketDto {
     @IsEnum(['AI', 'HUMANO', 'HIBRIDO'])
     @IsOptional()
     mode?: 'AI' | 'HUMANO' | 'HIBRIDO';
+
+    @ApiProperty({ description: 'IDs das tags a aplicar no chamado (substitui todas as tags)', required: false, type: [String] })
+    @IsArray()
+    @IsOptional()
+    tagIds?: string[];
 }
