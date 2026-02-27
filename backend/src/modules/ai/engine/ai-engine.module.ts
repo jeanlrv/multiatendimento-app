@@ -8,6 +8,8 @@ import { ConversationHistoryService } from '../conversation-history.service';
 import { NotificationService } from '../notifications/notification.service';
 import { DatabaseModule } from '../../../database/database.module';
 
+import { S3Service } from '../storage/s3.service';
+
 @Module({
     imports: [
         DatabaseModule,
@@ -15,7 +17,7 @@ import { DatabaseModule } from '../../../database/database.module';
             name: 'knowledge-processing',
         }),
     ],
-    providers: [LLMService, VectorStoreService, LLMProviderFactory, EmbeddingCacheService, ConversationHistoryService, NotificationService],
-    exports: [LLMService, VectorStoreService, LLMProviderFactory, EmbeddingCacheService, ConversationHistoryService, NotificationService],
+    providers: [LLMService, VectorStoreService, LLMProviderFactory, EmbeddingCacheService, ConversationHistoryService, NotificationService, S3Service],
+    exports: [LLMService, VectorStoreService, LLMProviderFactory, EmbeddingCacheService, ConversationHistoryService, NotificationService, S3Service],
 })
 export class AIEngineModule { }

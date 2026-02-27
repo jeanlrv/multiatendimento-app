@@ -74,17 +74,18 @@ export class KnowledgeProcessor extends WorkerHost {
 
             const chunks = await splitter.splitText(text);
 
-            // 5. Gera Embeddings e Salva Chunks (com queries parametrizadas)
+            // 5. Gera Embeddings e Salva Chunks (Usando Prisma Client para evitar casts de vetor)
             let chunkCount = 0;
             for (const content of chunks) {
                 const embedding = await this.vectorStore.generateEmbedding(content);
-                const vectorString = `[${embedding.join(',')}]`;
 
-                // Query parametrizada para evitar SQL Injection
-                await (this.prisma as any).$executeRaw`
-                    INSERT INTO document_chunks (id, "documentId", content, embedding)
-                    VALUES (gen_random_uuid(), ${documentId}, ${content}, ${vectorString}::vector);
-                `;
+                await (this.prisma as any).documentChunk.create({
+                    data: {
+                        documentId,
+                        content,
+                        embedding, // Salva como JSON
+                    },
+                });
                 chunkCount++;
             }
 
