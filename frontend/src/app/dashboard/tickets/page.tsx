@@ -82,6 +82,9 @@ export default function TicketsPage() {
     const [loading, setLoading] = useState(true);
     const [loadingMessages, setLoadingMessages] = useState(false);
     const [filter, setFilter] = useState('OPEN');
+    const [showContactHistory, setShowContactHistory] = useState(false);
+    const [contactHistory, setContactHistory] = useState<any[]>([]);
+    const [loadingHistory, setLoadingHistory] = useState(false);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [showTransferModal, setShowTransferModal] = useState(false);
     const [isTyping, setIsTyping] = useState<{ userId: string, userName: string } | null>(null);
@@ -223,9 +226,24 @@ export default function TicketsPage() {
         }
     };
 
+    const fetchContactHistory = async (contactId: string) => {
+        setLoadingHistory(true);
+        try {
+            const response = await api.get(`/tickets?contactId=${contactId}&status=RESOLVED`);
+            setContactHistory(response.data.tickets || []);
+        } catch (error) {
+            console.error('Erro ao carregar histórico:', error);
+        } finally {
+            setLoadingHistory(false);
+        }
+    };
+
     const handleSelectTicket = async (ticket: Ticket) => {
         setSelectedTicket(ticket);
         fetchMessages(ticket.id);
+        if (showContactHistory) {
+            fetchContactHistory(ticket.contactId);
+        }
         const index = tickets.findIndex(t => t.id === ticket.id);
         if (index !== -1) setSelectedTicketIndex(index);
         router.push(`/dashboard/tickets?id=${ticket.id}`, { scroll: false });
@@ -890,7 +908,60 @@ export default function TicketsPage() {
                                     </div>
                                 </div>
                             </div>
-                            <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-3">
+                                <button
+                                    onClick={() => setShowContactHistory(!showContactHistory)}
+                                    className={`p-2 rounded-xl transition-all ${showContactHistory ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5'}`}
+                                    title="Informações do Contato"
+                                >
+                                    <Info size={20} />
+                                </button>
+                                {selectedTicket.status === 'RESOLVED' && (
+                                    <button
+                                        onClick={async () => {
+                                            try {
+                                                await ticketsService.update(selectedTicket.id, { status: 'OPEN' });
+                                                fetchTickets();
+                                                toast.success("Ticket reaberto com sucesso!");
+                                            } catch (error) {
+                                                toast.error("Erro ao reabrir ticket");
+                                            }
+                                        }}
+                                        className="flex items-center gap-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 px-4 py-2 rounded-2xl border border-emerald-500/20 transition-all font-black text-[10px] uppercase tracking-widest active:scale-95 shadow-lg shadow-emerald-500/10"
+                                    >
+                                        <ArrowRightLeft size={14} />
+                                        Reabrir Ticket
+                                    </button>
+                                )}
+
+                                {/* Seletor de Prioridade */}
+                                <div className="flex items-center bg-slate-100/50 dark:bg-white/5 p-1 rounded-2xl border border-white/50 dark:border-white/5 backdrop-blur-md shadow-sm">
+                                    {(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const).map((p) => (
+                                        <button
+                                            key={p}
+                                            onClick={async () => {
+                                                try {
+                                                    await ticketsService.update(selectedTicket.id, { priority: p });
+                                                    setSelectedTicket(prev => prev ? { ...prev, priority: p } : null);
+                                                    fetchTickets();
+                                                    toast.success(`Prioridade alterada para ${p}`);
+                                                } catch (error) {
+                                                    toast.error("Erro ao alterar prioridade");
+                                                }
+                                            }}
+                                            className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-tighter transition-all ${selectedTicket.priority === p
+                                                ? p === 'CRITICAL' ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/30' :
+                                                    p === 'HIGH' ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/30' :
+                                                        p === 'MEDIUM' ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30' :
+                                                            'bg-slate-500 text-white shadow-lg shadow-slate-500/30'
+                                                : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'
+                                                }`}
+                                        >
+                                            {p === 'CRITICAL' ? 'Crítico' : p === 'HIGH' ? 'Alta' : p === 'MEDIUM' ? 'Média' : 'Baixa'}
+                                        </button>
+                                    ))}
+                                </div>
+
                                 {selectedTicket.evaluation && (
                                     <SentimentIndicator
                                         sentiment={selectedTicket.evaluation.sentiment}
@@ -1379,6 +1450,75 @@ export default function TicketsPage() {
                         </div>
                     </>
                 )}
+
+                {/* Painel Lateral de Informações do Contato */}
+                <AnimatePresence>
+                    {showContactHistory && selectedTicket && (
+                        <motion.div
+                            initial={{ x: '100%' }}
+                            animate={{ x: 0 }}
+                            exit={{ x: '100%' }}
+                            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                            className="absolute inset-y-0 right-0 w-80 bg-white/80 dark:bg-slate-900/90 backdrop-blur-2xl border-l border-slate-200 dark:border-white/10 z-30 shadow-2xl flex flex-col"
+                        >
+                            <div className="p-6 border-b border-slate-200 dark:border-white/10 flex items-center justify-between">
+                                <h4 className="font-black text-xs uppercase tracking-[0.2em] text-slate-400">Contexto do Cliente</h4>
+                                <button onClick={() => setShowContactHistory(false)} className="p-2 hover:bg-slate-100 dark:hover:bg-white/5 rounded-xl text-slate-400">
+                                    <X size={18} />
+                                </button>
+                            </div>
+
+                            <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
+                                {/* Perfil */}
+                                <div className="text-center">
+                                    <div className="h-20 w-20 bg-primary/10 rounded-3xl flex items-center justify-center text-3xl font-black text-primary mx-auto mb-4 shadow-inner">
+                                        {selectedTicket.contact.name.charAt(0)}
+                                    </div>
+                                    <h3 className="font-black text-lg text-slate-900 dark:text-white leading-tight">{selectedTicket.contact.name}</h3>
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1">{selectedTicket.contact.phoneNumber}</p>
+                                </div>
+
+                                {/* Dados */}
+                                <div className="space-y-4">
+                                    <div className="bg-slate-50 dark:bg-white/5 rounded-2xl p-4 border border-slate-100 dark:border-white/5">
+                                        <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">Canal Principal</p>
+                                        <div className="flex items-center gap-2 text-primary font-black text-sm">
+                                            <Phone size={14} />
+                                            WhatsApp
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Histórico */}
+                                <div className="space-y-4">
+                                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">Histórico Resumido</p>
+                                    {loadingHistory ? (
+                                        <div className="flex justify-center py-4"><div className="h-5 w-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" /></div>
+                                    ) : contactHistory.length === 0 ? (
+                                        <p className="text-[10px] font-bold text-slate-400 italic">Nenhum chamado anterior encontrado.</p>
+                                    ) : (
+                                        <div className="space-y-3">
+                                            {contactHistory.map((h) => (
+                                                <div key={h.id} className="bg-white/50 dark:bg-black/20 rounded-xl p-3 border border-white/40 dark:border-white/5 group hover:border-primary/30 transition-all">
+                                                    <div className="flex justify-between items-start mb-1">
+                                                        <span className="text-[10px] font-black text-primary truncate">#{h.id.substring(h.id.length - 4).toUpperCase()}</span>
+                                                        <span className="text-[8px] font-bold text-slate-400">{new Date(h.createdAt).toLocaleDateString()}</span>
+                                                    </div>
+                                                    <p className="text-[11px] font-black text-slate-700 dark:text-gray-300 line-clamp-1">{h.subject || 'Sem assunto'}</p>
+                                                    <div className="flex items-center gap-2 mt-2 opacity-60">
+                                                        <div className="h-1 w-1 rounded-full bg-slate-400" />
+                                                        <span className="text-[8px] font-black uppercase tracking-tighter text-slate-500">{h.department.name}</span>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+            </>
 
                 {/* Modais */}
                 <CreateTicketModal
