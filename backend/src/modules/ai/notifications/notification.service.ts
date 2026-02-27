@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue, Job, QueueEvents } from 'bullmq';
-import type { PrismaService } from '../../../database/prisma.service';
+import { PrismaService } from '../../../database/prisma.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ConfigService } from '@nestjs/config';
 

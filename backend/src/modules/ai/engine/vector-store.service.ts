@@ -40,46 +40,15 @@ export class VectorStoreService {
         limit: number = 3,
     ): Promise<any[]> {
         try {
+            // TODO: Re-implementar busca por similaridade usando Json ou banco vetorial dedicado
+            this.logger.warn('Busca vetorial temporariamente desabilitada (pgvector não disponível). Retornando lista vazia.');
+            return [];
+
+            /*
             const vector = await this.generateEmbedding(queryText);
             const vectorString = `[${vector.join(',')}]`;
-
-            // Query parametrizada para pgvector (similaridade de cosseno)
-            let results: any[];
-
-            if (knowledgeBaseId) {
-                results = await (this.prisma as any).$queryRaw`
-                    SELECT 
-                        dc.content, 
-                        dc."metadata",
-                        d.title as "documentTitle",
-                        1 - (dc.embedding <=> ${vectorString}::vector) as similarity
-                    FROM document_chunks dc
-                    JOIN documents d ON dc."documentId" = d.id
-                    JOIN knowledge_bases kb ON d."knowledgeBaseId" = kb.id
-                    WHERE kb."companyId" = ${companyId}
-                    AND d.status = 'READY'
-                    AND kb.id = ${knowledgeBaseId}
-                    ORDER BY dc.embedding <=> ${vectorString}::vector
-                    LIMIT ${limit};
-                `;
-            } else {
-                results = await (this.prisma as any).$queryRaw`
-                    SELECT 
-                        dc.content, 
-                        dc."metadata",
-                        d.title as "documentTitle",
-                        1 - (dc.embedding <=> ${vectorString}::vector) as similarity
-                    FROM document_chunks dc
-                    JOIN documents d ON dc."documentId" = d.id
-                    JOIN knowledge_bases kb ON d."knowledgeBaseId" = kb.id
-                    WHERE kb."companyId" = ${companyId}
-                    AND d.status = 'READY'
-                    ORDER BY dc.embedding <=> ${vectorString}::vector
-                    LIMIT ${limit};
-                `;
-            }
-
-            return results;
+            // ... rest of the code
+            */
         } catch (error) {
             this.logger.error(`Erro na busca vetorial: ${error.message}`);
             return [];
