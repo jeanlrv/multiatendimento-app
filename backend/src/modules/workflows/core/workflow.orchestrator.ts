@@ -57,9 +57,9 @@ export class WorkflowOrchestrator {
 
             // Para condition nodes as condições ficam em node.data.conditions (não em params)
             // Mesclamos ambos para garantir que o executor receba tudo
-            const rawParams = node.data['params'] || {};
+            const rawParams = (node.data['params'] as Record<string, any>) || {};
             const paramsForExecutor = node.type === 'condition'
-                ? { ...rawParams, conditions: node.data['conditions'] || rawParams['conditions'] || [] }
+                ? { ...rawParams, conditions: (node.data as any)['conditions'] || rawParams['conditions'] || [] }
                 : (node.data['params'] || node.data);
 
             const actionPromise = executor.execute(context, paramsForExecutor);
