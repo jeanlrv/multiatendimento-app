@@ -55,6 +55,7 @@ interface Ticket {
     };
     mode: 'AI' | 'HUMANO' | 'HIBRIDO';
     unreadMessages: number;
+    notes?: string;
     evaluation?: any;
     assignedUser?: {
         id: string;
@@ -85,6 +86,14 @@ export default function TicketsPage() {
     const [showContactHistory, setShowContactHistory] = useState(false);
     const [contactHistory, setContactHistory] = useState<any[]>([]);
     const [loadingHistory, setLoadingHistory] = useState(false);
+
+    // Edição Inline
+    const [isEditingSubject, setIsEditingSubject] = useState(false);
+    const [isEditingNotes, setIsEditingNotes] = useState(false);
+    const [editedSubject, setEditedSubject] = useState('');
+    const [editedNotes, setEditedNotes] = useState('');
+    const [updatingInfo, setUpdatingInfo] = useState(false);
+
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [showTransferModal, setShowTransferModal] = useState(false);
     const [isTyping, setIsTyping] = useState<{ userId: string, userName: string } | null>(null);
@@ -238,6 +247,23 @@ export default function TicketsPage() {
         }
     };
 
+    const handleUpdateTicketInfo = async (data: { subject?: string, notes?: string }) => {
+        if (!selectedTicket) return;
+        setUpdatingInfo(true);
+        try {
+            await ticketsService.update(selectedTicket.id, data);
+            setSelectedTicket(prev => prev ? { ...prev, ...data } : null);
+            fetchTickets();
+            toast.success("Informações atualizadas!");
+            setIsEditingSubject(false);
+            setIsEditingNotes(false);
+        } catch (error) {
+            toast.error("Erro ao atualizar informações");
+        } finally {
+            setUpdatingInfo(false);
+        }
+    };
+
     const handleSelectTicket = async (ticket: Ticket) => {
         setSelectedTicket(ticket);
         fetchMessages(ticket.id);
@@ -294,7 +320,7 @@ export default function TicketsPage() {
 
             // 1. Upload do arquivo
             const uploadRes = await api.post('/uploads', formData, {
-                headers: { 'Content-Type': 'multipart/form-data' },
+                headers: { 'Content-Type': 'multipart/form-Type' },
             });
 
             // 2. Enviar mensagem com a URL do áudio
@@ -885,18 +911,54 @@ export default function TicketsPage() {
                                                 >
                                                     <User size={10} className="text-amber-600 dark:text-amber-400" />
                                                     <span className="text-[9px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-widest leading-none">
-                                                        Não atribuído — Assumir
+                                                        Não atribuído — Atender
                                                     </span>
                                                 </button>
                                             )}
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-3 mt-1.5">
-                                        {selectedTicket.subject && (
-                                            <p className="text-xs font-bold text-slate-500 dark:text-slate-400 tracking-tight border-r border-slate-200 dark:border-white/10 pr-3">
-                                                {selectedTicket.subject}
-                                            </p>
+                                    <div className="flex items-center gap-3 mt-1.5 min-h-[1.5rem]">
+                                        {isEditingSubject ? (
+                                            <div className="flex items-center gap-2 flex-1">
+                                                <input
+                                                    autoFocus
+                                                    value={editedSubject}
+                                                    onChange={(e) => setEditedSubject(e.target.value)}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') handleUpdateTicketInfo({ subject: editedSubject });
+                                                        if (e.key === 'Escape') setIsEditingSubject(false);
+                                                    }}
+                                                    className="bg-white/50 dark:bg-white/5 border border-primary/30 rounded-lg px-2 py-0.5 text-xs font-bold outline-none focus:ring-1 ring-primary/50 w-full max-w-sm"
+                                                    placeholder="Assunto do chamado..."
+                                                />
+                                                <button
+                                                    onClick={() => handleUpdateTicketInfo({ subject: editedSubject })}
+                                                    className="p-1 hover:bg-emerald-500/20 text-emerald-500 rounded-md transition-all"
+                                                >
+                                                    <CheckCheck size={14} />
+                                                </button>
+                                                <button
+                                                    onClick={() => setIsEditingSubject(false)}
+                                                    className="p-1 hover:bg-rose-500/20 text-rose-500 rounded-md transition-all"
+                                                >
+                                                    <X size={14} />
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <div
+                                                className="flex items-center gap-2 cursor-pointer group/subject"
+                                                onClick={() => {
+                                                    setEditedSubject(selectedTicket.subject || '');
+                                                    setIsEditingSubject(true);
+                                                }}
+                                            >
+                                                <p className="text-xs font-bold text-slate-500 dark:text-slate-400 tracking-tight">
+                                                    {selectedTicket.subject || 'Sem assunto (clique para editar)'}
+                                                </p>
+                                                <Edit3 size={10} className="text-slate-400 opacity-0 group-hover/subject:opacity-100 transition-opacity" />
+                                            </div>
                                         )}
+                                        <div className="h-4 w-[1px] bg-slate-200 dark:border-white/10 mx-1" />
                                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none border-r border-slate-200 dark:border-white/10 pr-3">{selectedTicket.contact.phoneNumber}</p>
                                         <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">
                                             <p className="text-primary italic">{selectedTicket.department.name}</p>
@@ -1478,8 +1540,56 @@ export default function TicketsPage() {
                                     <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1">{selectedTicket.contact.phoneNumber}</p>
                                 </div>
 
-                                {/* Dados */}
+                                {/* Notas */}
                                 <div className="space-y-4">
+                                    <div className="bg-amber-50/50 dark:bg-amber-500/5 rounded-2xl p-4 border border-amber-100/50 dark:border-amber-500/10 group/notes relative">
+                                        <div className="flex items-center justify-between mb-2">
+                                            <p className="text-[9px] font-black uppercase tracking-widest text-amber-600/60 dark:text-amber-400/40">Notas de Atendimento</p>
+                                            {!isEditingNotes && (
+                                                <button 
+                                                    onClick={() => {
+                                                        setEditedNotes(selectedTicket.notes || '');
+                                                        setIsEditingNotes(true);
+                                                    }}
+                                                    className="p-1 hover:bg-amber-100 dark:hover:bg-white/5 rounded-md text-amber-600 dark:text-amber-400 opacity-0 group-hover/notes:opacity-100 transition-all"
+                                                >
+                                                    <Edit3 size={12} />
+                                                </button>
+                                            )}
+                                        </div>
+                                        
+                                        {isEditingNotes ? (
+                                            <div className="space-y-2">
+                                                <textarea
+                                                    autoFocus
+                                                    value={editedNotes}
+                                                    onChange={(e) => setEditedNotes(e.target.value)}
+                                                    className="w-full bg-white dark:bg-black/20 border border-amber-200 dark:border-amber-500/30 rounded-xl p-3 text-xs font-bold outline-none focus:ring-1 ring-amber-500/50 min-h-[100px] text-slate-700 dark:text-slate-200"
+                                                    placeholder="Adicione observações importantes sobre este cliente..."
+                                                />
+                                                <div className="flex items-center gap-2 justify-end">
+                                                    <button 
+                                                        onClick={() => setIsEditingNotes(false)}
+                                                        className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 transition-all"
+                                                    >
+                                                        Cancelar
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => handleUpdateTicketInfo({ notes: editedNotes })}
+                                                        disabled={updatingInfo}
+                                                        className="px-3 py-1.5 bg-amber-500 text-white rounded-lg text-[10px] font-black uppercase tracking-widest shadow-lg shadow-amber-500/20 hover:bg-amber-600 active:scale-95 transition-all disabled:opacity-50"
+                                                    >
+                                                        {updatingInfo ? 'Salvando...' : 'Salvar Nota'}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <p className="text-xs font-bold text-amber-800/80 dark:text-amber-200/60 leading-relaxed italic whitespace-pre-wrap">
+                                                {selectedTicket.notes || 'Nenhuma observação interna registrada.'}
+                                            </p>
+                                        )}
+                                    </div>
+
                                     <div className="bg-slate-50 dark:bg-white/5 rounded-2xl p-4 border border-slate-100 dark:border-white/5">
                                         <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">Canal Principal</p>
                                         <div className="flex items-center gap-2 text-primary font-black text-sm">
@@ -1518,7 +1628,7 @@ export default function TicketsPage() {
                         </motion.div>
                     )}
                 </AnimatePresence>
-            </>
+            </div>
 
                 {/* Modais */}
                 <CreateTicketModal
@@ -1570,4 +1680,3 @@ export default function TicketsPage() {
         </div >
     );
 }
-
