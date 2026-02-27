@@ -1,19 +1,40 @@
-import { Injectable, Logger, NotFoundException, BadRequestException, HttpException, HttpStatus } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, HttpException, HttpStatus, OnModuleDestroy } from '@nestjs/common';
 import { PrismaService } from '../../../database/prisma.service';
 import { AIService } from '../ai.service';
-import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
-export class EmbedService {
+export class EmbedService implements OnModuleDestroy {
     private readonly logger = new Logger(EmbedService.name);
     // Rate limiter em memória: Map<sessionId, { count: number, resetAt: number }>
     // Simulando 20 mensagens por 10 min
     private rateLimiter: Map<string, { count: number, resetAt: number }> = new Map();
+    private cleanupInterval: NodeJS.Timeout;
 
     constructor(
         private prisma: PrismaService,
         private aiService: AIService,
-    ) { }
+    ) {
+        // Limpeza periódica de entradas expiradas (a cada 5 minutos)
+        this.cleanupInterval = setInterval(() => this.cleanupExpiredEntries(), 5 * 60 * 1000);
+    }
+
+    onModuleDestroy() {
+        clearInterval(this.cleanupInterval);
+    }
+
+    private cleanupExpiredEntries() {
+        const now = Date.now();
+        let cleaned = 0;
+        for (const [key, value] of this.rateLimiter) {
+            if (now > value.resetAt) {
+                this.rateLimiter.delete(key);
+                cleaned++;
+            }
+        }
+        if (cleaned > 0) {
+            this.logger.debug(`Rate limiter: ${cleaned} entradas expiradas removidas, ${this.rateLimiter.size} ativas`);
+        }
+    }
 
     private checkRateLimit(sessionId: string, maxLimit: number = 20) {
         const now = Date.now();

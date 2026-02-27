@@ -169,7 +169,7 @@ export class TicketsService {
                         include: { tag: true }
                     }
                 },
-                orderBy: { lastMessageAt: 'desc' },
+                orderBy: [{ lastMessageAt: 'desc' }, { updatedAt: 'desc' }],
                 skip,
                 take: limit,
             }),

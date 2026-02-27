@@ -95,11 +95,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
             setUser(userData);
 
-            // Fetch company branding after login
-            setTimeout(async () => {
-                await fetchCompany();
-                router.push('/dashboard');
-            }, 100);
+            // Fetch company branding e redirecionar sequencialmente
+            await fetchCompany();
+            router.push('/dashboard');
         } catch (error: any) {
             // Logar apenas status HTTP — nunca dados de resposta (podem conter informações sensíveis)
             const status = error.response?.status;
@@ -112,7 +110,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Invalidar refresh token no servidor (fire-and-forget)
         const storedRefreshToken = localStorage.getItem('refresh_token');
         if (storedRefreshToken) {
-            api.post('/auth/logout', { refresh_token: storedRefreshToken }).catch(() => {});
+            api.post('/auth/logout', { refresh_token: storedRefreshToken }).catch(() => { });
         }
 
         localStorage.removeItem('token');

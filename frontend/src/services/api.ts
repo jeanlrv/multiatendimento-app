@@ -1,7 +1,5 @@
 import axios, { AxiosRequestConfig } from 'axios';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.host}` : '');
-
 export const api = axios.create({
     baseURL: '/api',
 });
@@ -72,7 +70,7 @@ api.interceptors.response.use(
             isRefreshing = true;
 
             try {
-                const response = await axios.post(`${API_URL}/api/auth/refresh`, {
+                const response = await axios.post('/api/auth/refresh', {
                     refresh_token: refreshToken,
                 });
 

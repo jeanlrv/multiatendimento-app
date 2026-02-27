@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useParams } from 'next/navigation'
-import { v4 as uuidv4 } from 'uuid'
 
 interface Message {
     role: 'user' | 'assistant'
@@ -40,7 +39,7 @@ export default function EmbedChatPage() {
         // 1. Session ID (localStorage)
         let sid = localStorage.getItem(`kszap_session_${embedId}`)
         if (!sid) {
-            sid = uuidv4()
+            sid = crypto.randomUUID()
             localStorage.setItem(`kszap_session_${embedId}`, sid)
         }
         setSessionId(sid)
@@ -167,8 +166,8 @@ export default function EmbedChatPage() {
                     >
                         <div
                             className={`p-3 rounded-2xl text-sm max-w-[85%] shadow-sm whitespace-pre-wrap ${msg.role === 'user'
-                                    ? 'text-white rounded-tr-none'
-                                    : 'bg-white text-gray-800 rounded-tl-none border border-gray-100'
+                                ? 'text-white rounded-tr-none'
+                                : 'bg-white text-gray-800 rounded-tl-none border border-gray-100'
                                 }`}
                             style={{
                                 backgroundColor: msg.role === 'user' ? config.brandColor : undefined

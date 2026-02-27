@@ -4,7 +4,9 @@ import { CreateAIAgentDto } from './dto/create-ai-agent.dto';
 import { UpdateAIAgentDto } from './dto/update-ai-agent.dto';
 import { LLMService } from './engine/llm.service';
 import { VectorStoreService } from './engine/vector-store.service';
-import { Observable, from } from 'rxjs';
+import { Observable } from 'rxjs';
+import axios from 'axios';
+import * as FormData from 'form-data';
 
 @Injectable()
 export class AIService {
@@ -56,81 +58,67 @@ export class AIService {
     }
 
     /**
+     * Verifica limites de tokens da empresa (hora, dia, total).
+     * Lança ForbiddenException se algum limite for atingido.
+     */
+    private async checkTokenLimits(companyId: string) {
+        const company = await (this.prisma as any).company.findUnique({
+            where: { id: companyId },
+            select: { limitTokens: true, limitTokensPerHour: true, limitTokensPerDay: true }
+        });
+
+        if (!company) return;
+
+        const now = new Date();
+        const startOfHour = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), 0, 0, 0);
+        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+
+        const [hourlyUsage, dailyUsage, totalTokens] = await Promise.all([
+            (this.prisma as any).aIUsage.aggregate({
+                where: { companyId, createdAt: { gte: startOfHour } },
+                _sum: { tokens: true }
+            }),
+            (this.prisma as any).aIUsage.aggregate({
+                where: { companyId, createdAt: { gte: startOfDay } },
+                _sum: { tokens: true }
+            }),
+            (this.prisma as any).aIUsage.aggregate({
+                where: { companyId },
+                _sum: { tokens: true }
+            }),
+        ]);
+
+        const hourlyTokens = hourlyUsage._sum.tokens || 0;
+        const dailyTokens = dailyUsage._sum.tokens || 0;
+        const totalTokensUsed = totalTokens._sum.tokens || 0;
+
+        if (company.limitTokensPerHour > 0 && hourlyTokens >= company.limitTokensPerHour) {
+            throw new ForbiddenException(`Limite de tokens por hora atingido (${company.limitTokensPerHour}). Tente novamente mais tarde.`);
+        }
+        if (company.limitTokensPerDay > 0 && dailyTokens >= company.limitTokensPerDay) {
+            throw new ForbiddenException(`Limite de tokens por dia atingido (${company.limitTokensPerDay}). Tente novamente amanhã.`);
+        }
+        if (company.limitTokens > 0 && totalTokensUsed >= company.limitTokens) {
+            throw new ForbiddenException(`Limite total de tokens de IA atingido (${company.limitTokens}). Entre em contato com o suporte.`);
+        }
+    }
+
+    /**
      * Motor de Chat Nativo: Usa LangChain com suporte multi-provider.
      */
     async chat(companyId: string, agentId: string, message: string, history: any[] = []) {
-        // 1. Validação de entrada
         if (!message || message.trim().length === 0) {
             throw new Error('Mensagem não pode ser vazia');
         }
-
-        // Limitar tamanho da mensagem (4000 caracteres)
-        if (message.length > 4000) {
-            message = message.substring(0, 4000);
-        }
-
-        // Limitar histórico a 20 mensagens
-        if (history.length > 20) {
-            history = history.slice(-20);
-        }
+        if (message.length > 4000) message = message.substring(0, 4000);
+        if (history.length > 20) history = history.slice(-20);
 
         const agent = await this.findOneAgent(companyId, agentId);
         if (!agent || !agent.isActive) {
             throw new Error('Agente não encontrado ou inativo');
         }
 
-        // 2. Verificação de Limite de Tokens (Rate Limiting)
-        const company = await (this.prisma as any).company.findUnique({
-            where: { id: companyId },
-            select: { limitTokens: true, limitTokensPerHour: true, limitTokensPerDay: true }
-        });
-
-        // Verificar limites por hora e por dia
-        const now = new Date();
-        const startOfHour = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), 0, 0, 0);
-        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-
-        const hourlyUsage = await (this.prisma as any).aIUsage.aggregate({
-            where: {
-                companyId,
-                createdAt: {
-                    gte: startOfHour
-                }
-            },
-            _sum: { tokens: true }
-        });
-
-        const dailyUsage = await (this.prisma as any).aIUsage.aggregate({
-            where: {
-                companyId,
-                createdAt: {
-                    gte: startOfDay
-                }
-            },
-            _sum: { tokens: true }
-        });
-
-        const totalTokens = await (this.prisma as any).aIUsage.aggregate({
-            where: { companyId },
-            _sum: { tokens: true }
-        });
-
-        const hourlyTokens = hourlyUsage._sum.tokens || 0;
-        const dailyTokens = dailyUsage._sum.tokens || 0;
-        const totalTokensUsed = totalTokens._sum.tokens || 0;
-
-        // Verificar limites
-        if (company && company.limitTokensPerHour > 0 && hourlyTokens >= company.limitTokensPerHour) {
-            throw new ForbiddenException(`Limite de tokens por hora atingido (${company.limitTokensPerHour}). Tente novamente mais tarde.`);
-        }
-
-        if (company && company.limitTokensPerDay > 0 && dailyTokens >= company.limitTokensPerDay) {
-            throw new ForbiddenException(`Limite de tokens por dia atingido (${company.limitTokensPerDay}). Tente novamente amanhã.`);
-        }
-
-        if (company && company.limitTokens > 0 && totalTokensUsed >= company.limitTokens) {
-            throw new ForbiddenException(`Limite total de tokens de IA atingido (${company.limitTokens}). Entre em contato com o suporte.`);
-        }
+        await this.checkTokenLimits(companyId);
 
         try {
             this.logger.log(`Chat com agente "${agent.name}" usando modelo: ${agent.modelId || 'gpt-4o-mini'}`);
@@ -186,22 +174,11 @@ export class AIService {
         imageUrls: string[] = [],
         history: any[] = []
     ) {
-        // 1. Validação de entrada
         if (!message || message.trim().length === 0) {
             throw new Error('Mensagem não pode ser vazia');
         }
-
-        // Limitar tamanho da mensagem (4000 caracteres)
-        if (message.length > 4000) {
-            message = message.substring(0, 4000);
-        }
-
-        // Limitar histórico a 20 mensagens
-        if (history.length > 20) {
-            history = history.slice(-20);
-        }
-
-        // Limitar imagens a 5 por requisição
+        if (message.length > 4000) message = message.substring(0, 4000);
+        if (history.length > 20) history = history.slice(-20);
         if (imageUrls.length > 5) {
             throw new Error('Máximo de 5 imagens por requisição');
         }
@@ -211,58 +188,7 @@ export class AIService {
             throw new Error('Agente não encontrado ou inativo');
         }
 
-        // 2. Verificação de Limite de Tokens (Rate Limiting)
-        const company = await (this.prisma as any).company.findUnique({
-            where: { id: companyId },
-            select: { limitTokens: true, limitTokensPerHour: true, limitTokensPerDay: true }
-        });
-
-        // Verificar limites por hora e por dia
-        const now = new Date();
-        const startOfHour = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), 0, 0, 0);
-        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-
-        const hourlyUsage = await (this.prisma as any).aIUsage.aggregate({
-            where: {
-                companyId,
-                createdAt: {
-                    gte: startOfHour
-                }
-            },
-            _sum: { tokens: true }
-        });
-
-        const dailyUsage = await (this.prisma as any).aIUsage.aggregate({
-            where: {
-                companyId,
-                createdAt: {
-                    gte: startOfDay
-                }
-            },
-            _sum: { tokens: true }
-        });
-
-        const totalTokens = await (this.prisma as any).aIUsage.aggregate({
-            where: { companyId },
-            _sum: { tokens: true }
-        });
-
-        const hourlyTokens = hourlyUsage._sum.tokens || 0;
-        const dailyTokens = dailyUsage._sum.tokens || 0;
-        const totalTokensUsed = totalTokens._sum.tokens || 0;
-
-        // Verificar limites
-        if (company && company.limitTokensPerHour > 0 && hourlyTokens >= company.limitTokensPerHour) {
-            throw new ForbiddenException(`Limite de tokens por hora atingido (${company.limitTokensPerHour}). Tente novamente mais tarde.`);
-        }
-
-        if (company && company.limitTokensPerDay > 0 && dailyTokens >= company.limitTokensPerDay) {
-            throw new ForbiddenException(`Limite de tokens por dia atingido (${company.limitTokensPerDay}). Tente novamente amanhã.`);
-        }
-
-        if (company && company.limitTokens > 0 && totalTokensUsed >= company.limitTokens) {
-            throw new ForbiddenException(`Limite total de tokens de IA atingido (${company.limitTokens}). Entre em contato com o suporte.`);
-        }
+        await this.checkTokenLimits(companyId);
 
         try {
             this.logger.log(`Chat multimodal com agente "${agent.name}" usando modelo: ${agent.modelId || 'gpt-4o-mini'}`);
@@ -314,12 +240,10 @@ export class AIService {
             this.logger.log(`Iniciando transcrição nativa (Whisper) para: ${mediaUrl}`);
 
             // 1. Baixar o arquivo de áudio
-            const axios = require('axios');
             const audioResponse = await axios.get(mediaUrl, { responseType: 'arraybuffer' });
             const audioBuffer = Buffer.from(audioResponse.data);
 
             // 2. Preparar payload FormData para a API da OpenAI
-            const FormData = require('form-data');
             const formData = new FormData();
 
             formData.append('file', audioBuffer, { filename: 'audio.ogg', contentType: 'audio/ogg' });
@@ -438,31 +362,27 @@ export class AIService {
             ORDER BY date ASC
         `;
 
-        // Uso por agente
+        // Uso por agente (lista agentes com totais gerais da empresa)
         const agentUsage = await (this.prisma as any).$queryRaw`
             SELECT 
-                a.name as agentName,
-                COUNT(u.id) as calls,
-                SUM(u.tokens) as tokens
-            FROM "AIUsage" u
-            JOIN "AIAgent" a ON a."companyId" = u."companyId"
-            WHERE u."companyId" = ${companyId}
-            GROUP BY a.name
-            ORDER BY tokens DESC
+                a.name as "agentName",
+                a."modelId" as model,
+                a."isActive" as active
+            FROM "AIAgent" a
+            WHERE a."companyId" = ${companyId}
+            ORDER BY a.name ASC
         `;
 
-        // Uso por modelo
+        // Uso por modelo (agrupado pelas configurações dos agentes)
         const modelUsage = await (this.prisma as any).$queryRaw`
             SELECT 
                 a."modelId" as model,
-                COUNT(u.id) as calls,
-                SUM(u.tokens) as tokens
-            FROM "AIUsage" u
-            JOIN "AIAgent" a ON a."companyId" = u."companyId"
-            WHERE u."companyId" = ${companyId}
+                COUNT(a.id) as "agentCount"
+            FROM "AIAgent" a
+            WHERE a."companyId" = ${companyId}
             AND a."modelId" IS NOT NULL
             GROUP BY a."modelId"
-            ORDER BY tokens DESC
+            ORDER BY "agentCount" DESC
         `;
 
         return {
@@ -482,39 +402,29 @@ export class AIService {
             throw new Error('Mensagem não pode ser vazia');
         }
 
-        // Limitar tamanho da mensagem (4000 caracteres)
         if (message.length > 4000) {
             message = message.substring(0, 4000);
         }
 
-        // Limitar histórico a 20 mensagens
         if (history.length > 20) {
             history = history.slice(-20);
         }
 
-        // Retornar um Observable que irá emitir os chunks da resposta
+        // Retornar um Observable que chama o LLM de forma assíncrona
         return new Observable(observer => {
-            // Esta é uma implementação simplificada
-            // Na prática, você precisaria de uma implementação mais complexa
-            // que interaja com o LLM para obter os chunks em tempo real
             observer.next({ data: { type: 'start', content: '' } });
 
-            // Simular envio de chunks
-            const chunks = message.split(' ');
-            let index = 0;
-
-            const sendChunk = () => {
-                if (index < chunks.length) {
-                    observer.next({ data: { type: 'chunk', content: chunks[index] + ' ' } });
-                    index++;
-                    setTimeout(sendChunk, 100); // Simular delay
-                } else {
+            this.chat(companyId, agentId, message, history)
+                .then(response => {
+                    observer.next({ data: { type: 'chunk', content: response } });
                     observer.next({ data: { type: 'end', content: '' } });
                     observer.complete();
-                }
-            };
-
-            sendChunk();
+                })
+                .catch(error => {
+                    this.logger.error(`Erro no streamChat: ${error.message}`);
+                    observer.next({ data: { type: 'error', content: error.message } });
+                    observer.complete();
+                });
         });
     }
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter, usePathname } from 'next/navigation';
 import { ModeToggle } from '@/components/mode-toggle';
@@ -18,6 +18,95 @@ import { PresenceSidebar } from '@/components/chat/PresenceSidebar';
 import { NotificationBell } from '@/components/NotificationBell';
 import { Users as UsersIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+
+const SidebarContent = React.memo(({
+    sidebarCollapsed,
+    logoUrl,
+    companyName,
+    companyInitials,
+    pathname,
+    menuItems,
+    logout,
+    setMobileMenuOpen
+}: {
+    sidebarCollapsed: boolean;
+    logoUrl?: string | null;
+    companyName: string;
+    companyInitials: string;
+    pathname: string;
+    menuItems: any[];
+    logout: () => void;
+    setMobileMenuOpen: (val: boolean) => void;
+}) => (
+    <>
+        {/* Logo */}
+        <div className={`${sidebarCollapsed ? 'p-4' : 'px-8 py-6'} flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-4'} transition-all duration-300`}>
+            <div className={`${sidebarCollapsed ? 'h-10 w-10 rounded-xl' : 'h-12 w-auto min-w-[140px] rounded-2xl'} bg-gradient-to-br from-primary to-primary-foreground flex items-center justify-center shadow-lg shadow-primary/20 overflow-hidden flex-shrink-0 transition-all duration-500`}>
+                {logoUrl ? (
+                    <img src={logoUrl} alt={companyName} className={`${sidebarCollapsed ? 'w-full h-full object-cover' : 'h-full w-full object-contain p-2 px-4'}`} />
+                ) : (
+                    <span className="text-white font-bold text-lg italic">{companyInitials}</span>
+                )}
+            </div>
+        </div>
+
+        {/* Nav */}
+        <nav className={`flex-1 ${sidebarCollapsed ? 'px-2' : 'px-4'} space-y-1 overflow-y-auto custom-scrollbar transition-all duration-300`}>
+            {!sidebarCollapsed && (
+                <p className="px-4 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-4 mt-2 opacity-50">MENU PRINCIPAL</p>
+            )}
+            {menuItems.map((item) => {
+                const isActive = pathname === item.path;
+                const count = item.liveCount ?? 0;
+                return (
+                    <Link
+                        key={item.label}
+                        href={item.path}
+                        className={`group flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'} p-3 rounded-2xl transition-all duration-300 relative ${isActive
+                            ? 'bg-primary text-white shadow-lg shadow-primary/30 font-bold scale-[1.02]'
+                            : 'text-gray-500 dark:text-gray-400 hover:bg-white/50 dark:hover:bg-white/5 hover:translate-x-1'
+                            }`}
+                        title={sidebarCollapsed ? item.label : ''}
+                        onClick={() => setMobileMenuOpen(false)}
+                    >
+                        <div className={`flex items-center ${sidebarCollapsed ? '' : 'gap-3'}`}>
+                            <span className={`text-xl transition-transform group-hover:scale-110 ${isActive ? 'filter-none' : 'grayscale group-hover:grayscale-0'}`}>
+                                {item.icon}
+                            </span>
+                            {!sidebarCollapsed && <span className="text-sm">{item.label}</span>}
+                        </div>
+                        {count > 0 && !sidebarCollapsed && (
+                            <span className={`min-w-[20px] h-5 px-1.5 flex items-center justify-center rounded-full text-[10px] font-black tabular-nums ${isActive ? 'bg-white/25 text-white' : 'bg-primary text-white'}`}>
+                                {count > 99 ? '99+' : count}
+                            </span>
+                        )}
+                        {count > 0 && sidebarCollapsed && (
+                            <span className="absolute -top-1 -right-1 h-4 w-4 bg-primary text-white text-[8px] font-black rounded-full flex items-center justify-center border-2 border-white dark:border-gray-900">
+                                {count > 9 ? '9+' : count}
+                            </span>
+                        )}
+                    </Link>
+                );
+            })}
+        </nav>
+
+        {/* Footer */}
+        {!sidebarCollapsed ? (
+            <div className="p-6 border-t border-gray-100/50 dark:border-white/5">
+
+                <button onClick={logout} className="flex items-center gap-3 w-full p-3 text-red-500 hover:bg-red-50/50 dark:hover:bg-red-950/20 rounded-xl transition-all font-bold text-sm">
+                    <span className="text-lg">🚪</span> Sair da Conta
+                </button>
+            </div>
+        ) : (
+            <div className="p-2 border-t border-gray-100/50 dark:border-white/5">
+                <button onClick={logout} className="flex items-center justify-center w-full p-3 text-red-500 hover:bg-red-50/50 dark:hover:bg-red-950/20 rounded-xl transition-all" title="Sair da Conta">
+                    <span className="text-lg">🚪</span>
+                </button>
+            </div>
+        )}
+    </>
+));
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
     const { user, company, logout, loading, updateUser } = useAuth();
@@ -150,76 +239,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const companyName = company?.name || 'KSZap';
     const companyInitials = companyName.substring(0, 2).toUpperCase();
 
-    const SidebarContent = () => (
-        <>
-            {/* Logo */}
-            <div className={`${sidebarCollapsed ? 'p-4' : 'px-8 py-6'} flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-4'} transition-all duration-300`}>
-                <div className={`${sidebarCollapsed ? 'h-10 w-10 rounded-xl' : 'h-12 w-auto min-w-[140px] rounded-2xl'} bg-gradient-to-br from-primary to-primary-foreground flex items-center justify-center shadow-lg shadow-primary/20 overflow-hidden flex-shrink-0 transition-all duration-500`}>
-                    {logoUrl ? (
-                        <img src={logoUrl} alt={companyName} className={`${sidebarCollapsed ? 'w-full h-full object-cover' : 'h-full w-full object-contain p-2 px-4'}`} />
-                    ) : (
-                        <span className="text-white font-bold text-lg italic">{companyInitials}</span>
-                    )}
-                </div>
-            </div>
 
-            {/* Nav */}
-            <nav className={`flex-1 ${sidebarCollapsed ? 'px-2' : 'px-4'} space-y-1 overflow-y-auto custom-scrollbar transition-all duration-300`}>
-                {!sidebarCollapsed && (
-                    <p className="px-4 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-4 mt-2 opacity-50">MENU PRINCIPAL</p>
-                )}
-                {menuItems.map((item) => {
-                    const isActive = pathname === item.path;
-                    const count = (item as any).liveCount ?? 0;
-                    return (
-                        <Link
-                            key={item.label}
-                            href={item.path}
-                            className={`group flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'} p-3 rounded-2xl transition-all duration-300 relative ${isActive
-                                ? 'bg-primary text-white shadow-lg shadow-primary/30 font-bold scale-[1.02]'
-                                : 'text-gray-500 dark:text-gray-400 hover:bg-white/50 dark:hover:bg-white/5 hover:translate-x-1'
-                                }`}
-                            title={sidebarCollapsed ? item.label : ''}
-                            onClick={() => setMobileMenuOpen(false)}
-                        >
-                            <div className={`flex items-center ${sidebarCollapsed ? '' : 'gap-3'}`}>
-                                <span className={`text-xl transition-transform group-hover:scale-110 ${isActive ? 'filter-none' : 'grayscale group-hover:grayscale-0'}`}>
-                                    {item.icon}
-                                </span>
-                                {!sidebarCollapsed && <span className="text-sm">{item.label}</span>}
-                            </div>
-                            {count > 0 && !sidebarCollapsed && (
-                                <span className={`min-w-[20px] h-5 px-1.5 flex items-center justify-center rounded-full text-[10px] font-black tabular-nums ${isActive ? 'bg-white/25 text-white' : 'bg-primary text-white'}`}>
-                                    {count > 99 ? '99+' : count}
-                                </span>
-                            )}
-                            {count > 0 && sidebarCollapsed && (
-                                <span className="absolute -top-1 -right-1 h-4 w-4 bg-primary text-white text-[8px] font-black rounded-full flex items-center justify-center border-2 border-white dark:border-gray-900">
-                                    {count > 9 ? '9+' : count}
-                                </span>
-                            )}
-                        </Link>
-                    );
-                })}
-            </nav>
-
-            {/* Footer */}
-            {!sidebarCollapsed ? (
-                <div className="p-6 border-t border-gray-100/50 dark:border-white/5">
-
-                    <button onClick={logout} className="flex items-center gap-3 w-full p-3 text-red-500 hover:bg-red-50/50 dark:hover:bg-red-950/20 rounded-xl transition-all font-bold text-sm">
-                        <span className="text-lg">🚪</span> Sair da Conta
-                    </button>
-                </div>
-            ) : (
-                <div className="p-2 border-t border-gray-100/50 dark:border-white/5">
-                    <button onClick={logout} className="flex items-center justify-center w-full p-3 text-red-500 hover:bg-red-50/50 dark:hover:bg-red-950/20 rounded-xl transition-all" title="Sair da Conta">
-                        <span className="text-lg">🚪</span>
-                    </button>
-                </div>
-            )}
-        </>
-    );
 
     return (
         <SessionTimeoutGuard>
@@ -228,7 +248,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
                 {/* ── SIDEBAR DESKTOP (md+) ────────────────────────────────── */}
                 <aside className={`${sidebarCollapsed ? 'w-20' : 'w-72'} liquid-glass border-r border-slate-200 dark:border-white/5 flex-shrink-0 hidden md:flex flex-col shadow-2xl relative z-20 transition-all duration-300`}>
-                    <SidebarContent />
+                    <SidebarContent
+                        sidebarCollapsed={sidebarCollapsed}
+                        logoUrl={logoUrl}
+                        companyName={companyName}
+                        companyInitials={companyInitials}
+                        pathname={pathname}
+                        menuItems={menuItems}
+                        logout={logout}
+                        setMobileMenuOpen={setMobileMenuOpen}
+                    />
                     <button
                         onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
                         className="absolute -right-3 top-20 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full p-1.5 shadow-lg hover:scale-110 transition-transform z-30"
@@ -262,11 +291,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                             >
                                 <button
                                     onClick={() => setMobileMenuOpen(false)}
-                                    className="absolute right-4 top-5 p-2 rounded-2xl hover:bg-white/20 text-slate-500 transition-all"
+                                    className="absolute right-4 top-5 p-2 rounded-2xl hover:bg-white/20 text-slate-500 transition-all z-50"
                                 >
                                     <X size={20} />
                                 </button>
-                                <SidebarContent />
+                                <SidebarContent
+                                    sidebarCollapsed={false}
+                                    logoUrl={logoUrl}
+                                    companyName={companyName}
+                                    companyInitials={companyInitials}
+                                    pathname={pathname}
+                                    menuItems={menuItems}
+                                    logout={logout}
+                                    setMobileMenuOpen={setMobileMenuOpen}
+                                />
                             </motion.aside>
                         </>
                     )}

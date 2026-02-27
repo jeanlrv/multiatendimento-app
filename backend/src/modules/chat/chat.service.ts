@@ -137,21 +137,21 @@ export class ChatService {
             let externalResult;
             switch (message.messageType) {
                 case 'IMAGE':
-                    externalResult = await this.whatsappService.sendImage(ticket.companyId, ticket.connectionId, ticket.contact.phoneNumber, message.mediaUrl, message.content);
+                    externalResult = await this.whatsappService.sendImage(ticket.connectionId, ticket.contact.phoneNumber, message.mediaUrl, ticket.companyId, message.content);
                     break;
                 case 'AUDIO':
-                    externalResult = await this.whatsappService.sendAudio(ticket.companyId, ticket.connectionId, ticket.contact.phoneNumber, message.mediaUrl);
+                    externalResult = await this.whatsappService.sendAudio(ticket.connectionId, ticket.contact.phoneNumber, message.mediaUrl, ticket.companyId);
                     break;
                 case 'VIDEO':
-                    externalResult = await this.whatsappService.sendVideo(ticket.companyId, ticket.connectionId, ticket.contact.phoneNumber, message.mediaUrl, message.content);
+                    externalResult = await this.whatsappService.sendVideo(ticket.connectionId, ticket.contact.phoneNumber, message.mediaUrl, ticket.companyId, message.content);
                     break;
                 case 'DOCUMENT':
                     const fileName = message.mediaUrl.split('/').pop() || 'documento';
                     const ext = fileName.split('.').pop() || 'pdf';
-                    externalResult = await this.whatsappService.sendDocument(ticket.companyId, ticket.connectionId, ticket.contact.phoneNumber, message.mediaUrl, fileName, ext);
+                    externalResult = await this.whatsappService.sendDocument(ticket.connectionId, ticket.contact.phoneNumber, message.mediaUrl, fileName, ext, ticket.companyId);
                     break;
                 default:
-                    externalResult = await this.whatsappService.sendMessage(ticket.companyId, ticket.connectionId, ticket.contact.phoneNumber, message.content);
+                    externalResult = await this.whatsappService.sendMessage(ticket.connectionId, ticket.contact.phoneNumber, message.content, ticket.companyId);
             }
 
             await this.prisma.message.update({
@@ -179,18 +179,11 @@ export class ChatService {
 
     private async handleAIResponse(ticketId: string, content: string) {
         try {
-            // Busca ticket+mensagens em paralelo para eliminar N+1 sequencial
-            const startOfMonth = new Date();
-            startOfMonth.setDate(1);
-            startOfMonth.setHours(0, 0, 0, 0);
-
-            // Primeiro, buscar apenas o ticket para obter o companyId
             const ticket = await this.prisma.ticket.findUnique({
                 where: { id: ticketId },
                 include: {
                     department: true,
                     contact: true,
-                    company: { select: { limitTokens: true } },
                 },
             });
 
@@ -205,29 +198,11 @@ export class ChatService {
                 return;
             }
 
-            // Buscar mensagens e uso de tokens em paralelo (agora que temos ticket.companyId)
-            const [messages, currentUsage] = await Promise.all([
-                this.prisma.message.findMany({
-                    where: { ticketId },
-                    orderBy: { sentAt: 'desc' },
-                    take: 11,
-                }),
-                // Usar transação para garantir atomicidade na verificação de limite
-                this.prisma.aIUsage.aggregate({
-                    where: { companyId: ticket.companyId, createdAt: { gte: startOfMonth } },
-                    _sum: { tokens: true },
-                }).catch(() => ({ _sum: { tokens: 0 } })),
-            ]);
-
-            // Verificar limite de tokens com atomicidade
-            const tokenLimit = (ticket as any).company?.limitTokens ?? 100000;
-            const estimatedTokens = Math.ceil((content.length + 200) / 4); // Estimativa conservadora
-            const currentTokens = currentUsage._sum.tokens || 0;
-
-            if (currentTokens + estimatedTokens >= tokenLimit) {
-                this.logger.warn(`Limite de IA atingido para a empresa ${ticket.companyId}`);
-                return;
-            }
+            const messages = await this.prisma.message.findMany({
+                where: { ticketId },
+                orderBy: { sentAt: 'desc' },
+                take: 11,
+            });
 
             const history = messages
                 .filter(m => m.content !== content)
@@ -237,17 +212,11 @@ export class ChatService {
                     content: m.content
                 }));
 
+            // AIService.chat() já verifica limites de tokens e registra uso
             const aiResponse = await this.aiService.chat(ticket.companyId, ticket.department.aiAgentId, content, history);
 
             if (aiResponse) {
                 await this.sendMessage(ticketId, aiResponse, true, 'TEXT', undefined, ticket.companyId, 'AI');
-                await this.prisma.aIUsage.create({
-                    data: {
-                        companyId: ticket.companyId,
-                        tokens: Math.ceil((content.length + aiResponse.length) / 4),
-                        cost: 0
-                    }
-                });
             }
         } catch (error) {
             this.logger.error(`Erro ao processar resposta de IA: ${error.message}`);

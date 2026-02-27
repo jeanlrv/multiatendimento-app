@@ -61,7 +61,12 @@ interface Ticket {
     mode: 'AI' | 'HUMANO' | 'HIBRIDO';
     unreadMessages: number;
     notes?: string;
-    evaluation?: any;
+    evaluation?: {
+        aiSentiment: string;
+        aiSentimentScore: number;
+        aiSummary: string;
+        aiJustification: string;
+    } | any;
     assignedUser?: {
         id: string;
         name: string;
@@ -1228,9 +1233,13 @@ export default function TicketsPage() {
                                 </div>
 
                                 {/* Indicador de sentimento */}
-                                {selectedTicket.evaluation && (
+                                {(selectedTicket as any).evaluation && (
                                     <div className="shrink-0">
-                                        <SentimentIndicator evaluation={selectedTicket.evaluation} compact />
+                                        <SentimentIndicator
+                                            sentiment={(selectedTicket as any).evaluation.aiSentiment}
+                                            score={(selectedTicket as any).evaluation.aiSentimentScore}
+                                            className="scale-90 origin-right"
+                                        />
                                     </div>
                                 )}
 
@@ -1386,38 +1395,38 @@ export default function TicketsPage() {
                                     <div className="w-[1px] h-6 bg-slate-200 dark:bg-white/10 mx-1" />
 
                                     {/* Finalizar (Principal) */}
-                                                    <button
-                                                        disabled={isResolving}
-                                                        onClick={() => {
-                                                            const ticketId = selectedTicket.id;
-                                                            toast('Finalizar este atendimento?', {
-                                                                action: {
-                                                                    label: 'Confirmar',
-                                                                    onClick: async () => {
-                                                                        try {
-                                                                            setIsResolving(true);
-                                                                            await api.post(`/tickets/${ticketId}/resolve`, {});
-                                                                            toast.success("Atendimento finalizado!");
-                                                                            setSelectedTicket(null);
-                                                                            fetchTickets();
-                                                                        } catch (error) {
-                                                                            toast.error("Erro ao finalizar atendimento");
-                                                                        } finally {
-                                                                            setIsResolving(false);
-                                                                        }
-                                                                    }
-                                                                },
-                                                                cancel: { label: 'Cancelar', onClick: () => {} },
-                                                                duration: 5000,
-                                                            });
-                                                        }}
-                                                        className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl shadow-lg shadow-emerald-500/20 transition-all disabled:opacity-50 active:scale-95 group"
-                                                    >
-                                                        <CheckCheck className="h-4 w-4 group-hover:scale-110 transition-transform" />
-                                                        <span className="text-[10px] font-black uppercase tracking-widest hidden sm:block">
-                                                            {isResolving ? 'Finalizando...' : 'Finalizar Atendimento'}
-                                                        </span>
-                                                    </button>
+                                    <button
+                                        disabled={isResolving}
+                                        onClick={() => {
+                                            const ticketId = selectedTicket.id;
+                                            toast('Finalizar este atendimento?', {
+                                                action: {
+                                                    label: 'Confirmar',
+                                                    onClick: async () => {
+                                                        try {
+                                                            setIsResolving(true);
+                                                            await api.post(`/tickets/${ticketId}/resolve`, {});
+                                                            toast.success("Atendimento finalizado!");
+                                                            setSelectedTicket(null);
+                                                            fetchTickets();
+                                                        } catch (error) {
+                                                            toast.error("Erro ao finalizar atendimento");
+                                                        } finally {
+                                                            setIsResolving(false);
+                                                        }
+                                                    }
+                                                },
+                                                cancel: { label: 'Cancelar', onClick: () => { } },
+                                                duration: 5000,
+                                            });
+                                        }}
+                                        className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl shadow-lg shadow-emerald-500/20 transition-all disabled:opacity-50 active:scale-95 group"
+                                    >
+                                        <CheckCheck className="h-4 w-4 group-hover:scale-110 transition-transform" />
+                                        <span className="text-[10px] font-black uppercase tracking-widest hidden sm:block">
+                                            {isResolving ? 'Finalizando...' : 'Finalizar Atendimento'}
+                                        </span>
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -1482,7 +1491,7 @@ export default function TicketsPage() {
                                                             <p className={`text-sm font-medium leading-relaxed ${msg.fromMe && msg.messageType !== 'INTERNAL' ? 'text-white' : 'text-slate-900 dark:text-white'}`}>
                                                                 {msg.content}
                                                             </p>
-                                                                        ) : msg.messageType === 'IMAGE' ? (
+                                                        ) : msg.messageType === 'IMAGE' ? (
                                                             <div className="space-y-2">
                                                                 <img src={msg.mediaUrl} alt="Imagem" className="rounded-xl max-w-full shadow-sm cursor-pointer hover:opacity-95 transition-opacity" onClick={() => window.open(msg.mediaUrl, '_blank')} />
                                                                 <a href={msg.mediaUrl} download target="_blank" className={`flex items-center gap-1 text-[10px] font-black uppercase tracking-tighter ${msg.fromMe ? 'text-white/70 hover:text-white' : 'text-primary hover:text-primary/80'} transition-colors`}>
