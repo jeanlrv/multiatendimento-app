@@ -99,6 +99,21 @@ fi
 # ============================================
 echo "📦 Executando migrações do Prisma..."
 
+# Resolver migrações com falha antes de aplicar novas
+echo "🔧 Verificando migrações com falha..."
+npx prisma@6 migrate resolve --rolled-back 20260222000001_sync_schema_roles_collaboration 2>&1 || true
+
+# Habilitar extensão pgvector diretamente via SQL (necessário antes das migrações)
+echo "🔧 Habilitando extensão pgvector..."
+node -e "
+const { Client } = require('pg');
+const client = new Client({ connectionString: process.env.DATABASE_URL });
+client.connect()
+  .then(() => client.query('CREATE EXTENSION IF NOT EXISTS vector'))
+  .then(() => { console.log('✅ Extensão pgvector habilitada'); return client.end(); })
+  .catch(e => { console.log('⚠️  pgvector não disponível:', e.message); return client.end(); });
+" 2>&1 || echo "⚠️  Não foi possível habilitar pgvector"
+
 if npx prisma@6 migrate deploy 2>&1; then
   echo "✅ Migrações aplicadas com sucesso"
 else
