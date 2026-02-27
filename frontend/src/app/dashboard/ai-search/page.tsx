@@ -113,7 +113,7 @@ export default function AISearchPage() {
     };
 
     return (
-        <div className="space-y-8 relative liquid-glass aurora min-h-[calc(100vh-6rem)] pb-12">
+        <div className="space-y-8 relative liquid-glass aurora min-h-0 md:min-h-[calc(100vh-6rem)] pb-12">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10 px-4 pt-4">
                 <div>
                     <h2 className="text-4xl font-black text-slate-900 dark:text-white tracking-tighter italic flex items-center gap-4">
@@ -209,9 +209,9 @@ export default function AISearchPage() {
                                                     <div className="flex items-start justify-between mb-3">
                                                         <div className="flex items-center gap-3">
                                                             <div className={`p-2 rounded-lg ${result.sourceType === 'PDF' ? 'bg-rose-100 text-rose-600' :
-                                                                    result.sourceType === 'DOCX' ? 'bg-blue-100 text-blue-600' :
-                                                                        result.sourceType === 'URL' ? 'bg-emerald-100 text-emerald-600' :
-                                                                            'bg-slate-100 text-slate-600'
+                                                                result.sourceType === 'DOCX' ? 'bg-blue-100 text-blue-600' :
+                                                                    result.sourceType === 'URL' ? 'bg-emerald-100 text-emerald-600' :
+                                                                        'bg-slate-100 text-slate-600'
                                                                 }`}>
                                                                 {result.sourceType === 'PDF' ? <FileUp size={16} /> :
                                                                     result.sourceType === 'DOCX' ? <FileCode size={16} /> :
@@ -275,8 +275,8 @@ export default function AISearchPage() {
                                                     className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                                                 >
                                                     <div className={`max-w-[80%] p-4 rounded-2xl ${msg.role === 'user'
-                                                            ? 'bg-primary text-white'
-                                                            : 'bg-white dark:bg-white/5 border border-slate-100 dark:border-white/10'
+                                                        ? 'bg-primary text-white'
+                                                        : 'bg-white dark:bg-white/5 border border-slate-100 dark:border-white/10'
                                                         }`}>
                                                         <p className="text-sm">{msg.content}</p>
                                                     </div>

@@ -64,8 +64,8 @@ export default function UsersPage() {
                 u.role?.name?.toLowerCase().includes(searchTerm.toLowerCase());
             const matchStatus =
                 filterStatus === 'ALL' ? true :
-                filterStatus === 'ACTIVE' ? u.isActive :
-                !u.isActive;
+                    filterStatus === 'ACTIVE' ? u.isActive :
+                        !u.isActive;
             const matchRole = filterRole ? u.roleId === filterRole : true;
             return matchSearch && matchStatus && matchRole;
         });
@@ -110,7 +110,7 @@ export default function UsersPage() {
     const openEdit = (user: User) => { setEditingUser(user); setShowDrawer(true); };
 
     return (
-        <div className="space-y-10 max-w-7xl mx-auto relative pb-12">
+        <div className="space-y-10 max-w-7xl mx-auto relative pb-12 liquid-glass aurora min-h-0 md:min-h-[calc(100vh-8rem)]">
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 px-4">
                 <div>

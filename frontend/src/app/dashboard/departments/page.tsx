@@ -115,7 +115,7 @@ export default function DepartmentsPage() {
     );
 
     return (
-        <div className="space-y-12 max-w-7xl mx-auto relative liquid-glass aurora pb-12">
+        <div className="space-y-12 max-w-7xl mx-auto relative liquid-glass aurora min-h-0 md:min-h-[calc(100vh-8rem)] pb-12">
             {/* Header Area Premium */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-8 relative z-10 px-4">
                 <div>
@@ -370,8 +370,8 @@ function DepartmentModal({ department, agents, workflows, onClose, onSave }: { d
                             type="button"
                             onClick={() => setActiveTab(tab.id as any)}
                             className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === tab.id
-                                    ? 'bg-white dark:bg-white/10 text-primary shadow-sm border border-slate-200 dark:border-white/10'
-                                    : 'text-slate-500 hover:text-slate-700 dark:hover:text-white'
+                                ? 'bg-white dark:bg-white/10 text-primary shadow-sm border border-slate-200 dark:border-white/10'
+                                : 'text-slate-500 hover:text-slate-700 dark:hover:text-white'
                                 }`}
                         >
                             {tab.icon} {tab.label}
@@ -536,8 +536,8 @@ function DepartmentModal({ department, agents, workflows, onClose, onSave }: { d
                                             type="button"
                                             onClick={() => setValue('defaultMode', mode as any)}
                                             className={`py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all border ${watch('defaultMode') === mode
-                                                    ? 'bg-primary text-white border-primary shadow-lg shadow-primary/20 scale-105'
-                                                    : 'bg-white dark:bg-white/5 text-slate-400 border-slate-200 dark:border-white/10 hover:border-primary/30'
+                                                ? 'bg-primary text-white border-primary shadow-lg shadow-primary/20 scale-105'
+                                                : 'bg-white dark:bg-white/5 text-slate-400 border-slate-200 dark:border-white/10 hover:border-primary/30'
                                                 }`}
                                         >
                                             {mode}

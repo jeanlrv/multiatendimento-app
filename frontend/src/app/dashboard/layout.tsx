@@ -47,7 +47,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         if (savedZoom) {
             const z = parseInt(savedZoom);
             setZoom(z);
-            document.documentElement.style.fontSize = `${(z / 100) * 16}px`;
+            document.documentElement.style.fontSize = `${(z / 100) * 12.8}px`;
         }
     }, []);
 
@@ -56,7 +56,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             let next = prev;
             if (action === 'in' && prev < 130) next = prev + 10;
             if (action === 'out' && prev > 70) next = prev - 10;
-            document.documentElement.style.fontSize = `${(next / 100) * 16}px`;
+            document.documentElement.style.fontSize = `${(next / 100) * 12.8}px`;
             localStorage.setItem('kszap_zoom', next.toString());
             return next;
         });
@@ -347,7 +347,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     </header>
 
                     {/* ── CONTEÚDO + ESPAÇO PARA BOTTOM NAV ───────────────── */}
-                    <main className="px-3 md:px-10 pb-24 md:pb-10 flex-1 overflow-auto custom-scrollbar">
+                    <main className="px-3 md:px-10 pb-24 md:pb-10 flex-1 overflow-x-hidden overflow-y-auto custom-scrollbar">
                         {children}
                     </main>
                 </div>

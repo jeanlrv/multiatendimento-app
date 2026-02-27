@@ -508,7 +508,7 @@ function ContactDrawer({
                     </div>
                 </div>
 
-                <div className="space-y-6 overflow-y-auto max-h-[calc(100vh-250px)] pr-2 custom-scrollbar">
+                <div className="space-y-6 overflow-y-auto max-h-none md:max-h-[calc(100vh-250px)] pr-2 custom-scrollbar">
                     <Section label="Informações de Contato">
                         <InfoItem label="Telefone" value={contact.phoneNumber} icon={MessageSquare} />
                         <InfoItem label="E-mail" value={contact.email || "—"} icon={Mail} />

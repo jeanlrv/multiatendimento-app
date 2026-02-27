@@ -11,6 +11,7 @@ import { Trash2, Send, Phone, User, Clock, CheckCheck, Paperclip, MoreVertical, 
 import { AudioRecorder } from '@/components/chat/AudioRecorder';
 import { toast } from 'sonner';
 import { io, Socket } from 'socket.io-client';
+import EmojiPicker from 'emoji-picker-react';
 import { CreateTicketModal } from '@/components/tickets/create-ticket-modal';
 import TransferTicketModal from '@/components/tickets/transfer-ticket-modal';
 import { CreateScheduleModal } from '@/components/chat/CreateScheduleModal';
@@ -22,7 +23,6 @@ import { MessageBubble } from '@/components/chat/MessageBubble';
 import { BulkActionBar } from '@/components/tickets/BulkActionBar';
 import { ticketsService } from '@/services/tickets';
 import { usersService } from '@/services/users';
-import { SmartViewSidebar } from '@/components/tickets/SmartViewSidebar';
 
 interface Message {
     id: string;
@@ -87,6 +87,7 @@ export default function TicketsPage() {
     const [selectedTicketIds, setSelectedTicketIds] = useState<string[]>([]);
     const [showCopilot, setShowCopilot] = useState(false);
     const [sending, setSending] = useState(false);
+    const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
     // Quick Replies (Macros) & Autocomplete
     const [macros, setMacros] = useState<{ id: string, shortcut: string, content: string }[]>([]);
@@ -118,7 +119,6 @@ export default function TicketsPage() {
     const [showFilters, setShowFilters] = useState(false);
     const [departments, setDepartments] = useState<{ id: string, name: string }[]>([]);
     const [connections, setConnections] = useState<{ id: string, name: string }[]>([]);
-    const [activeSavedFilterId, setActiveSavedFilterId] = useState<string | undefined>(undefined);
 
     // Atalhos de navegação na lista de tickets
     useKeyboardShortcuts([
@@ -330,37 +330,6 @@ export default function TicketsPage() {
         }, 3000);
     };
 
-    const handleSelectSavedFilter = (filters: any) => {
-        // Assume que filters é um objeto compatível com advancedFilters + filter (status)
-        if (filters.status) setFilter(filters.status);
-        if (filters.searchTerm) setSearchTerm(filters.searchTerm);
-
-        setAdvancedFilters(prev => ({
-            ...prev,
-            ...filters.advanced || {}
-        }));
-
-        // Se houver um ID no objeto de filtros que veio do banco (opcional dependendo de como salvamos)
-        // setActiveSavedFilterId(...)
-    };
-
-    const handleSaveCurrentFilter = async (name: string, color: string) => {
-        try {
-            await api.post('/saved-filters', {
-                name,
-                color,
-                filters: {
-                    status: filter,
-                    searchTerm,
-                    advanced: advancedFilters
-                }
-            });
-            toast.success('Filtro salvo com sucesso!');
-        } catch (error) {
-            console.error('Erro ao salvar filtro:', error);
-            toast.error('Erro ao salvar filtro.');
-        }
-    };
 
     useEffect(() => {
         const delayDebounceFn = setTimeout(() => {
@@ -547,19 +516,9 @@ export default function TicketsPage() {
     };
 
     return (
-        <div className="flex h-[calc(100vh-140px)] md:h-[calc(100vh-8rem)] gap-0 md:gap-6 max-w-full relative overflow-hidden">
-            {/* Smart Views Sidebar (Novo) */}
-            <div className={`hidden md:flex flex-shrink-0 transition-all duration-300 ${selectedTicket ? 'hidden lg:flex' : ''}`}>
-                <SmartViewSidebar
-                    onSelectFilter={handleSelectSavedFilter}
-                    activeFilterId={activeSavedFilterId}
-                    currentFilters={{ status: filter, searchTerm, advanced: advancedFilters }}
-                    onSaveCurrent={handleSaveCurrentFilter}
-                />
-            </div>
-
+        <div className="flex flex-col md:flex-row h-[calc(100vh-6rem)] md:h-[calc(100vh-5rem)] gap-4 md:gap-6 max-w-full relative overflow-hidden">
             {/* Lista de Tickets - Esquerda */}
-            <div className={`w-full md:w-[420px] flex-shrink-0 flex flex-col liquid-glass md:rounded-[2.5rem] overflow-hidden border border-slate-200 dark:border-white/10 shadow-2xl relative aurora transition-all duration-300 ${selectedTicket ? 'hidden md:flex' : 'flex'}`}>
+            <div className={`w-full md:w-[420px] h-full flex-shrink-0 flex flex-col liquid-glass md:rounded-[2.5rem] overflow-hidden border border-slate-200 dark:border-white/10 shadow-2xl relative aurora transition-all duration-300 ${selectedTicket ? 'hidden md:flex' : 'flex'}`}>
                 {/* Header da Lista */}
                 <div className="p-8 border-b border-slate-200 dark:border-white/5 relative z-10">
                     <div className="flex items-center justify-between mb-6">
@@ -608,6 +567,35 @@ export default function TicketsPage() {
                         </button>
                     </div>
 
+                    {/* Filtros Rápidos de Setor */}
+                    {(user?.role === 'ADMIN' || user?.role === 'SUPERVISOR' || (user?.departments && user.departments.length > 1)) && (
+                        <div className="mb-4 space-y-2">
+                            <p className="text-[10px] font-bold uppercase tracking-widest opacity-60">Filtrar Setores</p>
+                            <div className="flex flex-wrap gap-2">
+                                {/* Se for Admin, mostra TODOS os departamentos carregados. Senão, apenas os do usuário. */}
+                                {(user?.role === 'ADMIN' || user?.role === 'SUPERVISOR' ? departments : user?.departments || []).map(dep => (
+                                    <button
+                                        key={dep.id}
+                                        onClick={() => {
+                                            setAdvancedFilters(prev => ({
+                                                ...prev,
+                                                departments: prev.departments.includes(dep.id)
+                                                    ? prev.departments.filter(id => id !== dep.id)
+                                                    : [...prev.departments, dep.id]
+                                            }));
+                                        }}
+                                        className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest border transition-all ${advancedFilters.departments.includes(dep.id)
+                                            ? 'bg-primary/20 border-primary/30 text-primary shadow-[0_0_15px_rgba(56,189,248,0.2)]'
+                                            : 'bg-white/50 border-slate-200 dark:bg-white/5 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:border-primary/20 hover:text-primary dark:hover:border-white/20'
+                                            }`}
+                                    >
+                                        {dep.name}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
                     {/* Filtros Avançados Expansíveis */}
                     <AnimatePresence>
                         {showFilters && (
@@ -639,34 +627,8 @@ export default function TicketsPage() {
                                             <option key={c.id} value={c.id}>{c.name}</option>
                                         ))}
                                     </select>
-                                    {(user?.role === 'ADMIN' || user?.role === 'SUPERVISOR' || (user?.departments && user.departments.length > 1)) && (
-                                        <div className="col-span-2 space-y-2 mt-2">
-                                            <p className="text-[10px] font-bold uppercase tracking-widest opacity-60">Filtrar Setores</p>
-                                            <div className="flex flex-wrap gap-2">
-                                                {/* Se for Admin, mostra TODOS os departamentos carregados. Senão, apenas os do usuário. */}
-                                                {(user?.role === 'ADMIN' || user?.role === 'SUPERVISOR' ? departments : user?.departments || []).map(dep => (
-                                                    <button
-                                                        key={dep.id}
-                                                        onClick={() => {
-                                                            setAdvancedFilters(prev => ({
-                                                                ...prev,
-                                                                departments: prev.departments.includes(dep.id)
-                                                                    ? prev.departments.filter(id => id !== dep.id)
-                                                                    : [...prev.departments, dep.id]
-                                                            }));
-                                                        }}
-                                                        className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest border transition-all ${advancedFilters.departments.includes(dep.id)
-                                                            ? 'bg-primary/20 border-primary/30 text-primary'
-                                                            : 'bg-white/5 border-white/10 text-slate-400 hover:border-white/20'
-                                                            }`}
-                                                    >
-                                                        {dep.name}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
                                 </div>
+
                                 <div className="flex items-center justify-between">
                                     <button
                                         onClick={resetFilters}
@@ -855,7 +817,7 @@ export default function TicketsPage() {
                 ) : (
                     <>
                         {/* Header da Conversa Estilo ZIP */}
-                        <div className="p-4 md:p-8 border-b border-white/40 dark:border-white/5 flex items-center justify-between bg-white/40 dark:bg-black/20 backdrop-blur-xl">
+                        <div className="p-4 md:p-5 border-b border-white/40 dark:border-white/5 flex items-center justify-between bg-white/40 dark:bg-black/20 backdrop-blur-xl">
                             <div className="flex items-center gap-2 md:gap-5">
                                 <button
                                     onClick={() => setSelectedTicket(null)}
@@ -1007,7 +969,7 @@ export default function TicketsPage() {
                         <div className="flex-1 flex overflow-hidden">
                             {/* Mensagens (agora dentro de uma div flex) */}
                             <div className="flex-1 flex flex-col overflow-hidden relative">
-                                <div className="flex-1 overflow-y-auto custom-scrollbar p-8 space-y-4">
+                                <div className="flex-1 overflow-y-auto custom-scrollbar p-4 md:p-6 space-y-4">
                                     {loadingMessages ? (
                                         <div className="flex items-center justify-center h-full">
                                             <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600"></div>
@@ -1119,7 +1081,7 @@ export default function TicketsPage() {
                                         </div>
                                     </div>
                                 ) : (
-                                    <div className="p-8 bg-white/60 dark:bg-black/40 border-t border-white/40 dark:border-white/5 backdrop-blur-2xl">
+                                    <div className="p-4 bg-white/60 dark:bg-black/40 border-t border-white/40 dark:border-white/5 backdrop-blur-2xl">
                                         <div className="flex items-end gap-5 max-w-6xl mx-auto relative z-10">
                                             <div className="flex-1 glass-heavy rounded-[2rem] p-3 flex items-center gap-3 border border-white/80 dark:border-white/10 shadow-2xl focus-within:ring-4 focus-within:ring-primary/20 transition-all group/input">
                                                 <button className="p-4 text-slate-400 hover:text-primary transition-all hover:scale-110">
@@ -1319,9 +1281,36 @@ export default function TicketsPage() {
                                                     >
                                                         <Mic className="h-6 w-6" />
                                                     </button>
-                                                    <button className="p-4 text-slate-400 hover:text-primary transition-all hover:scale-110">
-                                                        <Smile className="h-6 w-6" />
-                                                    </button>
+                                                    <div className="relative flex items-center">
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                setShowEmojiPicker(!showEmojiPicker);
+                                                            }}
+                                                            className={`p-4 transition-all hover:scale-110 ${showEmojiPicker ? 'text-primary' : 'text-slate-400 hover:text-primary'}`}
+                                                        >
+                                                            <Smile className="h-6 w-6" />
+                                                        </button>
+
+                                                        <AnimatePresence>
+                                                            {showEmojiPicker && (
+                                                                <motion.div
+                                                                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                                    className="absolute bottom-full right-0 mb-4 z-50 shadow-2xl rounded-[2rem] overflow-hidden border border-slate-200 dark:border-white/10"
+                                                                >
+                                                                    <EmojiPicker
+                                                                        onEmojiClick={(emojiData) => {
+                                                                            setNewMessage(prev => prev + emojiData.emoji);
+                                                                        }}
+                                                                        theme={'auto' as any}
+                                                                    />
+                                                                </motion.div>
+                                                            )}
+                                                        </AnimatePresence>
+                                                    </div>
                                                 </div>
                                             </div>
                                             <button

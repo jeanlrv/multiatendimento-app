@@ -109,7 +109,7 @@ export default function AIAgentsPage() {
     };
 
     return (
-        <div className="space-y-8 relative liquid-glass aurora min-h-[calc(100vh-6rem)] pb-12">
+        <div className="space-y-8 relative liquid-glass aurora min-h-0 md:min-h-[calc(100vh-6rem)] pb-12">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10 px-4 pt-4">
                 <div>
                     <h2 className="text-4xl font-black text-slate-900 dark:text-white tracking-tighter italic flex items-center gap-4">

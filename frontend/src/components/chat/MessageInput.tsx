@@ -1,5 +1,7 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { Paperclip, Smile, Send, Mic } from 'lucide-react';
+import EmojiPicker from 'emoji-picker-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface MessageInputProps {
     newMessage: string;
@@ -18,6 +20,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
 }) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+    const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
     // Auto-resize da textarea conforme o conteúdo cresce
     useEffect(() => {
@@ -53,9 +56,8 @@ export const MessageInput: React.FC<MessageInputProps> = ({
                     onClick={() => fileInputRef.current?.click()}
                     disabled={uploading}
                     title="Anexar arquivo"
-                    className={`p-3 text-gray-400 hover:text-blue-600 transition-all hover:scale-110 shrink-0 mb-1 ${
-                        uploading ? 'animate-pulse' : ''
-                    }`}
+                    className={`p-3 text-gray-400 hover:text-blue-600 transition-all hover:scale-110 shrink-0 mb-1 ${uploading ? 'animate-pulse' : ''
+                        }`}
                 >
                     <Paperclip className="h-5 w-5" />
                 </button>
@@ -71,15 +73,35 @@ export const MessageInput: React.FC<MessageInputProps> = ({
                     rows={1}
                 />
 
-                {/* Emoji (placeholder visual) */}
-                <button
-                    type="button"
-                    title="Emoji (em breve)"
-                    className="p-3 text-gray-400 hover:text-blue-600 transition-all hover:scale-110 shrink-0 mb-1 opacity-50 cursor-not-allowed"
-                    disabled
-                >
-                    <Smile className="h-5 w-5" />
-                </button>
+                {/* Emoji */}
+                <div className="relative flex items-center shrink-0 mb-1">
+                    <button
+                        type="button"
+                        onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                        title="Emoji"
+                        className={`p-3 transition-all hover:scale-110 ${showEmojiPicker ? 'text-blue-600' : 'text-gray-400 hover:text-blue-600'}`}
+                    >
+                        <Smile className="h-5 w-5" />
+                    </button>
+
+                    <AnimatePresence>
+                        {showEmojiPicker && (
+                            <motion.div
+                                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                className="absolute bottom-full right-0 mb-4 z-[100] shadow-2xl rounded-[2rem] overflow-hidden border border-slate-200 dark:border-white/10"
+                            >
+                                <EmojiPicker
+                                    onEmojiClick={(emojiData) => {
+                                        setNewMessage(newMessage + emojiData.emoji);
+                                    }}
+                                    theme={'auto' as any}
+                                />
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                </div>
 
                 {/* Botão enviar / microfone */}
                 {isEmpty ? (

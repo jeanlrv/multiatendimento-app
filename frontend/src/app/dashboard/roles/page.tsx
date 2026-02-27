@@ -94,7 +94,7 @@ export default function RolesPage() {
     const openEdit = (role: Role) => { setEditingRole(role); setShowDrawer(true); };
 
     return (
-        <div className="space-y-10 max-w-7xl mx-auto pb-12 relative">
+        <div className="space-y-10 max-w-7xl mx-auto pb-12 relative liquid-glass aurora min-h-0 md:min-h-[calc(100vh-8rem)]">
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 px-4">
                 <div>

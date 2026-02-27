@@ -161,7 +161,7 @@ export default function ConnectionsPage() {
 
     return (
         <>
-            <div className="space-y-10 max-w-7xl mx-auto relative liquid-glass aurora pb-12">
+            <div className="space-y-10 max-w-7xl mx-auto relative liquid-glass aurora min-h-0 md:min-h-[calc(100vh-8rem)] pb-12">
                 {/* Header */}
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-8 relative z-10 px-4">
                     <div>
