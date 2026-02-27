@@ -225,12 +225,12 @@ export default function DashboardPage() {
     }
 
     return (
-        <div className="space-y-8 max-w-7xl mx-auto">
+        <div className="liquid-glass aurora min-h-0 md:min-h-[calc(100vh-8rem)] p-4 md:p-8 rounded-[2rem] md:rounded-[3rem] shadow-2xl space-y-8 max-w-7xl mx-auto">
             {/* Hero Section Redesenhada */}
             <motion.div
                 initial={{ opacity: 0, scale: 0.98 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="liquid-glass aurora bg-white/40 dark:bg-[#050505]/40 p-6 md:p-10 rounded-[2rem] md:rounded-[2.5rem] border border-white/80 dark:border-white/10 shadow-2xl relative overflow-hidden group"
+                className="bg-white/40 dark:bg-[#050505]/40 p-6 md:p-10 rounded-[2rem] md:rounded-[2.5rem] border border-white/80 dark:border-white/10 shadow-2xl relative overflow-hidden group"
             >
                 <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                     <div>

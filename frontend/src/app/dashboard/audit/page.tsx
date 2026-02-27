@@ -74,7 +74,7 @@ export default function AuditPage() {
     };
 
     return (
-        <div className="space-y-8 max-w-7xl mx-auto pb-10">
+        <div className="liquid-glass aurora min-h-0 md:min-h-[calc(100vh-8rem)] p-4 md:p-8 rounded-[2rem] md:rounded-[3rem] shadow-2xl space-y-8 max-w-7xl mx-auto pb-10">
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div>

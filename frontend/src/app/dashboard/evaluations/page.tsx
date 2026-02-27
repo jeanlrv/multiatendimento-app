@@ -69,7 +69,7 @@ export default function EvaluationsPage() {
     };
 
     return (
-        <div className="p-8 space-y-8">
+        <div className="liquid-glass aurora min-h-0 md:min-h-[calc(100vh-8rem)] p-4 md:p-8 rounded-[2rem] md:rounded-[3rem] shadow-2xl space-y-8">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
                     <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Qualidade & Satisfação</h1>

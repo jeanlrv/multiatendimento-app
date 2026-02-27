@@ -198,54 +198,56 @@ export default function ChatPage() {
     }
 
     return (
-        <div className="flex flex-col h-[calc(100vh-140px)] glass-card rounded-[3rem] shadow-2xl overflow-hidden relative group">
-            <div className="absolute inset-0 bg-blue-500/5 dark:bg-blue-500/10 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none blur-3xl -z-10" />
+        <div className="liquid-glass aurora min-h-0 md:min-h-[calc(100vh-8rem)] p-2 md:p-8 rounded-[2rem] md:rounded-[3rem] shadow-2xl">
+            <div className="flex flex-col h-[calc(100vh-6rem)] md:h-[calc(100vh-8rem)] glass-card rounded-[2rem] md:rounded-[3rem] shadow-2xl overflow-hidden relative group">
+                <div className="absolute inset-0 bg-blue-500/5 dark:bg-blue-500/10 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none blur-3xl -z-10" />
 
-            <ChatHeader ticket={ticket} onTransfer={() => setShowTransferModal(true)} />
+                <ChatHeader ticket={ticket} onTransfer={() => setShowTransferModal(true)} />
 
-            <MessageList messages={messages} messagesEndRef={messagesEndRef} />
+                <MessageList messages={messages} messagesEndRef={messagesEndRef} />
 
-            {/* Indicador de digitação */}
-            <AnimatePresence>
-                {isTyping && (
-                    <motion.div
-                        initial={{ opacity: 0, scale: 0.8, x: -10 }}
-                        animate={{ opacity: 1, scale: 1, x: 0 }}
-                        exit={{ opacity: 0, scale: 0.8, x: -10 }}
-                        className="px-8 pb-3 flex items-center gap-2"
-                    >
-                        <div className="flex gap-1">
-                            {[0, 0.2, 0.4].map((delay) => (
-                                <motion.span
-                                    key={delay}
-                                    animate={{ opacity: [0.4, 1, 0.4] }}
-                                    transition={{ repeat: Infinity, duration: 1.5, delay }}
-                                    className="h-1.5 w-1.5 bg-blue-500 rounded-full"
-                                />
-                            ))}
-                        </div>
-                        <span className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest leading-none">
-                            {isTyping.userName} está digitando...
-                        </span>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+                {/* Indicador de digitação */}
+                <AnimatePresence>
+                    {isTyping && (
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.8, x: -10 }}
+                            animate={{ opacity: 1, scale: 1, x: 0 }}
+                            exit={{ opacity: 0, scale: 0.8, x: -10 }}
+                            className="px-8 pb-3 flex items-center gap-2"
+                        >
+                            <div className="flex gap-1">
+                                {[0, 0.2, 0.4].map((delay) => (
+                                    <motion.span
+                                        key={delay}
+                                        animate={{ opacity: [0.4, 1, 0.4] }}
+                                        transition={{ repeat: Infinity, duration: 1.5, delay }}
+                                        className="h-1.5 w-1.5 bg-blue-500 rounded-full"
+                                    />
+                                ))}
+                            </div>
+                            <span className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest leading-none">
+                                {isTyping.userName} está digitando...
+                            </span>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
 
 
-            <MessageInput
-                newMessage={newMessage}
-                setNewMessage={handleMessageChange}
-                onSendMessage={handleSendMessage}
-                onFileUpload={handleFileUpload}
-                uploading={uploading}
-            />
+                <MessageInput
+                    newMessage={newMessage}
+                    setNewMessage={handleMessageChange}
+                    onSendMessage={handleSendMessage}
+                    onFileUpload={handleFileUpload}
+                    uploading={uploading}
+                />
 
-            <TransferTicketModal
-                isOpen={showTransferModal}
-                onClose={() => setShowTransferModal(false)}
-                ticketId={ticketId as string}
-                onSuccess={handleTransferSuccess}
-            />
+                <TransferTicketModal
+                    isOpen={showTransferModal}
+                    onClose={() => setShowTransferModal(false)}
+                    ticketId={ticketId as string}
+                    onSuccess={handleTransferSuccess}
+                />
+            </div>
         </div>
     );
 }

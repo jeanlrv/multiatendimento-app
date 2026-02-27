@@ -191,7 +191,7 @@ export default function SchedulingPage() {
     const closeModal = () => { setShowModal(false); setEditingId(null); setForm(initialForm); };
 
     return (
-        <div className="space-y-6">
+        <div className="liquid-glass aurora min-h-0 md:min-h-[calc(100vh-8rem)] p-4 md:p-8 rounded-[2rem] md:rounded-[3rem] shadow-2xl space-y-6">
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div>

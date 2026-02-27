@@ -89,7 +89,7 @@ export default function ProfilePage() {
     if (!user) return null;
 
     return (
-        <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+        <div className="liquid-glass aurora min-h-0 md:min-h-[calc(100vh-8rem)] p-4 md:p-8 rounded-[2rem] md:rounded-[3rem] shadow-2xl max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
             {/* Header Area */}
             <div>
                 <h2 className="text-3xl font-black text-gray-900 dark:text-white tracking-tight flex items-center gap-3">
