@@ -90,16 +90,22 @@ echo "✅ Banco de dados disponível"
 # ============================================
 echo "📦 Executando migrações do Prisma..."
 
-# Resolver migrações marcadas como falha que impedem o deploy
-echo "🔧 Curando estado das migrações..."
+# Resolver migrações marcadas como falha ou não sincronizadas devido ao uso passado de "db push"
+echo "🔧 Curando estado das migrações para deploy limpo..."
+npx prisma@6 migrate resolve --applied 20260222000001_sync_schema_roles_collaboration 2>&1 || true
+npx prisma@6 migrate resolve --applied 20260222000002_users_roleid_not_null 2>&1 || true
+npx prisma@6 migrate resolve --applied 20260222000003_indexes_columns_fixes 2>&1 || true
 npx prisma@6 migrate resolve --applied 20260225000001_notifications 2>&1 || true
+npx prisma@6 migrate resolve --applied 20260226000004_fallback_schema_sync 2>&1 || true
 
+echo "🚀 Iniciando migrate deploy..."
 if npx prisma@6 migrate deploy 2>&1; then
   echo "✅ Migrações aplicadas com sucesso"
 else
-  echo "⚠️  migrate deploy falhou, tentando db push como fallback..."
-  npx prisma@6 db push --accept-data-loss 2>&1 || echo "⚠️  db push também falhou, continuando..."
+  echo "❌ migrate deploy falhou! Verifique os logs e corrija as migrações localmente."
+  exit 1
 fi
+
 
 # ============================================
 # SEED (APENAS SE CONFIGURADO E BANCO VAZIO)
