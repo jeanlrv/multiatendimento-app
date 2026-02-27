@@ -27,41 +27,29 @@ Error: ERROR: type "vector" does not exist
 **Causa:** O schema Prisma usa o tipo `vector(1536)` para embeddings na tabela `document_chunks`, mas a extensão `pgvector` não estava habilitada no PostgreSQL do Railway.
 
 **Solução:**
-1. Criada nova migração para habilitar a extensão `pgvector` no PostgreSQL
-2. Mantido apenas `postgresqlExtensions` no previewFeatures (o previewFeature `pgvector` não é suportado na versão do Prisma 6.19.2)
-3. Renomeada a migração para ter timestamp anterior (`20260219000000`) para garantir que seja aplicada antes das outras migrações
+1. Inicialmente tentamos usar migrações para criação manual.
+2. Contudo, devido a restrições de permissões nos Postgres convencionais da Railway para criar dependências vetoriais, optamos por contornar.
+3. Substituímos o tipo `Unsupported("vector")` do Prisma por `Json?`.
+4. Criamos uma "migrations bridge" `20260226000004_fallback_schema_sync` para equalizar o banco.
 
 **Arquivos Criados/Modificados:**
-- `backend/prisma/migrations/20260219000000_enable_pgvector_extension/migration.sql` (novo)
 - `backend/prisma/schema.prisma` (atualizado)
-- `backend/prisma/migrations/migration_lock.toml` (atualizado)
 
-## PreviewFeatures Correto
-
-O previewFeature `pgvector` não é conhecido na versão do Prisma 6.19.2. Use apenas:
-
-```prisma
-generator client {
-  provider        = "prisma-client-js"
-  binaryTargets   = ["native", "linux-musl-openssl-3.0.x"]
-  previewFeatures = ["postgresqlExtensions"]
-}
-```
-
-A extensão `pgvector` é habilitada via SQL na migração, não via previewFeature.
+## Fallback de Migração
+A extensão `pgvector` foi omitida, use apenas objetos nativos do PostgreSQL/Prisma para armazenamento vetorial ou considere bancos alternativos (como Supabase) caso exija operações pesadas de vizinhança na IA.
 
 ## Ordem das Migrações
 
-A migração `pgvector` deve ser a primeira para garantir que a extensão esteja disponível antes de qualquer tabela que use o tipo `vector`:
+A migração `pgvector` foi removida em favor de um tipo `Json` nativo no Prisma, dado que o Railway (versões padrão) não suporta ativar diretamente a extensão pelo sistema de usuário. Foi criada uma migração de ponte (20260226000004_fallback_schema_sync) para sincronizar o banco:
 
 ```
-20260219000000_enable_pgvector_extension    ← PRIMEIRO (habilita pgvector)
 20260220142556_init_enterprise
 20260221000001_add_nodes_edges_to_workflow_version
 20260222000001_sync_schema_roles_collaboration
 20260222000002_users_roleid_not_null
 20260222000003_indexes_columns_fixes
 20260225000001_notifications
+20260226000004_fallback_schema_sync         ← ÚLTIMA (Traz todas as tabelas de inteligência artificial e chatbots que não entraram nas migrações passadas)
 ```
 
 ## Migrações Necessárias

@@ -489,8 +489,8 @@ model DocumentChunk {
   pageNumber Int?
   metadata   Json?
 
-  // Embeddings para RAG usando extesão pgvector
-  embedding Unsupported("vector(1536)")?
+  // Embeddings temporariamente armazenados como Json devido a limitações do pgvector no Railway
+  embedding Json?
 
   document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
 
