@@ -290,9 +290,9 @@ export default function CollabPage() {
                             <div className="flex items-center gap-3 bg-gray-50 dark:bg-white/5 rounded-2xl p-2 pr-2">
                                 <input
                                     value={input}
-                                    onChange={e => { setInput(e.target.value); emitTyping(activeChatId, e.target.value.length > 0); }}
+                                    onChange={e => { setInput(e.target.value); activeChatId && emitTyping(activeChatId, e.target.value.length > 0); }}
                                     onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
-                                    onBlur={() => emitTyping(activeChatId, false)}
+                                    onBlur={() => activeChatId && emitTyping(activeChatId, false)}
                                     placeholder="Digite uma mensagem..."
                                     className="flex-1 bg-transparent border-none outline-none text-sm py-1 px-2"
                                 />
