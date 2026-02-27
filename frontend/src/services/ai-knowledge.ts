@@ -16,7 +16,7 @@ export interface AIDocument {
     id: string;
     knowledgeBaseId: string;
     title: string;
-    sourceType: 'TEXT' | 'PDF' | 'URL' | 'DOCX';
+    sourceType: string;
     contentUrl?: string;
     rawContent?: string;
     status: 'PENDING' | 'PROCESSING' | 'READY' | 'ERROR';

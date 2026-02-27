@@ -139,9 +139,13 @@ export class AIService {
             // Se o agente tiver uma base de conhecimento vinculada, buscamos contexto (RAG)
             if (agent.knowledgeBaseId) {
                 const chunks = await this.vectorStoreService.searchSimilarity(
+                    this.prisma,
                     companyId,
                     message,
-                    agent.knowledgeBaseId
+                    agent.knowledgeBaseId,
+                    5,
+                    agent.embeddingProvider || 'openai',
+                    agent.embeddingModel,
                 );
                 context = chunks.map(c => c.content).join('\n---\n');
             }

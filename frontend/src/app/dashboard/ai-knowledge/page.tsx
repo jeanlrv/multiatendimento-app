@@ -3,7 +3,132 @@
 import { useState, useEffect, useRef } from 'react';
 import { AIKnowledgeService, KnowledgeBase, AIDocument } from '@/services/ai-knowledge';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Database, Plus, Pencil, Trash2, FileText, Globe, FileUp, Loader2, CheckCircle, XCircle, Search, Activity, ChevronRight, X, Save, Zap, FileCode, UploadCloud, RefreshCw } from 'lucide-react';
+import { Database, Plus, Trash2, FileText, Globe, FileUp, Loader2, CheckCircle, Activity, ChevronRight, Save, Zap, FileCode, UploadCloud, RefreshCw, Music, Youtube, Github, FileSpreadsheet, Presentation, BookOpen, Braces, AlignLeft } from 'lucide-react';
+
+// Mapeamento de sourceType → ícone e cor
+const SOURCE_TYPE_META: Record<string, { icon: React.ElementType; color: string; label: string }> = {
+    TEXT:     { icon: AlignLeft,       color: 'bg-slate-100 text-slate-600',   label: 'Texto' },
+    TXT:      { icon: AlignLeft,       color: 'bg-slate-100 text-slate-600',   label: 'TXT' },
+    MD:       { icon: FileText,        color: 'bg-purple-100 text-purple-600', label: 'Markdown' },
+    HTML:     { icon: Globe,           color: 'bg-orange-100 text-orange-600', label: 'HTML' },
+    CSV:      { icon: FileSpreadsheet, color: 'bg-green-100 text-green-600',   label: 'CSV' },
+    JSON:     { icon: Braces,          color: 'bg-yellow-100 text-yellow-600', label: 'JSON' },
+    YAML:     { icon: Braces,          color: 'bg-yellow-100 text-yellow-600', label: 'YAML' },
+    XML:      { icon: Braces,          color: 'bg-yellow-100 text-yellow-600', label: 'XML' },
+    RTF:      { icon: AlignLeft,       color: 'bg-slate-100 text-slate-600',   label: 'RTF' },
+    PDF:      { icon: FileUp,          color: 'bg-rose-100 text-rose-600',     label: 'PDF' },
+    DOCX:     { icon: FileText,        color: 'bg-blue-100 text-blue-600',     label: 'Word' },
+    XLSX:     { icon: FileSpreadsheet, color: 'bg-green-100 text-green-600',   label: 'Excel' },
+    XLS:      { icon: FileSpreadsheet, color: 'bg-green-100 text-green-600',   label: 'Excel' },
+    PPTX:     { icon: Presentation,    color: 'bg-orange-100 text-orange-600', label: 'PowerPoint' },
+    EPUB:     { icon: BookOpen,        color: 'bg-violet-100 text-violet-600', label: 'EPUB' },
+    CODE:     { icon: FileCode,        color: 'bg-cyan-100 text-cyan-600',     label: 'Código' },
+    AUDIO:    { icon: Music,           color: 'bg-pink-100 text-pink-600',     label: 'Áudio' },
+    URL:      { icon: Globe,           color: 'bg-sky-100 text-sky-600',       label: 'Website' },
+    YOUTUBE:  { icon: Youtube,         color: 'bg-red-100 text-red-600',       label: 'YouTube' },
+    GITHUB:   { icon: Github,          color: 'bg-slate-100 text-slate-700',   label: 'GitHub' },
+};
+
+function DocTypeIcon({ sourceType, size = 20 }: { sourceType: string; size?: number }) {
+    const meta = SOURCE_TYPE_META[sourceType?.toUpperCase()] || SOURCE_TYPE_META.TEXT;
+    const Icon = meta.icon;
+    return <div className={`p-3 rounded-xl ${meta.color}`}><Icon size={size} /></div>;
+}
+
+// Grupos para o seletor
+const SOURCE_TYPE_GROUPS = [
+    {
+        label: 'Texto',
+        types: [
+            { value: 'TEXT',  label: 'Texto Livre' },
+            { value: 'TXT',   label: 'Arquivo TXT' },
+            { value: 'MD',    label: 'Markdown (.md)' },
+            { value: 'RTF',   label: 'RTF' },
+        ],
+    },
+    {
+        label: 'Office / Documentos',
+        types: [
+            { value: 'PDF',  label: 'PDF' },
+            { value: 'DOCX', label: 'Word (.docx)' },
+            { value: 'XLSX', label: 'Excel (.xlsx / .xls)' },
+            { value: 'PPTX', label: 'PowerPoint (.pptx)' },
+            { value: 'EPUB', label: 'EPUB (livro digital)' },
+        ],
+    },
+    {
+        label: 'Dados',
+        types: [
+            { value: 'CSV',  label: 'CSV' },
+            { value: 'JSON', label: 'JSON' },
+            { value: 'YAML', label: 'YAML / YML' },
+            { value: 'XML',  label: 'XML' },
+        ],
+    },
+    {
+        label: 'Código-Fonte',
+        types: [
+            { value: 'CODE', label: 'Código (.js, .ts, .py, .java, .go…)' },
+        ],
+    },
+    {
+        label: 'Mídia (transcrição automática)',
+        types: [
+            { value: 'AUDIO', label: 'Áudio (.mp3, .wav, .mp4, .ogg…) — Whisper' },
+        ],
+    },
+    {
+        label: 'Web',
+        types: [
+            { value: 'URL',     label: 'Website / URL' },
+            { value: 'YOUTUBE', label: 'YouTube (transcrição automática)' },
+            { value: 'GITHUB',  label: 'Repositório GitHub / GitLab' },
+            { value: 'HTML',    label: 'Arquivo HTML' },
+        ],
+    },
+];
+
+// Tipos que requerem upload de arquivo
+const FILE_UPLOAD_TYPES = new Set(['PDF', 'DOCX', 'XLSX', 'XLS', 'PPTX', 'EPUB', 'TXT', 'MD', 'RTF', 'CSV', 'JSON', 'YAML', 'XML', 'CODE', 'HTML', 'AUDIO']);
+
+// Tipos que precisam de URL
+const URL_INPUT_TYPES = new Set(['URL', 'YOUTUBE', 'GITHUB']);
+
+// Mapa de tipo → accept attribute
+const ACCEPT_BY_TYPE: Record<string, string> = {
+    PDF:   '.pdf',
+    DOCX:  '.doc,.docx',
+    XLSX:  '.xls,.xlsx',
+    PPTX:  '.ppt,.pptx',
+    EPUB:  '.epub',
+    TXT:   '.txt',
+    MD:    '.md,.mdx,.markdown',
+    RTF:   '.rtf',
+    CSV:   '.csv',
+    JSON:  '.json',
+    YAML:  '.yaml,.yml',
+    XML:   '.xml',
+    CODE:  '.js,.ts,.jsx,.tsx,.py,.java,.go,.rb,.php,.cs,.cpp,.c,.rs,.swift,.kt,.sh,.sql',
+    HTML:  '.html,.htm',
+    AUDIO: '.mp3,.wav,.mp4,.ogg,.webm,.m4a',
+};
+
+function autoDetectSourceType(filename: string): string {
+    const ext = filename.split('.').pop()?.toLowerCase() || '';
+    const map: Record<string, string> = {
+        pdf: 'PDF', doc: 'DOCX', docx: 'DOCX',
+        xls: 'XLSX', xlsx: 'XLSX', ppt: 'PPTX', pptx: 'PPTX', epub: 'EPUB',
+        txt: 'TXT', md: 'MD', mdx: 'MD', markdown: 'MD', rtf: 'RTF',
+        csv: 'CSV', json: 'JSON', yaml: 'YAML', yml: 'YAML', xml: 'XML',
+        html: 'HTML', htm: 'HTML',
+        js: 'CODE', ts: 'CODE', jsx: 'CODE', tsx: 'CODE', py: 'CODE',
+        java: 'CODE', go: 'CODE', rb: 'CODE', php: 'CODE', cs: 'CODE',
+        cpp: 'CODE', c: 'CODE', rs: 'CODE', swift: 'CODE', kt: 'CODE',
+        sh: 'CODE', sql: 'CODE',
+        mp3: 'AUDIO', wav: 'AUDIO', mp4: 'AUDIO', ogg: 'AUDIO', webm: 'AUDIO', m4a: 'AUDIO',
+    };
+    return map[ext] || 'TEXT';
+}
 
 export default function AIKnowledgePage() {
     const [bases, setBases] = useState<KnowledgeBase[]>([]);
@@ -15,7 +140,7 @@ export default function AIKnowledgePage() {
     const [documents, setDocuments] = useState<AIDocument[]>([]);
     const [loadingDocs, setLoadingDocs] = useState(false);
     const [isDocModalOpen, setIsDocModalOpen] = useState(false);
-    const [newDoc, setNewDoc] = useState<{ title: string; sourceType: 'TEXT' | 'PDF' | 'URL' | 'DOCX'; rawContent?: string; contentUrl?: string; file?: File | null }>({
+    const [newDoc, setNewDoc] = useState<{ title: string; sourceType: string; rawContent?: string; contentUrl?: string; file?: File | null }>({
         title: '',
         sourceType: 'TEXT',
         rawContent: '',
@@ -128,16 +253,14 @@ export default function AIKnowledgePage() {
         try {
             setSubmitting(true);
 
-            if ((newDoc.sourceType === 'PDF' || newDoc.sourceType === 'DOCX') && newDoc.file) {
-                // Upload de arquivo real
+            if (FILE_UPLOAD_TYPES.has(newDoc.sourceType) && newDoc.file) {
                 await AIKnowledgeService.uploadDocument(selectedBase.id, newDoc.file);
             } else {
-                // Adição via Link/Texto
                 await AIKnowledgeService.addDocument(selectedBase.id, {
                     title: newDoc.title,
                     sourceType: newDoc.sourceType,
                     rawContent: newDoc.rawContent,
-                    contentUrl: newDoc.contentUrl
+                    contentUrl: newDoc.contentUrl,
                 });
             }
 
@@ -164,14 +287,12 @@ export default function AIKnowledgePage() {
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
             const file = e.target.files[0];
-            const isDocx = file.name.endsWith('.docx');
-            const isPdf = file.name.endsWith('.pdf');
-
+            const detected = autoDetectSourceType(file.name);
             setNewDoc({
                 ...newDoc,
                 file,
                 title: newDoc.title || file.name,
-                sourceType: isDocx ? 'DOCX' : isPdf ? 'PDF' : newDoc.sourceType
+                sourceType: detected,
             });
         }
     };
@@ -286,9 +407,7 @@ export default function AIKnowledgePage() {
                                         {documents.map(doc => (
                                             <div key={doc.id} className="p-5 bg-white dark:bg-white/5 rounded-3xl border border-slate-100 dark:border-white/10 flex items-center justify-between hover:shadow-lg transition-all group">
                                                 <div className="flex items-center gap-4">
-                                                    <div className={`p-3 rounded-xl ${doc.status === 'READY' ? 'bg-emerald-100 text-emerald-600' : doc.status === 'ERROR' ? 'bg-rose-100 text-rose-600' : 'bg-amber-100 text-amber-600'}`}>
-                                                        {doc.sourceType === 'PDF' ? <FileUp size={20} /> : doc.sourceType === 'DOCX' ? <FileCode size={20} /> : doc.sourceType === 'URL' ? <Globe size={20} /> : <FileText size={20} />}
-                                                    </div>
+                                                    <DocTypeIcon sourceType={doc.sourceType} />
                                                     <div>
                                                         <p className="text-sm font-black uppercase tracking-tight text-slate-800 dark:text-white line-clamp-1">{doc.title}</p>
                                                         <div className="flex items-center gap-2 mt-1">
@@ -371,52 +490,63 @@ export default function AIKnowledgePage() {
                                         <input required value={newDoc.title} onChange={e => setNewDoc({ ...newDoc, title: e.target.value })} placeholder="Nome do documento..." className="w-full p-4 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 font-bold text-sm" />
                                     </div>
                                     <div className="space-y-2">
-                                        <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Fonte</label>
-                                        <select value={newDoc.sourceType} onChange={e => setNewDoc({ ...newDoc, sourceType: e.target.value as any, file: null })} className="w-full p-4 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 font-bold text-sm">
-                                            <option value="TEXT">Texto Livre</option>
-                                            <option value="URL">Website/URL</option>
-                                            <option value="PDF">Arquivo PDF (Upload Local)</option>
-                                            <option value="DOCX">Arquivo Word (.docx)</option>
+                                        <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Tipo de Fonte</label>
+                                        <select value={newDoc.sourceType} onChange={e => setNewDoc({ ...newDoc, sourceType: e.target.value, file: null })} className="w-full p-4 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 font-bold text-sm">
+                                            {SOURCE_TYPE_GROUPS.map(group => (
+                                                <optgroup key={group.label} label={group.label}>
+                                                    {group.types.map(t => (
+                                                        <option key={t.value} value={t.value}>{t.label}</option>
+                                                    ))}
+                                                </optgroup>
+                                            ))}
                                         </select>
                                     </div>
                                 </div>
 
                                 {newDoc.sourceType === 'TEXT' ? (
                                     <div className="space-y-2">
-                                        <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Conteúdo Bruto</label>
+                                        <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Conteúdo</label>
                                         <textarea required value={newDoc.rawContent} onChange={e => setNewDoc({ ...newDoc, rawContent: e.target.value })} className="w-full p-6 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 font-medium text-sm h-48 resize-none italic" placeholder="Cole aqui o conhecimento que a IA deve dominar..." />
                                     </div>
-                                ) : newDoc.sourceType === 'URL' ? (
+                                ) : URL_INPUT_TYPES.has(newDoc.sourceType) ? (
                                     <div className="space-y-2">
-                                        <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Link Externo</label>
-                                        <input required value={newDoc.contentUrl} onChange={e => setNewDoc({ ...newDoc, contentUrl: e.target.value })} placeholder="https://..." className="w-full p-4 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 font-bold text-sm" />
+                                        <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                                            {newDoc.sourceType === 'YOUTUBE' ? 'URL do YouTube' : newDoc.sourceType === 'GITHUB' ? 'URL do Repositório GitHub' : 'URL'}
+                                        </label>
+                                        <input required value={newDoc.contentUrl} onChange={e => setNewDoc({ ...newDoc, contentUrl: e.target.value })} placeholder={newDoc.sourceType === 'YOUTUBE' ? 'https://youtube.com/watch?v=...' : newDoc.sourceType === 'GITHUB' ? 'https://github.com/owner/repo' : 'https://...'} className="w-full p-4 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 font-bold text-sm" />
                                     </div>
                                 ) : (
                                     <div className="space-y-4">
                                         <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block">Upload de Arquivo</label>
                                         <div
                                             onClick={() => fileInputRef.current?.click()}
-                                            className="border-2 border-dashed border-slate-200 dark:border-white/10 rounded-3xl p-12 flex flex-col items-center justify-center cursor-pointer hover:bg-primary/5 transition-all group"
+                                            className="border-2 border-dashed border-slate-200 dark:border-white/10 rounded-3xl p-10 flex flex-col items-center justify-center cursor-pointer hover:bg-primary/5 transition-all group"
                                         >
                                             <input
                                                 type="file"
                                                 ref={fileInputRef}
                                                 onChange={handleFileChange}
-                                                accept={newDoc.sourceType === 'PDF' ? '.pdf' : '.docx'}
+                                                accept={ACCEPT_BY_TYPE[newDoc.sourceType] || '*'}
                                                 className="hidden"
                                             />
-                                            <div className="h-16 w-16 bg-primary/10 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                                                <UploadCloud className="text-primary" size={32} />
+                                            <div className="h-14 w-14 bg-primary/10 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                                                <UploadCloud className="text-primary" size={28} />
                                             </div>
-                                            <p className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tighter">
-                                                {newDoc.file ? newDoc.file.name : `Clique para selecionar seu ${newDoc.sourceType}`}
+                                            <p className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tighter text-center">
+                                                {newDoc.file ? newDoc.file.name : `Clique: ${SOURCE_TYPE_META[newDoc.sourceType]?.label || newDoc.sourceType}`}
                                             </p>
-                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2 italic">Max: 10MB</p>
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2 italic">
+                                                {ACCEPT_BY_TYPE[newDoc.sourceType] || 'qualquer arquivo'} · Max: 50MB
+                                            </p>
                                         </div>
                                     </div>
                                 )}
-                                <button disabled={submitting || ((newDoc.sourceType === 'PDF' || newDoc.sourceType === 'DOCX') && !newDoc.file)} type="submit" className="w-full py-4 bg-primary text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-primary/20 flex items-center justify-center gap-2 disabled:opacity-50">
-                                    {submitting ? <Loader2 size={16} className="animate-spin" /> : <Zap size={16} />} Fundir Inteligência
+                                <button
+                                    disabled={submitting || (FILE_UPLOAD_TYPES.has(newDoc.sourceType) && !newDoc.file) || (URL_INPUT_TYPES.has(newDoc.sourceType) && !newDoc.contentUrl)}
+                                    type="submit"
+                                    className="w-full py-4 bg-primary text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-primary/20 flex items-center justify-center gap-2 disabled:opacity-50"
+                                >
+                                    {submitting ? <Loader2 size={16} className="animate-spin" /> : <Zap size={16} />} Fundir Inteligência
                                 </button>
                             </form>
                         </motion.div>

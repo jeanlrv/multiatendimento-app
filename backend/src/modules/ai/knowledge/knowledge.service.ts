@@ -77,14 +77,11 @@ export class KnowledgeService {
     async addDocumentFromFile(companyId: string, baseId: string, file: Express.Multer.File) {
         await this.findOneBase(companyId, baseId);
 
-        const ext = file.originalname.split('.').pop()?.toUpperCase();
-        let sourceType: 'PDF' | 'DOCX' | 'TEXT' = 'PDF';
-        if (ext === 'DOCX') sourceType = 'DOCX';
+        const ext = file.originalname.split('.').pop()?.toLowerCase() || '';
+        const sourceType = detectSourceType(ext);
 
-        // Determinar o content type
-        let contentType = 'application/octet-stream';
-        if (sourceType === 'PDF') contentType = 'application/pdf';
-        if (sourceType === 'DOCX') contentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+        // Determinar o content type para S3
+        const contentType = getMimeType(ext);
 
         // Fazer upload para S3
         let contentUrl = file.path; // fallback para path local
@@ -267,4 +264,78 @@ export class KnowledgeService {
             estimatedTokens: totalTokens
         };
     }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Mapeamentos auxiliares de extensão → sourceType e MIME type
+// ──────────────────────────────────────────────────────────────────────────────
+
+const EXT_TO_SOURCE_TYPE: Record<string, string> = {
+    // Documentos Office
+    pdf: 'PDF',
+    doc: 'DOCX',
+    docx: 'DOCX',
+    xls: 'XLS',
+    xlsx: 'XLSX',
+    ppt: 'PPTX',
+    pptx: 'PPTX',
+    epub: 'EPUB',
+    // Texto
+    txt: 'TXT',
+    md: 'MD',
+    mdx: 'MD',
+    markdown: 'MD',
+    rtf: 'RTF',
+    // Web
+    html: 'HTML',
+    htm: 'HTML',
+    // Dados
+    csv: 'CSV',
+    json: 'JSON',
+    yaml: 'YAML',
+    yml: 'YAML',
+    xml: 'XML',
+    // Código
+    js: 'CODE', ts: 'CODE', jsx: 'CODE', tsx: 'CODE',
+    py: 'CODE', java: 'CODE', go: 'CODE', rb: 'CODE',
+    php: 'CODE', cs: 'CODE', cpp: 'CODE', c: 'CODE',
+    rs: 'CODE', swift: 'CODE', kt: 'CODE', sh: 'CODE',
+    bash: 'CODE', sql: 'CODE',
+    // Áudio
+    mp3: 'AUDIO', wav: 'AUDIO', mp4: 'AUDIO',
+    ogg: 'AUDIO', webm: 'AUDIO', m4a: 'AUDIO', mpeg: 'AUDIO',
+};
+
+const EXT_TO_MIME: Record<string, string> = {
+    pdf: 'application/pdf',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    doc: 'application/msword',
+    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    xls: 'application/vnd.ms-excel',
+    pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    ppt: 'application/vnd.ms-powerpoint',
+    epub: 'application/epub+zip',
+    txt: 'text/plain',
+    md: 'text/markdown',
+    html: 'text/html',
+    htm: 'text/html',
+    csv: 'text/csv',
+    json: 'application/json',
+    xml: 'application/xml',
+    yaml: 'application/yaml',
+    yml: 'application/yaml',
+    mp3: 'audio/mpeg',
+    wav: 'audio/wav',
+    mp4: 'audio/mp4',
+    ogg: 'audio/ogg',
+    webm: 'audio/webm',
+    m4a: 'audio/mp4',
+};
+
+export function detectSourceType(ext: string): string {
+    return EXT_TO_SOURCE_TYPE[ext.toLowerCase()] || 'TEXT';
+}
+
+export function getMimeType(ext: string): string {
+    return EXT_TO_MIME[ext.toLowerCase()] || 'application/octet-stream';
 }

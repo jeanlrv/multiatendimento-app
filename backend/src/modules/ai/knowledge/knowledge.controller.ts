@@ -1,10 +1,24 @@
 import { Controller, Get, Post, Patch, Body, Param, Delete, UseGuards, Req, UseInterceptors, UploadedFile } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import * as path from 'path';
+import * as os from 'os';
 import { KnowledgeService } from './knowledge.service';
 import { CreateKnowledgeBaseDto } from './dto/create-knowledge.dto';
 import { AddDocumentDto } from './dto/add-document.dto';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
+
+const UPLOAD_OPTIONS = {
+    storage: diskStorage({
+        destination: os.tmpdir(),
+        filename: (_req: any, file: any, cb: any) => {
+            const ext = path.extname(file.originalname);
+            cb(null, `upload-${Date.now()}${ext}`);
+        },
+    }),
+    limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB
+};
 
 @ApiTags('AI Knowledge')
 @Controller('ai/knowledge')
@@ -44,8 +58,8 @@ export class KnowledgeController {
     }
 
     @Post('bases/:id/upload')
-    @ApiOperation({ summary: 'Enviar arquivo para a base de conhecimento' })
-    @UseInterceptors(FileInterceptor('file'))
+    @ApiOperation({ summary: 'Enviar arquivo para a base de conhecimento (PDF, DOCX, XLSX, PPTX, EPUB, MD, TXT, CSV, JSON, YAML, HTML, áudio, código, etc.)' })
+    @UseInterceptors(FileInterceptor('file', UPLOAD_OPTIONS))
     uploadDocument(
         @Req() req: any,
         @Param('id') id: string,

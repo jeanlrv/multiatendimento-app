@@ -5,6 +5,7 @@ import { UpdateAIAgentDto } from './dto/update-ai-agent.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
 import { LLMProviderFactory } from './engine/llm-provider.factory';
+import { EmbeddingProviderFactory } from './engine/embedding-provider.factory';
 import { ChatRequestDto } from './dto/chat-request.dto';
 import { Observable } from 'rxjs';
 import { ConversationHistoryService } from './conversation-history.service';
@@ -18,6 +19,7 @@ export class AIController {
     constructor(
         private readonly aiService: AIService,
         private readonly providerFactory: LLMProviderFactory,
+        private readonly embeddingProviderFactory: EmbeddingProviderFactory,
         private readonly conversationHistoryService: ConversationHistoryService,
         private readonly notificationService: NotificationService,
     ) { }
@@ -74,6 +76,12 @@ export class AIController {
     @ApiOperation({ summary: 'Listar modelos de IA disponíveis por provider' })
     getModels() {
         return this.providerFactory.getAvailableModels();
+    }
+
+    @Get('embedding-providers')
+    @ApiOperation({ summary: 'Listar providers de embedding disponíveis' })
+    getEmbeddingProviders() {
+        return this.embeddingProviderFactory.getAvailableProviders();
     }
 
     @Get('usage')

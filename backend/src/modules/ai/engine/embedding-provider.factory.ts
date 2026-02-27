@@ -1,0 +1,187 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { Embeddings } from '@langchain/core/embeddings';
+import { OpenAIEmbeddings } from '@langchain/openai';
+
+export interface EmbeddingModelConfig {
+    id: string;
+    name: string;
+    dimensions: number;
+}
+
+export interface EmbeddingProviderConfig {
+    id: string;
+    name: string;
+    envKey: string;
+    baseURL?: string;
+    models: EmbeddingModelConfig[];
+}
+
+export const EMBEDDING_PROVIDERS: EmbeddingProviderConfig[] = [
+    {
+        id: 'openai',
+        name: 'OpenAI',
+        envKey: 'OPENAI_API_KEY',
+        models: [
+            { id: 'text-embedding-3-small', name: 'text-embedding-3-small (Econômico)', dimensions: 1536 },
+            { id: 'text-embedding-3-large', name: 'text-embedding-3-large (Alta qualidade)', dimensions: 3072 },
+            { id: 'text-embedding-ada-002', name: 'text-embedding-ada-002 (Legado)', dimensions: 1536 },
+        ],
+    },
+    {
+        id: 'ollama',
+        name: 'Ollama (Local)',
+        envKey: 'OLLAMA_BASE_URL',
+        baseURL: 'http://localhost:11434/v1',
+        models: [
+            { id: 'nomic-embed-text', name: 'nomic-embed-text (Recomendado)', dimensions: 768 },
+            { id: 'mxbai-embed-large', name: 'mxbai-embed-large (Alta qualidade)', dimensions: 1024 },
+            { id: 'all-minilm', name: 'all-MiniLM (Leve)', dimensions: 384 },
+        ],
+    },
+    {
+        id: 'gemini',
+        name: 'Google Gemini',
+        envKey: 'GEMINI_API_KEY',
+        models: [
+            { id: 'text-embedding-004', name: 'text-embedding-004', dimensions: 768 },
+            { id: 'embedding-001', name: 'embedding-001 (Legado)', dimensions: 768 },
+        ],
+    },
+    {
+        id: 'cohere',
+        name: 'Cohere',
+        envKey: 'COHERE_API_KEY',
+        models: [
+            { id: 'embed-multilingual-v3.0', name: 'embed-multilingual-v3.0 (PT-BR)', dimensions: 1024 },
+            { id: 'embed-english-v3.0', name: 'embed-english-v3.0', dimensions: 1024 },
+            { id: 'embed-multilingual-light-v3.0', name: 'embed-multilingual-light-v3.0 (Leve)', dimensions: 384 },
+        ],
+    },
+    {
+        id: 'azure',
+        name: 'Azure OpenAI',
+        envKey: 'AZURE_OPENAI_API_KEY',
+        models: [
+            { id: 'text-embedding-ada-002', name: 'text-embedding-ada-002', dimensions: 1536 },
+            { id: 'text-embedding-3-small', name: 'text-embedding-3-small', dimensions: 1536 },
+            { id: 'text-embedding-3-large', name: 'text-embedding-3-large', dimensions: 3072 },
+        ],
+    },
+    {
+        id: 'voyage',
+        name: 'Voyage AI',
+        envKey: 'VOYAGE_API_KEY',
+        baseURL: 'https://api.voyageai.com/v1',
+        models: [
+            { id: 'voyage-3', name: 'voyage-3 (Melhor custo-benefício)', dimensions: 1024 },
+            { id: 'voyage-3-large', name: 'voyage-3-large (Alta qualidade)', dimensions: 1024 },
+            { id: 'voyage-3-lite', name: 'voyage-3-lite (Econômico)', dimensions: 512 },
+            { id: 'voyage-multilingual-2', name: 'voyage-multilingual-2 (PT-BR)', dimensions: 1024 },
+        ],
+    },
+];
+
+@Injectable()
+export class EmbeddingProviderFactory {
+    private readonly logger = new Logger(EmbeddingProviderFactory.name);
+
+    constructor(private configService: ConfigService) { }
+
+    /**
+     * Cria instância do provedor de embedding correto.
+     * @param providerId ID do provider (openai, ollama, gemini, cohere, azure, voyage)
+     * @param modelId ID do modelo de embedding
+     */
+    createEmbeddings(providerId: string = 'openai', modelId?: string): Embeddings {
+        const provider = EMBEDDING_PROVIDERS.find(p => p.id === providerId);
+        if (!provider) {
+            this.logger.warn(`Provider de embedding desconhecido: ${providerId}. Usando OpenAI.`);
+            return this.createOpenAIEmbeddings('text-embedding-3-small');
+        }
+
+        const model = modelId || provider.models[0].id;
+        this.logger.log(`Criando embedding: ${providerId}/${model}`);
+
+        switch (providerId) {
+            case 'openai':
+                return this.createOpenAIEmbeddings(model);
+            case 'ollama':
+                return this.createOllamaEmbeddings(model);
+            case 'gemini':
+                return this.createGeminiEmbeddings(model);
+            case 'cohere':
+                return this.createCohereEmbeddings(model);
+            case 'azure':
+                return this.createAzureEmbeddings(model);
+            case 'voyage':
+                return this.createVoyageEmbeddings(model);
+            default:
+                return this.createOpenAIEmbeddings('text-embedding-3-small');
+        }
+    }
+
+    private createOpenAIEmbeddings(model: string): Embeddings {
+        const apiKey = this.configService.get<string>('OPENAI_API_KEY');
+        if (!apiKey) throw new Error('OPENAI_API_KEY não configurada.');
+        return new OpenAIEmbeddings({ openAIApiKey: apiKey, modelName: model });
+    }
+
+    private createOllamaEmbeddings(model: string): Embeddings {
+        const baseURL = this.configService.get<string>('OLLAMA_BASE_URL') || 'http://localhost:11434/v1';
+        // Ollama expõe endpoint OpenAI-compat para embeddings
+        return new OpenAIEmbeddings({
+            openAIApiKey: 'ollama',
+            modelName: model,
+            configuration: { baseURL },
+        });
+    }
+
+    private createGeminiEmbeddings(model: string): Embeddings {
+        const apiKey = this.configService.get<string>('GEMINI_API_KEY');
+        if (!apiKey) throw new Error('GEMINI_API_KEY não configurada.');
+        const { GoogleGenerativeAIEmbeddings } = require('@langchain/google-genai');
+        return new GoogleGenerativeAIEmbeddings({ apiKey, model });
+    }
+
+    private createCohereEmbeddings(model: string): Embeddings {
+        const apiKey = this.configService.get<string>('COHERE_API_KEY');
+        if (!apiKey) throw new Error('COHERE_API_KEY não configurada.');
+        const { CohereEmbeddings } = require('@langchain/cohere');
+        return new CohereEmbeddings({ apiKey, model });
+    }
+
+    private createAzureEmbeddings(model: string): Embeddings {
+        const apiKey = this.configService.get<string>('AZURE_OPENAI_API_KEY');
+        const endpoint = this.configService.get<string>('AZURE_OPENAI_ENDPOINT');
+        if (!apiKey || !endpoint) throw new Error('AZURE_OPENAI_API_KEY ou AZURE_OPENAI_ENDPOINT não configurados.');
+        const { AzureOpenAIEmbeddings } = require('@langchain/openai');
+        return new AzureOpenAIEmbeddings({
+            azureOpenAIApiKey: apiKey,
+            azureOpenAIApiInstanceName: endpoint.replace('https://', '').replace('.openai.azure.com/', ''),
+            azureOpenAIApiDeploymentName: model,
+            azureOpenAIApiVersion: '2024-02-01',
+        });
+    }
+
+    private createVoyageEmbeddings(model: string): Embeddings {
+        const apiKey = this.configService.get<string>('VOYAGE_API_KEY');
+        if (!apiKey) throw new Error('VOYAGE_API_KEY não configurada.');
+        // Voyage AI é compatível com a API de embeddings da OpenAI
+        return new OpenAIEmbeddings({
+            openAIApiKey: apiKey,
+            modelName: model,
+            configuration: { baseURL: 'https://api.voyageai.com/v1' },
+        });
+    }
+
+    /**
+     * Retorna todos os providers disponíveis (com base nas env vars configuradas).
+     */
+    getAvailableProviders(): { id: string; name: string; models: EmbeddingModelConfig[] }[] {
+        return EMBEDDING_PROVIDERS.filter(p => {
+            if (p.id === 'ollama') return true; // Sempre disponível (local)
+            return !!this.configService.get<string>(p.envKey);
+        }).map(p => ({ id: p.id, name: p.name, models: p.models }));
+    }
+}

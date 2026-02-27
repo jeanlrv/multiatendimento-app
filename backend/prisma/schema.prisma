@@ -447,12 +447,14 @@ model QuickReply {
 // ============================================
 
 model KnowledgeBase {
-  id          String   @id @default(uuid())
-  name        String
-  description String?
-  companyId   String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                String   @id @default(uuid())
+  name              String
+  description       String?
+  companyId         String
+  embeddingProvider String   @default("openai")
+  embeddingModel    String   @default("text-embedding-3-small")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   company   Company    @relation(fields: [companyId], references: [id])
   agents    AIAgent[]
@@ -510,6 +512,8 @@ model AIAgent {
   isActive               Boolean  @default(true)
   companyId              String
   knowledgeBaseId        String?
+  embeddingProvider      String   @default("openai")
+  embeddingModel         String   @default("text-embedding-3-small")
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 

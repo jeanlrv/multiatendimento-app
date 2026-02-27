@@ -434,6 +434,61 @@ export default function AIAgentsPage() {
                                                 )}
                                             </div>
                                         </div>
+                                        <div className="space-y-3">
+                                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1 block">Provedor de Embedding</label>
+                                            <p className="text-[10px] text-slate-400 ml-1">Modelo usado para vetorizar documentos e consultas RAG. Deve coincidir com o provider usado na base de conhecimento.</p>
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div>
+                                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Provider</label>
+                                                    <select
+                                                        value={(currentAgent as any)?.embeddingProvider || 'openai'}
+                                                        onChange={e => setCurrentAgent({ ...currentAgent, embeddingProvider: e.target.value, embeddingModel: '' } as any)}
+                                                        className="w-full mt-1 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-sm font-semibold outline-none dark:text-white appearance-none"
+                                                    >
+                                                        <option value="openai">OpenAI</option>
+                                                        <option value="ollama">Ollama (Local)</option>
+                                                        <option value="gemini">Google Gemini</option>
+                                                        <option value="cohere">Cohere</option>
+                                                        <option value="azure">Azure OpenAI</option>
+                                                        <option value="voyage">Voyage AI</option>
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Modelo</label>
+                                                    <select
+                                                        value={(currentAgent as any)?.embeddingModel || ''}
+                                                        onChange={e => setCurrentAgent({ ...currentAgent, embeddingModel: e.target.value } as any)}
+                                                        className="w-full mt-1 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-sm font-semibold outline-none dark:text-white appearance-none"
+                                                    >
+                                                        {(currentAgent as any)?.embeddingProvider === 'ollama' ? <>
+                                                            <option value="nomic-embed-text">nomic-embed-text (768d)</option>
+                                                            <option value="mxbai-embed-large">mxbai-embed-large (1024d)</option>
+                                                            <option value="all-minilm">all-MiniLM (384d)</option>
+                                                        </> : (currentAgent as any)?.embeddingProvider === 'gemini' ? <>
+                                                            <option value="text-embedding-004">text-embedding-004 (768d)</option>
+                                                            <option value="embedding-001">embedding-001 (768d)</option>
+                                                        </> : (currentAgent as any)?.embeddingProvider === 'cohere' ? <>
+                                                            <option value="embed-multilingual-v3.0">embed-multilingual-v3.0 (PT-BR, 1024d)</option>
+                                                            <option value="embed-english-v3.0">embed-english-v3.0 (1024d)</option>
+                                                            <option value="embed-multilingual-light-v3.0">embed-multilingual-light (384d)</option>
+                                                        </> : (currentAgent as any)?.embeddingProvider === 'voyage' ? <>
+                                                            <option value="voyage-3">voyage-3 (1024d)</option>
+                                                            <option value="voyage-3-large">voyage-3-large (1024d)</option>
+                                                            <option value="voyage-multilingual-2">voyage-multilingual-2 PT-BR (1024d)</option>
+                                                        </> : (currentAgent as any)?.embeddingProvider === 'azure' ? <>
+                                                            <option value="text-embedding-ada-002">text-embedding-ada-002 (1536d)</option>
+                                                            <option value="text-embedding-3-small">text-embedding-3-small (1536d)</option>
+                                                            <option value="text-embedding-3-large">text-embedding-3-large (3072d)</option>
+                                                        </> : <>
+                                                            <option value="text-embedding-3-small">text-embedding-3-small (1536d) — Recomendado</option>
+                                                            <option value="text-embedding-3-large">text-embedding-3-large (3072d) — Alta qualidade</option>
+                                                            <option value="text-embedding-ada-002">text-embedding-ada-002 (1536d) — Legado</option>
+                                                        </>}
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        </div>
+
                                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center px-8 leading-relaxed">
                                             O RAG (Retrieval-Augmented Generation) permite que o agente consulte documentos específicos da sua empresa antes de responder ao cliente, garantindo precisão e confiança.
                                         </p>

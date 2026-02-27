@@ -10,6 +10,8 @@ export interface AIAgent {
     configuration?: any;
     isActive: boolean;
     knowledgeBaseId?: string;
+    embeddingProvider?: string;
+    embeddingModel?: string;
     createdAt: string;
     updatedAt: string;
 }
