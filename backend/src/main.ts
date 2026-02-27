@@ -118,10 +118,10 @@ async function bootstrap() {
         });
 
         const port = process.env.PORT || 3000;
-        // Railway usa IPv6 na rede privada interna — não limitar a 0.0.0.0
-        await app.listen(port);
+        // Railway requer binding em 0.0.0.0 para acessibilidade pública e privada
+        await app.listen(port, '0.0.0.0');
 
-        logger.log(`🚀 Servidor iniciado na porta ${port} (IPv4 + IPv6)`);
+        logger.log(`🚀 Servidor iniciado na porta ${port}`);
         logger.log(`📡 API: http://localhost:${port}/api`);
         if (isDev) logger.log(`📚 Docs: http://localhost:${port}/api/docs`);
     } catch (error) {
