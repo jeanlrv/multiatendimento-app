@@ -26,13 +26,35 @@ export class NotificationService implements OnModuleInit {
     async onModuleInit() {
         this.logger.log('NotificationService inicializado');
 
-        // Configurar listener para eventos da fila
-        const redisOptions = {
-            host: this.configService.get<string>('REDIS_HOST', 'localhost'),
-            port: this.configService.get<number>('REDIS_PORT', 6379),
-        };
+        // Configurar listener para eventos da fila com suporte a autenticação
+        const redisUrl = this.configService.get<string>('REDIS_URL');
+        let connection: any;
 
-        this.queueEvents = new QueueEvents('knowledge-processing', { connection: redisOptions });
+        if (redisUrl) {
+            try {
+                const parsed = new URL(redisUrl);
+                const isTls = parsed.protocol === 'rediss:';
+                connection = {
+                    host: parsed.hostname,
+                    port: parseInt(parsed.port, 10) || 6379,
+                    password: parsed.password || undefined,
+                    username: parsed.username || undefined,
+                    ...(isTls ? { tls: { rejectUnauthorized: false } } : {}),
+                };
+            } catch (e) {
+                this.logger.error(`Erro ao parsear REDIS_URL no NotificationService: ${e.message}`);
+            }
+        }
+
+        if (!connection) {
+            connection = {
+                host: this.configService.get<string>('REDIS_HOST', 'localhost'),
+                port: this.configService.get<number>('REDIS_PORT', 6379),
+                password: this.configService.get<string>('REDIS_PASSWORD'),
+            };
+        }
+
+        this.queueEvents = new QueueEvents('knowledge-processing', { connection });
 
         // Escutar eventos de conclusão de processamento
         this.queueEvents.on('completed', ({ jobId }: { jobId: string }) => this.handleJobCompleted(jobId));
