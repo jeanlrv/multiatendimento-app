@@ -7,7 +7,7 @@ import { getSocket } from '@/lib/socket';
 import { api } from '@/services/api';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trash2, Send, Phone, User, Clock, CheckCheck, Paperclip, MoreVertical, ArrowRightLeft, Smile, Search, SlidersHorizontal, MessageSquare, Bot, Sparkles, AlertTriangle, Plus, X, Mic, Tag as TagIcon, Info, Calendar, ArrowLeft } from 'lucide-react';
+import { Trash2, Send, Phone, User, Clock, CheckCheck, Paperclip, MoreVertical, ArrowRightLeft, Smile, Search, SlidersHorizontal, MessageSquare, Bot, Sparkles, AlertTriangle, Plus, X, Mic, Tag as TagIcon, Info, Calendar, ArrowLeft, Copy } from 'lucide-react';
 import { AudioRecorder } from '@/components/chat/AudioRecorder';
 import { toast } from 'sonner';
 import { io, Socket } from 'socket.io-client';
@@ -56,6 +56,11 @@ interface Ticket {
     mode: 'AI' | 'HUMANO' | 'HIBRIDO';
     unreadMessages: number;
     evaluation?: any;
+    assignedUser?: {
+        id: string;
+        name: string;
+        avatar?: string;
+    };
     tags?: {
         tag: {
             id: string;
@@ -700,7 +705,6 @@ export default function TicketsPage() {
                                 >
                                     {selectedTicketIds.includes(ticket.id) && <CheckCheck size={12} />}
                                 </div>
-
                                 <div className={`flex items-start justify-between mb-3 transition-transform ${selectedTicketIds.length > 0 || selectedTicketIds.includes(ticket.id) ? 'pl-6' : ''}`}>
                                     <div className="flex items-center gap-3">
                                         <div className="relative">
@@ -727,77 +731,72 @@ export default function TicketsPage() {
                                                     }`} />
                                             )}
                                         </div>
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-2">
-                                                <p className={`font-black text-sm truncate tracking-tight ${selectedTicket?.id === ticket.id ? 'text-slate-900 dark:text-white' : 'text-slate-700 dark:text-gray-300'}`}>
-                                                    {ticket.contact.name}
-                                                </p>
-                                                {ticket.mode === 'AI' && (
-                                                    <motion.div
-                                                        animate={{ scale: [1, 1.2, 1], rotate: [0, 10, -10, 0] }}
-                                                        transition={{ repeat: Infinity, duration: 3 }}
-                                                    >
-                                                        <Sparkles className="h-3 w-3 text-primary" />
-                                                    </motion.div>
-                                                )}
-                                                {ticket.unreadMessages > 0 && (
-                                                    <span className="h-2 w-2 bg-primary rounded-full animate-ping" />
-                                                )}
+                                        <div className="flex-1 min-w-0 transition-transform flex flex-col gap-2">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-2">
+                                                    <h3 className={`text-sm font-black tracking-tight leading-none ${selectedTicket?.id === ticket.id ? 'text-primary' : 'text-slate-800 dark:text-white'}`}>
+                                                        {ticket.contact.name || 'Contato'}
+                                                    </h3>
+                                                    <span className="text-[10px] font-mono text-slate-400 bg-slate-100 dark:bg-white/5 px-1.5 py-0.5 rounded-md">
+                                                        #{ticket.id.substring(ticket.id.length - 4).toUpperCase()}
+                                                    </span>
+                                                    {ticket.unreadMessages > 0 && (
+                                                        <span className="h-2 w-2 bg-primary rounded-full animate-ping" />
+                                                    )}
+                                                </div>
+                                                <div className="flex flex-col items-end gap-1">
+                                                    {ticket.assignedUser && (
+                                                        <div className="flex items-center gap-1 bg-blue-50 dark:bg-blue-500/10 px-1.5 py-0.5 rounded-lg border border-blue-100 dark:border-blue-500/20">
+                                                            <User size={8} className="text-blue-600 dark:text-blue-400" />
+                                                            <span className="text-[8px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-tighter">
+                                                                {ticket.assignedUser.name.split(' ')[0]}
+                                                            </span>
+                                                        </div>
+                                                    )}
+                                                    <span className={`px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-tighter ${selectedTicket?.id === ticket.id ? 'bg-primary/20 text-primary border border-primary/20' : 'bg-slate-100 dark:bg-white/5 text-slate-500'}`}>
+                                                        {translateStatus(ticket.status)}
+                                                    </span>
+                                                </div>
                                             </div>
-                                            <p className={`text-[10px] font-bold uppercase tracking-widest opacity-60`}>
-                                                {ticket.contact.phoneNumber}
-                                            </p>
+
+                                            {ticket.subject && (
+                                                <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 line-clamp-1 italic">
+                                                    {ticket.subject}
+                                                </p>
+                                            )}
+
+                                            <div className="flex flex-wrap gap-1">
+                                                {ticket.tags?.map((t: any) => (
+                                                    <span
+                                                        key={t.tag.id}
+                                                        className="px-2 py-0.5 rounded-lg text-[7px] font-black uppercase tracking-widest border border-white/20"
+                                                        style={{ backgroundColor: `${t.tag.color}20`, color: t.tag.color }}
+                                                    >
+                                                        {t.tag.name}
+                                                    </span>
+                                                ))}
+                                            </div>
+
+                                            <div className="flex items-center justify-between mt-auto">
+                                                <div className="flex items-center gap-2">
+                                                    <p
+                                                        className="text-[10px] font-black uppercase tracking-widest italic"
+                                                        style={{ color: ticket.department.color || undefined, opacity: selectedTicket?.id === ticket.id ? 1 : 0.6 }}
+                                                    >
+                                                        {ticket.department.name}
+                                                    </p>
+                                                    <div className="h-1 w-1 bg-slate-300 rounded-full" />
+                                                    <p className="text-[10px] font-bold opacity-40">
+                                                        {new Date(ticket.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                    </p>
+                                                </div>
+                                                <SlaIndicator ticket={ticket as any} />
+                                            </div>
                                         </div>
                                     </div>
-                                    <span className={`px-3 py-1 rounded-xl text-[8px] font-black uppercase tracking-tighter ${selectedTicket?.id === ticket.id ? 'bg-primary/20 text-primary border border-primary/20' : 'bg-slate-100 dark:bg-white/5 text-slate-500'}`}>
-                                        {translateStatus(ticket.status)}
-                                    </span>
-                                </div>
-
-                                {/* Tags Inline no Card */}
-                                <div className="flex flex-wrap gap-1 mb-3">
-                                    {ticket.tags?.map((t: any) => (
-                                        <span
-                                            key={t.tag.id}
-                                            className="px-2 py-0.5 rounded-lg text-[7px] font-black uppercase tracking-widest border border-white/20"
-                                            style={{ backgroundColor: `${t.tag.color}20`, color: t.tag.color }}
-                                        >
-                                            {t.tag.name}
-                                        </span>
-                                    ))}
-                                </div>
-
-                                {ticket.evaluation && (
-                                    <div className="mt-3">
-                                        <SentimentIndicator
-                                            sentiment={ticket.evaluation.sentiment}
-                                            score={ticket.evaluation.score}
-                                            className="!py-0.5 !px-2 !rounded-lg border-none bg-transparent shadow-none"
-                                        />
-                                    </div>
-                                )}
-
-                                <div>
-                                    <SlaIndicator ticket={ticket as any} />
-                                </div>
-
-                                <div className="flex items-center justify-between mt-3">
-                                    <div className="flex items-center gap-3">
-                                        <p
-                                            className="text-[10px] font-black uppercase tracking-widest italic"
-                                            style={{ color: ticket.department.color || undefined, opacity: selectedTicket?.id === ticket.id ? 1 : 0.6 }}
-                                        >
-                                            {ticket.department.name}
-                                        </p>
-                                        <div className="h-1 w-1 bg-slate-300 rounded-full" />
-                                        <Phone size={10} className="opacity-30" />
-                                    </div>
-                                    <p className={`text-[10px] font-bold opacity-40`}>
-                                        {new Date(ticket.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                    </p>
                                 </div>
                             </motion.button>
-                        ))
+                        ))}
                     )}
                 </div>
             </div>
@@ -830,13 +829,61 @@ export default function TicketsPage() {
                                     <div className="absolute inset-0 bg-gradient-to-tr from-white/20 to-transparent" />
                                 </div>
                                 <div>
-                                    <h3 className="font-black text-xl text-slate-900 dark:text-white tracking-tight leading-none">{selectedTicket.contact.name}</h3>
-                                    <div className="flex items-center gap-3 mt-1">
-                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none border-r border-slate-200 dark:border-white/10 pr-3">{selectedTicket.contact.phoneNumber}</p>
+                                    <div className="flex items-center gap-3">
+                                        <h3 className="font-black text-xl text-slate-900 dark:text-white tracking-tight leading-none">{selectedTicket.contact.name}</h3>
                                         <div className="flex items-center gap-2">
-                                            <p className="text-[10px] font-black text-primary uppercase tracking-widest leading-none italic">{selectedTicket.department.name}</p>
+                                            <span className="text-[11px] font-mono text-slate-400 bg-slate-100 dark:bg-white/5 px-2 py-0.5 rounded-lg border border-slate-200 dark:border-white/10 flex items-center gap-1.5 group/id">
+                                                #{selectedTicket.id.substring(selectedTicket.id.length - 6).toUpperCase()}
+                                                <button
+                                                    onClick={() => {
+                                                        navigator.clipboard.writeText(selectedTicket.id);
+                                                        toast.success("ID do Ticket copiado!");
+                                                    }}
+                                                    className="opacity-0 group-hover/id:opacity-100 transition-opacity"
+                                                >
+                                                    <Copy size={10} className="text-slate-400 hover:text-primary" />
+                                                </button>
+                                            </span>
+                                            {selectedTicket.assignedUser ? (
+                                                <div className="flex items-center gap-1.5 bg-blue-50 dark:bg-blue-500/10 px-2.5 py-1 rounded-xl border border-blue-100 dark:border-blue-500/20">
+                                                    <User size={10} className="text-blue-600 dark:text-blue-400" />
+                                                    <span className="text-[9px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest leading-none">
+                                                        Responsável: {selectedTicket.assignedUser.name}
+                                                    </span>
+                                                </div>
+                                            ) : (
+                                                <button
+                                                    onClick={async () => {
+                                                        try {
+                                                            await ticketsService.assign(selectedTicket.id, user!.id);
+                                                            setSelectedTicket(prev => prev ? { ...prev, assignedUser: user as any } : null);
+                                                            fetchTickets();
+                                                            toast.success("Você assumiu este chamado!");
+                                                        } catch (error) {
+                                                            toast.error("Erro ao assumir chamado");
+                                                        }
+                                                    }}
+                                                    className="flex items-center gap-1.5 bg-amber-50 dark:bg-amber-500/10 px-2.5 py-1 rounded-xl border border-amber-100 dark:border-amber-500/20 hover:bg-amber-100 dark:hover:bg-amber-500/20 transition-all active:scale-95"
+                                                >
+                                                    <User size={10} className="text-amber-600 dark:text-amber-400" />
+                                                    <span className="text-[9px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-widest leading-none">
+                                                        Não atribuído — Assumir
+                                                    </span>
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-3 mt-1.5">
+                                        {selectedTicket.subject && (
+                                            <p className="text-xs font-bold text-slate-500 dark:text-slate-400 tracking-tight border-r border-slate-200 dark:border-white/10 pr-3">
+                                                {selectedTicket.subject}
+                                            </p>
+                                        )}
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none border-r border-slate-200 dark:border-white/10 pr-3">{selectedTicket.contact.phoneNumber}</p>
+                                        <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">
+                                            <p className="text-primary italic">{selectedTicket.department.name}</p>
                                             <div className="h-1 w-1 rounded-full bg-slate-300" />
-                                            <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md ${selectedTicket.mode === 'AI' ? 'bg-blue-500/20 text-blue-500' : selectedTicket.mode === 'HUMANO' ? 'bg-amber-500/20 text-amber-500' : 'bg-emerald-500/20 text-emerald-500'}`}>
+                                            <span className={`px-2 py-0.5 rounded-md ${selectedTicket.mode === 'AI' ? 'bg-blue-500/20 text-blue-500' : selectedTicket.mode === 'HUMANO' ? 'bg-amber-500/20 text-amber-500' : 'bg-emerald-500/20 text-emerald-500'}`}>
                                                 {selectedTicket.mode}
                                             </span>
                                         </div>

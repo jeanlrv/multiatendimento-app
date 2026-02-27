@@ -32,6 +32,11 @@ export const ticketsService = {
         return response.data;
     },
 
+    assign: async (id: string, userId: string) => {
+        const response = await api.post(`/tickets/${id}/assign`, { userId });
+        return response.data;
+    },
+
     bulkAction: async (params: BulkActionParams) => {
         const response = await api.post('/tickets/bulk', params);
         return response.data;
