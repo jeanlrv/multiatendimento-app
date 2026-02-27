@@ -56,72 +56,77 @@ function validateRequiredEnvVars() {
 }
 
 async function bootstrap() {
-    validateRequiredEnvVars();
-    const logger = new Logger('Bootstrap');
-    const isDev = process.env.NODE_ENV !== 'production';
-    const allowedOrigins = process.env.CORS_ORIGIN
-        ? process.env.CORS_ORIGIN.split(',').map(o => o.trim())
-        : isDev
-            ? '*'
-            : [];
+    try {
+        validateRequiredEnvVars();
+        const logger = new Logger('Bootstrap');
+        const isDev = process.env.NODE_ENV !== 'production';
+        const allowedOrigins = process.env.CORS_ORIGIN
+            ? process.env.CORS_ORIGIN.split(',').map(o => o.trim())
+            : isDev
+                ? '*'
+                : [];
 
-    const app = await NestFactory.create<NestExpressApplication>(AppModule, {
-        cors: {
-            origin: allowedOrigins,
-            credentials: true,
-        },
-    });
+        const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+            cors: {
+                origin: allowedOrigins,
+                credentials: true,
+            },
+        });
 
-    // Graceful shutdown — aguarda requests em andamento antes de encerrar
-    app.enableShutdownHooks();
+        // Graceful shutdown — aguarda requests em andamento antes de encerrar
+        app.enableShutdownHooks();
 
-    // Helmet — headers de segurança HTTP adicionais (complementa os do nginx)
-    app.use(helmet({
-        crossOriginResourcePolicy: { policy: 'cross-origin' }, // permite static assets
-        contentSecurityPolicy: isDev ? false : undefined,      // desabilitar CSP em dev (Swagger)
-    }));
+        // Helmet — headers de segurança HTTP adicionais (complementa os do nginx)
+        app.use(helmet({
+            crossOriginResourcePolicy: { policy: 'cross-origin' }, // permite static assets
+            contentSecurityPolicy: isDev ? false : undefined,      // desabilitar CSP em dev (Swagger)
+        }));
 
-    // Static assets
-    app.useStaticAssets(join(__dirname, '..', 'public'), {
-        prefix: '/public/',
-    });
+        // Static assets
+        app.useStaticAssets(join(__dirname, '..', 'public'), {
+            prefix: '/public/',
+        });
 
-    // Global prefix
-    app.setGlobalPrefix('api');
+        // Global prefix
+        app.setGlobalPrefix('api');
 
-    // Validation pipe
-    app.useGlobalPipes(
-        new ValidationPipe({
-            whitelist: true,
-            forbidNonWhitelisted: true,
-            transform: true,
-        }),
-    );
+        // Validation pipe
+        app.useGlobalPipes(
+            new ValidationPipe({
+                whitelist: true,
+                forbidNonWhitelisted: true,
+                transform: true,
+            }),
+        );
 
-    // Swagger documentation (apenas em desenvolvimento)
-    if (process.env.NODE_ENV !== 'production') {
-        const config = new DocumentBuilder()
-            .setTitle('WhatsApp SaaS API')
-            .setDescription('API para plataforma multi-WhatsApp com IA')
-            .setVersion('1.0')
-            .addBearerAuth()
-            .build();
+        // Swagger documentation (apenas em desenvolvimento)
+        if (process.env.NODE_ENV !== 'production') {
+            const config = new DocumentBuilder()
+                .setTitle('WhatsApp SaaS API')
+                .setDescription('API para plataforma multi-WhatsApp com IA')
+                .setVersion('1.0')
+                .addBearerAuth()
+                .build();
 
-        const document = SwaggerModule.createDocument(app, config);
-        SwaggerModule.setup('api/docs', app, document);
+            const document = SwaggerModule.createDocument(app, config);
+            SwaggerModule.setup('api/docs', app, document);
+        }
+
+        // Health check endpoint sem prefixo /api — usado pelo Docker healthcheck
+        app.getHttpAdapter().get('/health', (_req: any, res: any) => {
+            res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+        });
+
+        const port = process.env.PORT || 3000;
+        await app.listen(port, '0.0.0.0');
+
+        logger.log(`🚀 Servidor iniciado na porta ${port}`);
+        logger.log(`📡 API: http://localhost:${port}/api`);
+        if (isDev) logger.log(`📚 Docs: http://localhost:${port}/api/docs`);
+    } catch (error) {
+        console.error('❌ ERRO CRÍTICO NO BOOTSTRAP DO BACKEND:', error);
+        process.exit(1);
     }
-
-    // Health check endpoint sem prefixo /api — usado pelo Docker healthcheck
-    app.getHttpAdapter().get('/health', (_req: any, res: any) => {
-        res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
-    });
-
-    const port = process.env.PORT || 3000;
-    await app.listen(port, '0.0.0.0');
-
-    logger.log(`🚀 Servidor iniciado na porta ${port}`);
-    logger.log(`📡 API: http://localhost:${port}/api`);
-    if (isDev) logger.log(`📚 Docs: http://localhost:${port}/api/docs`);
 }
 
 bootstrap();
