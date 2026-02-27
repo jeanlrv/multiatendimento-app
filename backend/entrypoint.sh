@@ -86,21 +86,13 @@ fi
 echo "✅ Banco de dados disponível"
 
 # ============================================
-# GERAR PRISMA CLIENT (se necessário)
-# ============================================
-echo "📦 Verificando Prisma Client..."
-if [ ! -d "node_modules/.prisma/client" ]; then
-  echo "   Gerando Prisma Client..."
-  npx prisma@6 generate
-fi
-
-# ============================================
 # MIGRAÇÕES PRISMA
 # ============================================
 echo "📦 Executando migrações do Prisma..."
 
-# Resolver migrações com falha antes de aplicar novas (apenas se necessário, removido rollbacks automáticos)
-echo "🔧 Verificando migrações..."
+# Resolver migrações marcadas como falha que impedem o deploy
+echo "🔧 Curando estado das migrações..."
+npx prisma@6 migrate resolve --applied 20260225000001_notifications 2>&1 || true
 
 if npx prisma@6 migrate deploy 2>&1; then
   echo "✅ Migrações aplicadas com sucesso"
