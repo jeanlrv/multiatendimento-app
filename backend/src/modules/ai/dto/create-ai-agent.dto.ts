@@ -31,6 +31,16 @@ export class CreateAIAgentDto {
     @IsOptional()
     knowledgeBaseId?: string;
 
+    @ApiProperty({ description: 'Provedor de embedding (ex: openai, ollama, native)', required: false })
+    @IsString()
+    @IsOptional()
+    embeddingProvider?: string;
+
+    @ApiProperty({ description: 'Modelo de embedding', required: false })
+    @IsString()
+    @IsOptional()
+    embeddingModel?: string;
+
     @ApiProperty({ description: 'ID do Workspace no AnythingLLM (legado)', required: false })
     @IsString()
     @IsOptional()
@@ -45,4 +55,49 @@ export class CreateAIAgentDto {
     @IsBoolean()
     @IsOptional()
     isActive?: boolean;
+
+    // --- Widget Embed Fields ---
+
+    @ApiProperty({ description: 'Habilitar widget de chat', required: false })
+    @IsBoolean()
+    @IsOptional()
+    embedEnabled?: boolean;
+
+    @ApiProperty({ description: 'Cor da marca no widget', required: false })
+    @IsString()
+    @IsOptional()
+    embedBrandColor?: string;
+
+    @ApiProperty({ description: 'URL da logo no widget', required: false })
+    @IsString()
+    @IsOptional()
+    embedBrandLogo?: string;
+
+    @ApiProperty({ description: 'Nome do agente exibido no widget', required: false })
+    @IsString()
+    @IsOptional()
+    embedAgentName?: string;
+
+    @ApiProperty({ description: 'Mensagem de boas-vindas no widget', required: false })
+    @IsString()
+    @IsOptional()
+    embedWelcomeMsg?: string;
+
+    @ApiProperty({ description: 'Texto de ajuda no input do widget', required: false })
+    @IsString()
+    @IsOptional()
+    embedPlaceholder?: string;
+
+    @ApiProperty({ description: 'Posição do widget (bottom-right, bottom-left)', required: false })
+    @IsString()
+    @IsOptional()
+    embedPosition?: string;
+
+    @ApiProperty({ description: 'Domínios permitidos para o widget', required: false })
+    @IsOptional()
+    embedAllowedDomains?: string[];
+
+    @ApiProperty({ description: 'Limite de mensagens por sessão (10min)', required: false })
+    @IsOptional()
+    embedRateLimit?: number;
 }

@@ -4,7 +4,7 @@ import { ApiKeysController } from './api-keys.controller';
 import { PrismaService } from '../../../database/prisma.service';
 
 @Module({
-    providers: [ApiKeysService, PrismaService],
+    providers: [ApiKeysService],
     controllers: [ApiKeysController],
     exports: [ApiKeysService],
 })
