@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { CryptoService } from '../../common/services/crypto.service';
 import { LLM_PROVIDERS } from '../ai/engine/llm-provider.factory';
@@ -41,44 +41,54 @@ export class ProviderConfigService {
 
     /** Retorna todos os configs da empresa com keys mascaradas */
     async findAllForCompany(companyId: string): Promise<ProviderConfigPublic[]> {
-        const configs = await (this.prisma as any).providerConfig.findMany({
-            where: { companyId },
-            orderBy: { provider: 'asc' },
-        });
+        try {
+            const configs = await (this.prisma as any).providerConfig.findMany({
+                where: { companyId },
+                orderBy: { provider: 'asc' },
+            });
 
-        return configs.map((c: any) => this.maskConfig(c));
+            return configs.map((c: any) => this.maskConfig(c));
+        } catch (error) {
+            this.logger.error(`Erro ao buscar configurações de providers para empresa ${companyId}: ${error.message}`, error.stack);
+            throw error;
+        }
     }
 
     /** Salva (upsert) a configuração de um provider */
     async upsert(companyId: string, provider: string, data: ProviderConfigInput): Promise<ProviderConfigPublic> {
-        const category = this.detectCategory(provider);
+        try {
+            this.logger.log(`Upsert de provider ${provider} para empresa ${companyId}`);
+            const category = this.detectCategory(provider);
 
-        const payload: any = {
-            category,
-            isEnabled: data.isEnabled ?? true,
-            baseUrl: data.baseUrl || null,
-            extraConfig: data.extraConfig || null,
-        };
+            const payload: any = {
+                category,
+                isEnabled: data.isEnabled ?? true,
+                baseUrl: data.baseUrl || null,
+                extraConfig: data.extraConfig || null,
+            };
 
-        // Encripta a API key somente se não for máscara (***) e não for string vazia
-        if (data.apiKey && !data.apiKey.includes('***')) {
-            payload.apiKey = this.crypto.encrypt(data.apiKey);
-        } else if (data.apiKey === '' || data.apiKey === null) {
-            payload.apiKey = null;
+            // Encripta a API key somente se não for máscara (***) e não for string vazia
+            if (data.apiKey && !data.apiKey.includes('***')) {
+                payload.apiKey = this.crypto.encrypt(data.apiKey);
+            } else if (data.apiKey === '' || data.apiKey === null) {
+                payload.apiKey = null;
+            }
+
+            const config = await (this.prisma as any).providerConfig.upsert({
+                where: { companyId_provider: { companyId, provider } },
+                create: {
+                    companyId,
+                    provider,
+                    ...payload,
+                },
+                update: payload,
+            });
+
+            return this.maskConfig(config);
+        } catch (error) {
+            this.logger.error(`Erro no upsert do provider ${provider} para empresa ${companyId}: ${error.message}`, error.stack);
+            throw error;
         }
-        // Se data.apiKey contém '***', mantém o valor anterior (não sobrescreve)
-
-        const config = await (this.prisma as any).providerConfig.upsert({
-            where: { companyId_provider: { companyId, provider } },
-            create: {
-                companyId,
-                provider,
-                ...payload,
-            },
-            update: payload,
-        });
-
-        return this.maskConfig(config);
     }
 
     /** Remove a configuração de um provider */

@@ -1,9 +1,10 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { CryptoService } from '../../common/services/crypto.service';
 
 @Injectable()
 export class IntegrationsService {
+    private readonly logger = new Logger(IntegrationsService.name);
     constructor(
         private prisma: PrismaService,
         private crypto: CryptoService,
@@ -39,37 +40,49 @@ export class IntegrationsService {
     }
 
     async create(data: any, companyId: string) {
-        const payload = { ...data };
-        if (payload.zapiToken) payload.zapiToken = this.crypto.encrypt(payload.zapiToken);
-        if (payload.zapiClientToken) payload.zapiClientToken = this.crypto.encrypt(payload.zapiClientToken);
+        try {
+            this.logger.log(`Criando integração para empresa ${companyId}: ${data.name}`);
+            const payload = { ...data };
+            if (payload.zapiToken) payload.zapiToken = this.crypto.encrypt(payload.zapiToken);
+            if (payload.zapiClientToken) payload.zapiClientToken = this.crypto.encrypt(payload.zapiClientToken);
 
-        const integration = await this.prisma.integration.create({
-            data: {
-                ...payload,
-                company: { connect: { id: companyId } },
-            },
-        });
+            const integration = await this.prisma.integration.create({
+                data: {
+                    ...payload,
+                    company: { connect: { id: companyId } },
+                },
+            });
 
-        return this.maskIntegration(integration);
+            return this.maskIntegration(integration);
+        } catch (error) {
+            this.logger.error(`Erro ao criar integração para empresa ${companyId}: ${error.message}`, error.stack);
+            throw error;
+        }
     }
 
     async update(id: string, data: any, companyId: string) {
-        await this.findOne(id, companyId);
+        try {
+            this.logger.log(`Atualizando integração ${id} para empresa ${companyId}`);
+            await this.findOne(id, companyId);
 
-        const payload = { ...data };
-        if (payload.zapiToken && !payload.zapiToken.includes('***')) {
-            payload.zapiToken = this.crypto.encrypt(payload.zapiToken);
+            const payload = { ...data };
+            if (payload.zapiToken && !payload.zapiToken.includes('***')) {
+                payload.zapiToken = this.crypto.encrypt(payload.zapiToken);
+            }
+            if (payload.zapiClientToken && !payload.zapiClientToken.includes('***')) {
+                payload.zapiClientToken = this.crypto.encrypt(payload.zapiClientToken);
+            }
+
+            const updated = await this.prisma.integration.update({
+                where: { id },
+                data: payload,
+            });
+
+            return this.maskIntegration(updated);
+        } catch (error) {
+            this.logger.error(`Erro ao atualizar integração ${id} para empresa ${companyId}: ${error.message}`, error.stack);
+            throw error;
         }
-        if (payload.zapiClientToken && !payload.zapiClientToken.includes('***')) {
-            payload.zapiClientToken = this.crypto.encrypt(payload.zapiClientToken);
-        }
-
-        const updated = await this.prisma.integration.update({
-            where: { id },
-            data: payload,
-        });
-
-        return this.maskIntegration(updated);
     }
 
     async remove(id: string, companyId: string) {

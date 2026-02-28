@@ -30,7 +30,9 @@ export class CryptoService {
      * Se ENCRYPTION_KEY não configurado, retorna o texto sem alteração.
      */
     encrypt(text: string): string {
-        if (!this.key || !text) return text;
+        if (!text) return text;
+        if (!this.key) return text;
+        if (typeof text !== 'string') return text;
         if (text.startsWith('enc:')) return text; // Já criptografado
 
         const iv = crypto.randomBytes(12);
