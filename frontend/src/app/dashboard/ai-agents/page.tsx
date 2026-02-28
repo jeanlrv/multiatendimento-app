@@ -32,8 +32,17 @@ export default function AIAgentsPage() {
             const [agentsData, kbData, modelsData, embProviders] = await Promise.all([
                 AIAgentsService.findAll(),
                 AIKnowledgeService.findAllBases(),
-                AIAgentsService.getModels().catch(() => []),
-                AIAgentsService.getEmbeddingProviders().catch(() => []),
+                AIAgentsService.getModels().catch((e) => {
+                    console.error('Falha crítica ao buscar Modelos LLMs:', e);
+                    toast.error('Erro ao listar opções de modelos de IA.');
+                    return [];
+                }),
+                AIAgentsService.getEmbeddingProviders().catch((e) => {
+                    console.error('Falha crítica ao buscar Embedding Providers:', e);
+                    toast.error('Erro ao listar providers de embedding.');
+                    // Garante que o fallback do Native no mínimo seja gerado em falhas severas
+                    return [{ id: 'native', name: 'Nativo (built-in CPU)', models: [{ id: 'Xenova/all-MiniLM-L6-v2', name: 'all-MiniLM-L6-v2', dimensions: 384 }] }];
+                }),
             ]);
             setAgents(agentsData);
             setKnowledgeBases(kbData);

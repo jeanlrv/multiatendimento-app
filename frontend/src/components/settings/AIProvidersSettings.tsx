@@ -11,22 +11,22 @@ import { api } from '@/services/api';
 
 // ─── Metadados dos providers ──────────────────────────────────────────────────
 const LLM_PROVIDERS = [
-    { id: 'openai', name: 'OpenAI', icon: '🤖', color: '#10a37f', hasBaseUrl: false, description: 'GPT-4o, GPT-4.1, O3 Mini' },
-    { id: 'anthropic', name: 'Anthropic', icon: '🧠', color: '#d97706', hasBaseUrl: false, description: 'Claude Sonnet 4, Claude 3.5' },
-    { id: 'gemini', name: 'Google Gemini', icon: '✨', color: '#4285f4', hasBaseUrl: false, description: 'Gemini 2.0 Flash, Gemini 1.5 Pro' },
-    { id: 'deepseek', name: 'DeepSeek', icon: '🔍', color: '#6366f1', hasBaseUrl: false, description: 'DeepSeek Chat V3, Reasoner R1' },
-    { id: 'groq', name: 'Groq', icon: '⚡', color: '#f59e0b', hasBaseUrl: false, description: 'Llama 3.3 70B, Mixtral 8x7B (ultra rápido)' },
-    { id: 'openrouter', name: 'OpenRouter', icon: '🔀', color: '#8b5cf6', hasBaseUrl: false, description: 'Acesso a 200+ modelos' },
-    { id: 'mistral', name: 'Mistral AI', icon: '🌀', color: '#06b6d4', hasBaseUrl: false, description: 'Mistral Large, Codestral' },
-    { id: 'azure', name: 'Azure OpenAI', icon: '☁️', color: '#0078d4', hasBaseUrl: true, baseUrlLabel: 'Endpoint Azure', baseUrlPlaceholder: 'https://meu-recurso.openai.azure.com', description: 'GPT-4o via Microsoft Azure' },
-    { id: 'together', name: 'Together AI', icon: '🤝', color: '#ec4899', hasBaseUrl: false, description: 'Llama, Mixtral, DeepSeek open-source' },
-    { id: 'lmstudio', name: 'LM Studio / LocalAI', icon: '💻', color: '#64748b', hasBaseUrl: true, baseUrlLabel: 'URL do servidor local', baseUrlPlaceholder: 'http://localhost:1234/v1', description: 'Modelos locais via LM Studio' },
-    { id: 'perplexity', name: 'Perplexity AI', icon: '🔎', color: '#14b8a6', hasBaseUrl: false, description: 'Sonar (busca online em tempo real)' },
-    { id: 'xai', name: 'xAI Grok', icon: '🚀', color: '#1d1d1d', color2: '#e2e8f0', hasBaseUrl: false, description: 'Grok 2, Grok 2 Vision' },
-    { id: 'cohere', name: 'Cohere', icon: '🌐', color: '#0ea5e9', hasBaseUrl: false, description: 'Command R+ com RAG nativo' },
-    { id: 'huggingface', name: 'HuggingFace', icon: '🤗', color: '#fbbf24', hasBaseUrl: false, description: 'Llama, Mistral, Phi-3 open-source' },
-    { id: 'ollama', name: 'Ollama (Local)', icon: '🦙', color: '#84cc16', hasBaseUrl: true, baseUrlLabel: 'URL do Ollama', baseUrlPlaceholder: 'http://localhost:11434/v1', description: 'Rode modelos LLM localmente', noApiKey: true },
-    { id: 'anythingllm', name: 'AnythingLLM', icon: '📦', color: '#3b82f6', hasBaseUrl: true, baseUrlLabel: 'URL do AnythingLLM', baseUrlPlaceholder: 'http://localhost:3001/api/v1', description: 'IA full-stack via AnythingLLM Desktop/Docker' },
+    { id: 'openai', name: 'OpenAI', icon: '🤖', color: '#10a37f', hasBaseUrl: false, description: 'GPT-4o, GPT-4.1, O3 Mini', models: [{ id: 'gpt-4o-mini', name: 'GPT-4o Mini' }, { id: 'gpt-4o', name: 'GPT-4o' }, { id: 'gpt-4.1-mini', name: 'GPT-4.1 Mini' }, { id: 'gpt-4.1', name: 'GPT-4.1' }, { id: 'o3-mini', name: 'O3 Mini' }] },
+    { id: 'anthropic', name: 'Anthropic', icon: '🧠', color: '#d97706', hasBaseUrl: false, description: 'Claude Sonnet 4, Claude 3.5', models: [{ id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4' }, { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet' }, { id: 'claude-3-5-haiku-20241022', name: 'Claude 3.5 Haiku' }] },
+    { id: 'gemini', name: 'Google Gemini', icon: '✨', color: '#4285f4', hasBaseUrl: false, description: 'Gemini 2.0 Flash, Gemini 1.5 Pro', models: [{ id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash' }, { id: 'gemini-2.0-flash-lite', name: 'Gemini 2.0 Flash Lite' }, { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro' }] },
+    { id: 'deepseek', name: 'DeepSeek', icon: '🔍', color: '#6366f1', hasBaseUrl: false, description: 'DeepSeek Chat V3, Reasoner R1', models: [{ id: 'deepseek-chat', name: 'DeepSeek Chat (V3)' }, { id: 'deepseek-reasoner', name: 'DeepSeek Reasoner (R1)' }] },
+    { id: 'groq', name: 'Groq', icon: '⚡', color: '#f59e0b', hasBaseUrl: false, description: 'Llama 3.3 70B, Mixtral 8x7B', models: [{ id: 'groq:llama-3.3-70b-versatile', name: 'Llama 3.3 70B' }, { id: 'groq:llama-3.1-8b-instant', name: 'Llama 3.1 8B' }, { id: 'groq:mixtral-8x7b-32768', name: 'Mixtral 8x7B' }] },
+    { id: 'openrouter', name: 'OpenRouter', icon: '🔀', color: '#8b5cf6', hasBaseUrl: false, description: 'Acesso a 200+ modelos', models: [{ id: 'openrouter:auto', name: 'Auto' }, { id: 'openrouter:google/gemini-2.0-flash-exp:free', name: 'Gemini Flash (Grátis)' }, { id: 'openrouter:meta-llama/llama-3.3-70b-instruct', name: 'Llama 3.3 70B' }, { id: 'openrouter:deepseek/deepseek-r1', name: 'DeepSeek R1' }] },
+    { id: 'mistral', name: 'Mistral AI', icon: '🌀', color: '#06b6d4', hasBaseUrl: false, description: 'Mistral Large, Codestral', models: [{ id: 'mistral-large-latest', name: 'Mistral Large' }, { id: 'mistral-small-latest', name: 'Mistral Small' }, { id: 'codestral-latest', name: 'Codestral' }] },
+    { id: 'azure', name: 'Azure OpenAI', icon: '☁️', color: '#0078d4', hasBaseUrl: true, baseUrlLabel: 'Endpoint Azure', baseUrlPlaceholder: 'https://meu-recurso.openai.azure.com', description: 'GPT-4o via Microsoft Azure', models: [{ id: 'azure:gpt-4o', name: 'GPT-4o' }, { id: 'azure:gpt-4o-mini', name: 'GPT-4o Mini' }, { id: 'azure:gpt-4', name: 'GPT-4' }, { id: 'azure:gpt-35-turbo', name: 'GPT-3.5 Turbo' }] },
+    { id: 'together', name: 'Together AI', icon: '🤝', color: '#ec4899', hasBaseUrl: false, description: 'Llama, Mixtral, DeepSeek open-source', models: [{ id: 'together:meta-llama/Llama-3.3-70B-Instruct-Turbo', name: 'Llama 3.3 70B Turbo' }, { id: 'together:meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo', name: 'Llama 3.1 8B Turbo' }, { id: 'together:mistralai/Mixtral-8x7B-Instruct-v0.1', name: 'Mixtral 8x7B' }, { id: 'together:deepseek-ai/DeepSeek-V3', name: 'DeepSeek V3' }] },
+    { id: 'lmstudio', name: 'LM Studio / LocalAI', icon: '💻', color: '#64748b', hasBaseUrl: true, baseUrlLabel: 'URL do servidor local', baseUrlPlaceholder: 'http://localhost:1234/v1', description: 'Modelos locais via LM Studio', customModelInput: true },
+    { id: 'perplexity', name: 'Perplexity AI', icon: '🔎', color: '#14b8a6', hasBaseUrl: false, description: 'Sonar (busca online em tempo real)', models: [{ id: 'perplexity:llama-3.1-sonar-huge-128k-online', name: 'Sonar Huge' }, { id: 'perplexity:llama-3.1-sonar-large-128k-online', name: 'Sonar Large' }, { id: 'perplexity:llama-3.1-sonar-small-128k-online', name: 'Sonar Small' }] },
+    { id: 'xai', name: 'xAI Grok', icon: '🚀', color: '#1d1d1d', color2: '#e2e8f0', hasBaseUrl: false, description: 'Grok 2, Grok 2 Vision', models: [{ id: 'xai:grok-2-latest', name: 'Grok 2' }, { id: 'xai:grok-2-vision-latest', name: 'Grok 2 Vision' }, { id: 'xai:grok-beta', name: 'Grok Beta' }] },
+    { id: 'cohere', name: 'Cohere', icon: '🌐', color: '#0ea5e9', hasBaseUrl: false, description: 'Command R+ com RAG nativo', models: [{ id: 'cohere:command-r-plus', name: 'Command R+ (Poderoso)' }, { id: 'cohere:command-r', name: 'Command R' }, { id: 'cohere:command-light', name: 'Command Light' }] },
+    { id: 'huggingface', name: 'HuggingFace', icon: '🤗', color: '#fbbf24', hasBaseUrl: false, description: 'Llama, Mistral, Phi-3 open-source', models: [{ id: 'huggingface:meta-llama/Meta-Llama-3-8B-Instruct', name: 'Llama 3 8B' }, { id: 'huggingface:mistralai/Mistral-7B-Instruct-v0.3', name: 'Mistral 7B' }, { id: 'huggingface:microsoft/Phi-3-mini-4k-instruct', name: 'Phi-3 Mini' }] },
+    { id: 'ollama', name: 'Ollama (Local)', icon: '🦙', color: '#84cc16', hasBaseUrl: true, baseUrlLabel: 'URL do Ollama', baseUrlPlaceholder: 'http://localhost:11434/v1', description: 'Rode modelos LLM localmente', noApiKey: true, customModelInput: true },
+    { id: 'anythingllm', name: 'AnythingLLM', icon: '📦', color: '#3b82f6', hasBaseUrl: true, baseUrlLabel: 'URL do AnythingLLM', baseUrlPlaceholder: 'http://localhost:3001/api/v1', description: 'IA full-stack via AnythingLLM Desktop/Docker', customModelInput: true },
 ] as const;
 
 const EMBEDDING_PROVIDERS = [
@@ -114,6 +114,9 @@ function ProviderCard({ meta, config, onSave, onDelete }: ProviderCardProps) {
 
     const isLLM = LLM_PROVIDERS.some(p => p.id === meta.id);
     const isEmbed = EMBEDDING_PROVIDERS.some(p => p.id === meta.id);
+
+    // Auxiliar para ver os modelos (só entra em ação nos LLMs com enum disponível)
+    const predefinedModels = (meta as any).models || [];
 
     return (
         <div className={`rounded-2xl border transition-all duration-200 overflow-hidden ${isConfigured
@@ -211,36 +214,58 @@ function ProviderCard({ meta, config, onSave, onDelete }: ProviderCardProps) {
                                 </div>
                             )}
 
-                            {/* Campo de Modelo Customizado p/ AnythingLLM, Ollama, LMStudio (locais/self-hosted) */}
-                            {['anythingllm', 'ollama', 'lmstudio'].includes(meta.id) && (
+                            {/* Controle do Modelo Preferido: Combos Dropdowns (OpenAI, DeepSeek, etc) OU Customizados (AnythingLLM, etc) */}
+                            {isLLM && (
                                 <div>
-                                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-1.5">
-                                        {meta.id === 'anythingllm'
-                                            ? <>Workspace/Modelo do AnythingLLM <span className="text-primary normal-case tracking-normal font-semibold">(ex: my-workspace, llama-3)</span></>
-                                            : meta.id === 'ollama'
-                                                ? <>Modelo Ollama <span className="text-primary normal-case tracking-normal font-semibold">(ex: llama3, deepseek-r1, mistral)</span></>
-                                                : <>Modelo LM Studio <span className="text-primary normal-case tracking-normal font-semibold">(ex: deepseek-r1-distill-qwen-7b)</span></>
+                                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-1.5 mt-2">
+                                        {(meta as any).customModelInput
+                                            ? meta.id === 'anythingllm'
+                                                ? <>Workspace/Modelo do AnythingLLM <span className="text-primary normal-case tracking-normal font-semibold">(ex: my-workspace, llama-3)</span></>
+                                                : meta.id === 'ollama'
+                                                    ? <>Modelo Ollama <span className="text-primary normal-case tracking-normal font-semibold">(ex: llama3, deepseek-r1, mistral)</span></>
+                                                    : <>Modelo LM Studio <span className="text-primary normal-case tracking-normal font-semibold">(ex: deepseek-r1-distill-qwen-7b)</span></>
+                                            : <>Modelo Preferencial <span className="text-primary normal-case tracking-normal font-semibold">(Este será o modelo oferecido no painel de Agentes de IA)</span></>
                                         }
                                     </label>
                                     <div className="relative">
                                         <Sparkles size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-primary shadow-sm" />
-                                        <input
-                                            type="text"
-                                            value={customModel}
-                                            onChange={e => setCustomModel(e.target.value)}
-                                            placeholder={
-                                                meta.id === 'anythingllm' ? 'workspace-slug ou nome do modelo'
-                                                    : meta.id === 'ollama' ? 'llama3:latest, mistral, deepseek-r1...'
-                                                        : 'nome-do-modelo-carregado'
-                                            }
-                                            className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:outline-none focus:border-primary transition-colors"
-                                        />
+                                        {(meta as any).customModelInput ? (
+                                            <input
+                                                type="text"
+                                                value={customModel}
+                                                onChange={e => setCustomModel(e.target.value)}
+                                                placeholder={
+                                                    meta.id === 'anythingllm' ? 'workspace-slug ou nome do modelo'
+                                                        : meta.id === 'ollama' ? 'llama3:latest, mistral, deepseek-r1...'
+                                                            : 'nome-do-modelo-carregado'
+                                                }
+                                                className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:outline-none focus:border-primary transition-colors"
+                                            />
+                                        ) : (
+                                            <select
+                                                value={customModel} // Usamos o customModel para armazenar a escolha no mesmo extraConfig.model
+                                                onChange={e => setCustomModel(e.target.value)}
+                                                className="w-full pl-9 pr-8 py-2.5 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 text-sm font-semibold outline-none transition-all text-slate-900 dark:text-white appearance-none focus:ring-4 focus:ring-primary/10"
+                                            >
+                                                <option value="" className="text-slate-400 bg-white dark:bg-slate-900">Selecionar Modelo (Obrigatório)...</option>
+                                                {predefinedModels.map((m: any) => (
+                                                    <option key={m.id} value={m.name} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+                                                        {m.name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        )}
                                     </div>
-                                    <p className="text-[10px] text-slate-400 mt-1.5">
+                                    <p className="text-[10px] text-slate-400 mt-1.5 flex items-center justify-between">
                                         {meta.id === 'anythingllm'
                                             ? 'O modelo configurado aqui será usado como padrão para agentes que usam este provider.'
-                                            : 'Certifique-se que o modelo está baixado/disponível no servidor local.'
+                                            : (meta as any).customModelInput
+                                                ? 'Certifique-se que o modelo está baixado/disponível no servidor local.'
+                                                : <span className="text-primary italic">Atenção: O modelo escolhido define as restrições da IA no Agente.</span>
                                         }
+                                        {!customModel && !(meta as any).customModelInput && (
+                                            <span className="text-red-500 uppercase tracking-widest font-black text-[9px]">*Selecione um Modelo*</span>
+                                        )}
                                     </p>
                                 </div>
                             )}
@@ -249,7 +274,7 @@ function ProviderCard({ meta, config, onSave, onDelete }: ProviderCardProps) {
                             <div className="flex gap-2 pt-1">
                                 <button
                                     onClick={handleSave}
-                                    disabled={saving || (!noApiKey && !apiKey && !isConfigured)}
+                                    disabled={saving || (!noApiKey && !apiKey && !isConfigured) || (isLLM && !customModel)}
                                     className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-white text-[11px] font-black uppercase tracking-widest hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                                 >
                                     <Save size={13} />

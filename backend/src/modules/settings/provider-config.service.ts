@@ -85,6 +85,9 @@ export class ProviderConfigService {
                 update: payload,
             });
 
+            // Inválida quaisquer pipelines que precisem ser re-avaliados com os novos settings
+            this.logger.log(`Upsert do provider ${provider} completo. O modelo selecionado foi atualizado no banco.`);
+
             return this.maskConfig(config);
         } catch (error) {
             this.logger.error(`Erro no upsert do provider ${provider} para empresa ${companyId}: ${error.message}`, error.stack);
@@ -114,14 +117,19 @@ export class ProviderConfigService {
         const result = new Map<string, ProviderConfigDecrypted>();
 
         for (const c of configs) {
-            result.set(c.provider, {
-                provider: c.provider,
-                category: c.category,
-                apiKey: c.apiKey ? this.crypto.decrypt(c.apiKey) : null,
-                baseUrl: c.baseUrl || null,
-                extraConfig: c.extraConfig || null,
-                isEnabled: c.isEnabled,
-            });
+            try {
+                result.set(c.provider, {
+                    provider: c.provider,
+                    category: c.category,
+                    apiKey: c.apiKey ? this.crypto.decrypt(c.apiKey) : null,
+                    baseUrl: c.baseUrl || null,
+                    extraConfig: c.extraConfig || null,
+                    isEnabled: c.isEnabled,
+                });
+            } catch (error) {
+                this.logger.error(`Erro ao descriptografar provider ${c.provider} para empresa ${companyId}: ${error.message}`);
+                // Pula este provider problemático mas continua carregando os outros
+            }
         }
 
         return result;
@@ -145,53 +153,61 @@ export class ProviderConfigService {
                 const config = companyConfigs.get(p.id);
                 const models = [...p.models];
 
-                // Se houver um modelo customizado no extraConfig, adiciona-o como primeira opção
+                // Se houver um modelo customizado no extraConfig, filtra/adiciona ele como a ÚNICA/primeira opção
                 if (config?.extraConfig?.model) {
                     const customModelId = `${p.id}:${config.extraConfig.model}`;
-                    // Remove duplicatas se o modelo padrão tiver o mesmo nome
-                    const filteredModels = models.filter(m => m.id !== customModelId);
-                    filteredModels.unshift({
-                        id: customModelId,
-                        name: `${config.extraConfig.model} (Customizado)`,
-                        contextWindow: 128000 // Aumento default para customizados
-                    });
 
-                    return {
-                        provider: p.id,
-                        providerName: p.name,
-                        models: filteredModels.map(m => ({
-                            ...m,
-                            multimodal: MULTIMODAL_MODELS.includes(m.id.split(':').pop() || m.id),
-                        })),
-                    };
-                }
+                    // Queremos expor APENAS o modelo selecionado para este provedor (se o user configurou no menu settings)
+                    // Mas se o modelo configurado já existia na base do factory, nós o mantemos; se não, nós injetamos.
+                    const existingModel = models.find(m => m.id === customModelId || m.name === config.extraConfig.model);
+
+                }];
+
+                this.logger.log(`Empresa ${companyId}: Filtrando modelos para ${p.id} -> [${filteredModels.map(m => m.name).join(', ')}]`);
 
                 return {
                     provider: p.id,
                     providerName: p.name,
-                    models: models.map(m => ({
+                    models: filteredModels.map(m => ({
                         ...m,
                         multimodal: MULTIMODAL_MODELS.includes(m.id.split(':').pop() || m.id),
                     })),
                 };
-            });
-    }
+            }
+
+                this.logger.debug(`Empresa ${companyId}: Sem modelo específico para ${p.id}, retornando todos do factory.`);
+
+        return {
+            provider: p.id,
+            providerName: p.name,
+            models: models.map(m => ({
+                ...m,
+                multimodal: MULTIMODAL_MODELS.includes(m.id.split(':').pop() || m.id),
+            })),
+        };
+    });
+}
 
     /** Retorna providers de embedding disponíveis para uma empresa (DB + env vars) */
-    async getAvailableEmbeddingProviders(companyId: string, configService: any): Promise<{
-        id: string;
-        name: string;
-        models: { id: string; name: string; dimensions: number }[];
-    }[]> {
-        const companyConfigs = await this.getDecryptedForCompany(companyId);
+    async getAvailableEmbeddingProviders(companyId: string, configService: any): Promise < {
+    id: string;
+    name: string;
+    models: { id: string; name: string; dimensions: number }[];
+}[] > {
+    const companyConfigs = await this.getDecryptedForCompany(companyId);
 
-        return EMBEDDING_PROVIDERS
-            .filter(p => {
-                if (p.id === 'native') return true; // Sempre disponível
+    return EMBEDDING_PROVIDERS
+        .filter(p => {
+            if (p.id === 'native') return true; // Sempre disponível
+            try {
                 const config = companyConfigs.get(p.id);
                 return config && config.isEnabled;
-            })
-            .map(p => {
+            } catch {
+                return false;
+            }
+        })
+        .map(p => {
+            try {
                 const config = companyConfigs.get(p.id);
                 const models = [...p.models];
 
@@ -208,31 +224,37 @@ export class ProviderConfigService {
                 }
 
                 return { id: p.id, name: p.name, models };
-            });
-    }
+            } catch (error) {
+                this.logger.error(`Erro ao processar provider de embedding ${p.id}: ${error.message}`);
+                if (p.id === 'native') return { id: p.id, name: p.name, models: p.models };
+                return null;
+            }
+        })
+        .filter(p => p !== null) as any;
+}
 
     /** Mascara a API key para exibição segura */
     private maskConfig(config: any): ProviderConfigPublic {
-        return {
-            id: config.id,
-            provider: config.provider,
-            category: config.category,
-            apiKey: config.apiKey ? this.crypto.mask(config.apiKey) : null,
-            baseUrl: config.baseUrl,
-            extraConfig: config.extraConfig,
-            isEnabled: config.isEnabled,
-            createdAt: config.createdAt,
-            updatedAt: config.updatedAt,
-        };
-    }
+    return {
+        id: config.id,
+        provider: config.provider,
+        category: config.category,
+        apiKey: config.apiKey ? this.crypto.mask(config.apiKey) : null,
+        baseUrl: config.baseUrl,
+        extraConfig: config.extraConfig,
+        isEnabled: config.isEnabled,
+        createdAt: config.createdAt,
+        updatedAt: config.updatedAt,
+    };
+}
 
     /** Detecta a categoria do provider baseado no registry */
     private detectCategory(provider: string): string {
-        const isLLM = LLM_PROVIDERS.some(p => p.id === provider);
-        const isEmbedding = EMBEDDING_PROVIDERS.some(p => p.id === provider);
+    const isLLM = LLM_PROVIDERS.some(p => p.id === provider);
+    const isEmbedding = EMBEDDING_PROVIDERS.some(p => p.id === provider);
 
-        if (isLLM && isEmbedding) return 'both';
-        if (isEmbedding) return 'embedding';
-        return 'llm';
-    }
+    if (isLLM && isEmbedding) return 'both';
+    if (isEmbedding) return 'embedding';
+    return 'llm';
+}
 }

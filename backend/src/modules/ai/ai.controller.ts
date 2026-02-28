@@ -93,14 +93,32 @@ export class AIController {
 
     @Get('models')
     @ApiOperation({ summary: 'Listar modelos de IA disponíveis por provider (filtra por configurações da empresa)' })
-    getModels(@Req() req: any) {
-        return this.providerConfigService.getAvailableLLMProviders(req.user.companyId, this.configService);
+    async getModels(@Req() req: any) {
+        try {
+            const models = await this.providerConfigService.getAvailableLLMProviders(req.user.companyId, this.configService);
+            if (!models || models.length === 0) {
+                Logger.warn(`Nenhum provider LLM encontrado/disponível para a empresa ${req.user.companyId}`, 'AIController');
+            }
+            return models;
+        } catch (error) {
+            Logger.error(`Erro ao buscar modelos LLM para empresa ${req.user.companyId}: ${error.message}`, error.stack, 'AIController');
+            throw error;
+        }
     }
 
     @Get('embedding-providers')
     @ApiOperation({ summary: 'Listar providers de embedding disponíveis (filtra por configurações da empresa)' })
-    getEmbeddingProviders(@Req() req: any) {
-        return this.providerConfigService.getAvailableEmbeddingProviders(req.user.companyId, this.configService);
+    async getEmbeddingProviders(@Req() req: any) {
+        try {
+            const providers = await this.providerConfigService.getAvailableEmbeddingProviders(req.user.companyId, this.configService);
+            if (!providers || providers.length === 0) {
+                Logger.warn(`Nenhum provider de embedding encontrado/disponível para a empresa ${req.user.companyId}`, 'AIController');
+            }
+            return providers;
+        } catch (error) {
+            Logger.error(`Erro ao buscar providers de embedding para empresa ${req.user.companyId}: ${error.message}`, error.stack, 'AIController');
+            throw error;
+        }
     }
 
     @Get('usage')

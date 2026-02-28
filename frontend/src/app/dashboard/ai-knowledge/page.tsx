@@ -96,7 +96,18 @@ export default function AIKnowledgePage() {
             setLoading(true);
             const [data, embProviders] = await Promise.all([
                 AIKnowledgeService.findAllBases(),
-                AIAgentsService.getEmbeddingProviders().catch(() => []),
+                AIAgentsService.getEmbeddingProviders().catch((e) => {
+                    console.error('Falha ao buscar Embedding Providers na Knowledge Page:', e);
+                    // Fallback de segurança para garantir que o "Nativo" esteja sempre disponível no UI
+                    return [{
+                        id: 'native',
+                        name: 'Nativo (built-in CPU)',
+                        models: [
+                            { id: 'Xenova/all-MiniLM-L6-v2', name: 'all-MiniLM-L6-v2 (Padrão)', dimensions: 384 },
+                            { id: 'Xenova/bge-micro-v2', name: 'bge-micro-v2 (Rápido)', dimensions: 384 }
+                        ]
+                    }];
+                }),
             ]);
             setBases(data);
             setEmbeddingProviders(embProviders);
