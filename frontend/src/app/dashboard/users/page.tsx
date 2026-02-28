@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     Users, UserPlus, Mail, Shield, Building2, Edit2, Trash2, Key,
     X, Save, Search, RefreshCcw, ShieldCheck, Eye, EyeOff, Check,
-    PowerOff, Power, ChevronDown, Filter, Copy, AlertTriangle,
+    PowerOff, Power, ChevronDown, ChevronLeft, Filter, Copy, AlertTriangle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
@@ -109,8 +109,29 @@ export default function UsersPage() {
     const openCreate = () => { setEditingUser(null); setShowDrawer(true); };
     const openEdit = (user: User) => { setEditingUser(user); setShowDrawer(true); };
 
+    if (showDrawer) {
+        return (
+            <div className="space-y-10 max-w-7xl mx-auto relative pb-12 liquid-glass aurora min-h-[calc(100dvh-6rem)] md:min-h-[calc(100vh-8rem)] pt-6">
+                <UserDrawer
+                    user={editingUser}
+                    roles={roles}
+                    departments={departments}
+                    onClose={() => setShowDrawer(false)}
+                    onSave={(updated) => {
+                        if (editingUser) {
+                            setUsers(prev => prev.map(u => u.id === updated.id ? updated : u));
+                        } else {
+                            setUsers(prev => [...prev, updated]);
+                        }
+                        setShowDrawer(false);
+                    }}
+                />
+            </div>
+        );
+    }
+
     return (
-        <div className="space-y-10 max-w-7xl mx-auto relative pb-12 liquid-glass aurora min-h-0 md:min-h-[calc(100vh-8rem)]">
+        <div className="space-y-10 max-w-7xl mx-auto relative pb-12 liquid-glass aurora min-h-[calc(100dvh-6rem)] md:min-h-[calc(100vh-8rem)]">
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 px-4">
                 <div>
@@ -326,24 +347,6 @@ export default function UsersPage() {
             )}
 
             {/* Drawer de criação/edição */}
-            <AnimatePresence>
-                {showDrawer && (
-                    <UserDrawer
-                        user={editingUser}
-                        roles={roles}
-                        departments={departments}
-                        onClose={() => setShowDrawer(false)}
-                        onSave={(updated) => {
-                            if (editingUser) {
-                                setUsers(prev => prev.map(u => u.id === updated.id ? updated : u));
-                            } else {
-                                setUsers(prev => [...prev, updated]);
-                            }
-                            setShowDrawer(false);
-                        }}
-                    />
-                )}
-            </AnimatePresence>
         </div>
     );
 }
@@ -428,53 +431,64 @@ function UserDrawer({ user, roles, departments, onClose, onSave }: DrawerProps) 
     };
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-end">
-            <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={onClose}
-                className="absolute inset-0 bg-slate-950/20 backdrop-blur-sm"
-            />
-            <motion.div
-                initial={{ x: '100%' }}
-                animate={{ x: 0 }}
-                exit={{ x: '100%' }}
-                transition={{ type: 'spring', damping: 26, stiffness: 220 }}
-                className="relative w-full max-w-lg h-full bg-white dark:bg-slate-900 shadow-[-20px_0_80px_rgba(0,0,0,0.12)] overflow-y-auto border-l border-slate-200 dark:border-white/10 flex flex-col"
-            >
-                {/* Header */}
-                <div className="p-8 border-b border-slate-100 dark:border-white/5 flex items-center justify-between sticky top-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl z-10">
-                    <div>
-                        <h3 className="text-2xl font-black text-slate-900 dark:text-white tracking-tighter italic">
-                            {isNew ? 'Recrutar' : 'Editar'} <span className="text-primary">Agente</span>
-                        </h3>
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">
-                            {isNew ? 'Novo acesso ao sistema' : `Editando: ${user.name}`}
-                        </p>
-                    </div>
-                    <button onClick={onClose} className="p-2 hover:bg-slate-100 dark:hover:bg-white/5 rounded-xl transition-all">
-                        <X size={20} className="text-slate-400" />
+        <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="w-full max-w-4xl mx-auto liquid-glass rounded-[2rem] md:rounded-[3rem] p-6 md:p-10 border border-white/10 shadow-2xl"
+        >
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 border-b border-white/10 pb-6">
+                <div>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="flex items-center gap-2 text-slate-500 hover:text-primary transition-colors text-xs font-black uppercase tracking-widest mb-2"
+                    >
+                        <ChevronLeft size={16} /> Voltar para Lista
+                    </button>
+                    <h3 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white tracking-tighter italic">
+                        {isNew ? 'Recrutar' : 'Editar'} <span className="text-primary">Agente</span>
+                    </h3>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">
+                        {isNew ? 'Novo acesso ao sistema' : `Editando: ${user?.name}`}
+                    </p>
+                </div>
+                <div className="flex gap-3">
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="px-6 py-3 border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400 font-black text-[10px] uppercase tracking-[0.2em] rounded-2xl hover:bg-slate-100 dark:hover:bg-white/5 transition-all"
+                    >
+                        Cancelar
+                    </button>
+                    <button
+                        onClick={handleSubmit}
+                        disabled={submitting}
+                        className="flex-1 md:flex-none px-8 py-3 bg-primary text-white font-black text-[10px] uppercase tracking-[0.2em] rounded-2xl shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+                    >
+                        {submitting ? <RefreshCcw className="animate-spin w-4 h-4" /> : <Save className="w-4 h-4" />}
+                        {isNew ? 'Confirmar Alistamento' : 'Salvar Alterações'}
                     </button>
                 </div>
+            </div>
 
-                {/* Form */}
-                <form onSubmit={handleSubmit} className="p-8 space-y-6 flex-1">
+            <form onSubmit={handleSubmit} className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* Nome */}
                     <div className="space-y-2">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nome completo</label>
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 block">Nome completo <span className="text-red-500">*</span></label>
                         <input
                             required
                             value={form.name}
                             onChange={e => setForm({ ...form, name: e.target.value })}
-                            className="w-full px-5 py-3.5 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 outline-none focus:ring-2 focus:ring-primary/20 text-sm font-semibold dark:text-white transition-all"
+                            className="w-full px-5 py-4 rounded-2xl border border-slate-200 dark:border-white/10 bg-white/50 dark:bg-black/20 outline-none focus:ring-2 focus:ring-primary/50 text-sm font-bold dark:text-white transition-all"
                             placeholder="Ex: João da Silva"
                         />
                     </div>
 
                     {/* Email */}
                     <div className="space-y-2">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Email</label>
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 block">Email <span className="text-red-500">*</span></label>
                         <div className="relative">
                             <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                             <input
@@ -482,7 +496,7 @@ function UserDrawer({ user, roles, departments, onClose, onSave }: DrawerProps) 
                                 type="email"
                                 value={form.email}
                                 onChange={e => setForm({ ...form, email: e.target.value })}
-                                className="w-full pl-12 pr-5 py-3.5 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 outline-none focus:ring-2 focus:ring-primary/20 text-sm font-semibold dark:text-white transition-all"
+                                className="w-full pl-12 pr-5 py-4 rounded-2xl border border-slate-200 dark:border-white/10 bg-white/50 dark:bg-black/20 outline-none focus:ring-2 focus:ring-primary/50 text-sm font-bold dark:text-white transition-all"
                                 placeholder="agente@empresa.com"
                             />
                         </div>
@@ -490,8 +504,8 @@ function UserDrawer({ user, roles, departments, onClose, onSave }: DrawerProps) 
 
                     {/* Senha */}
                     <div className="space-y-2">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
-                            {isNew ? 'Senha' : 'Nova senha (deixe em branco para não alterar)'}
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 block">
+                            {isNew ? 'Senha *' : 'Nova senha (deixe em branco para manter)'}
                         </label>
                         <div className="relative">
                             <Key className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
@@ -501,7 +515,7 @@ function UserDrawer({ user, roles, departments, onClose, onSave }: DrawerProps) 
                                 value={form.password}
                                 onChange={e => setForm({ ...form, password: e.target.value })}
                                 minLength={6}
-                                className="w-full pl-12 pr-12 py-3.5 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 outline-none focus:ring-2 focus:ring-primary/20 text-sm font-semibold dark:text-white transition-all"
+                                className="w-full pl-12 pr-12 py-4 rounded-2xl border border-slate-200 dark:border-white/10 bg-white/50 dark:bg-black/20 outline-none focus:ring-2 focus:ring-primary/50 text-sm font-bold dark:text-white transition-all"
                                 placeholder="Mínimo 6 caracteres"
                             />
                             <button type="button" onClick={() => setShowPassword(!showPassword)}
@@ -514,7 +528,7 @@ function UserDrawer({ user, roles, departments, onClose, onSave }: DrawerProps) 
                     {/* Confirmar senha */}
                     {(isNew || form.password) && (
                         <div className="space-y-2">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Confirmar senha</label>
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 block">Confirmar senha <span className="text-red-500">*</span></label>
                             <div className="relative">
                                 <Key className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                                 <input
@@ -522,9 +536,9 @@ function UserDrawer({ user, roles, departments, onClose, onSave }: DrawerProps) 
                                     type={showConfirm ? 'text' : 'password'}
                                     value={form.passwordConfirm}
                                     onChange={e => setForm({ ...form, passwordConfirm: e.target.value })}
-                                    className={`w-full pl-12 pr-12 py-3.5 rounded-2xl border bg-slate-50 dark:bg-white/5 outline-none focus:ring-2 text-sm font-semibold dark:text-white transition-all ${form.passwordConfirm && form.password !== form.passwordConfirm
+                                    className={`w-full pl-12 pr-12 py-4 rounded-2xl border bg-white/50 dark:bg-black/20 outline-none focus:ring-2 text-sm font-bold dark:text-white transition-all ${form.passwordConfirm && form.password !== form.passwordConfirm
                                         ? 'border-rose-400 focus:ring-rose-300'
-                                        : 'border-slate-200 dark:border-white/10 focus:ring-primary/20'
+                                        : 'border-slate-200 dark:border-white/10 focus:ring-primary/50'
                                         }`}
                                     placeholder="Repita a senha"
                                 />
@@ -538,21 +552,23 @@ function UserDrawer({ user, roles, departments, onClose, onSave }: DrawerProps) 
                             </div>
                         </div>
                     )}
+                </div>
 
+                <div className="border-t border-slate-200 dark:border-white/5 my-6 pt-6 grid grid-cols-1 md:grid-cols-2 gap-8">
                     {/* Role */}
-                    <div className="space-y-2">
+                    <div className="space-y-3">
                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2">
                             <Shield size={11} className="text-primary" /> Patente / Role
                         </label>
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             {roles.map(r => (
                                 <button
                                     key={r.id}
                                     type="button"
                                     onClick={() => setForm({ ...form, roleId: r.id })}
-                                    className={`p-3 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all text-left ${form.roleId === r.id
-                                        ? 'bg-primary border-primary text-white shadow-md'
-                                        : 'bg-white dark:bg-white/5 border-slate-200 dark:border-white/10 text-slate-500 hover:border-primary/40'
+                                    className={`p-4 rounded-[1rem] border text-xs font-black uppercase tracking-widest transition-all text-left shadow-sm ${form.roleId === r.id
+                                        ? 'bg-primary border-primary text-white shadow-primary/20 scale-[1.02]'
+                                        : 'bg-white/50 dark:bg-white/5 border-slate-200 dark:border-white/10 text-slate-500 hover:border-primary/40'
                                         }`}
                                 >
                                     {r.name}
@@ -563,7 +579,7 @@ function UserDrawer({ user, roles, departments, onClose, onSave }: DrawerProps) 
 
                     {/* Departamentos (multi-select) */}
                     {departments.length > 0 && (
-                        <div className="space-y-2">
+                        <div className="space-y-3">
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2">
                                 <Building2 size={11} className="text-primary" /> Departamentos
                                 <span className="text-slate-300 normal-case font-normal">(múltiplos)</span>
@@ -576,12 +592,12 @@ function UserDrawer({ user, roles, departments, onClose, onSave }: DrawerProps) 
                                             key={d.id}
                                             type="button"
                                             onClick={() => toggleDept(d.id)}
-                                            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-[10px] font-bold transition-all ${selected
-                                                ? 'bg-primary/10 border-primary/30 text-primary'
-                                                : 'bg-white dark:bg-white/5 border-slate-200 dark:border-white/10 text-slate-500 hover:border-primary/20'
+                                            className={`flex items-center gap-2 px-4 py-3 rounded-[1rem] border text-[11px] font-bold transition-all shadow-sm ${selected
+                                                ? 'bg-primary/10 border-primary/30 text-primary scale-[1.02]'
+                                                : 'bg-white/50 dark:bg-white/5 border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:border-primary/20'
                                                 }`}
                                         >
-                                            {selected && <Check size={10} className="text-primary" />}
+                                            {selected && <Check size={12} className="text-primary" />}
                                             {d.emoji && <span>{d.emoji}</span>}
                                             {d.name}
                                         </button>
@@ -590,51 +606,30 @@ function UserDrawer({ user, roles, departments, onClose, onSave }: DrawerProps) 
                             </div>
                         </div>
                     )}
+                </div>
 
-                    {/* Status */}
-                    <label className="flex items-center gap-4 p-4 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-100 dark:border-white/5 cursor-pointer hover:bg-primary/5 transition-all">
+                {/* Status */}
+                <div className="border-t border-slate-200 dark:border-white/5 pt-6 flex items-center justify-between">
+                    <label className="flex items-center gap-4 cursor-pointer group">
                         <div className="relative">
                             <input
                                 type="checkbox"
                                 checked={form.isActive}
                                 onChange={e => setForm({ ...form, isActive: e.target.checked })}
-                                className="w-5 h-5 rounded-md border-slate-300 text-primary focus:ring-0 cursor-pointer accent-primary"
+                                className="w-5 h-5 md:w-6 md:h-6 rounded-md border-slate-300 text-primary focus:ring-0 cursor-pointer accent-primary"
                             />
                         </div>
                         <div>
-                            <span className="text-[10px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-widest block">
+                            <span className="text-xs font-black text-slate-700 dark:text-slate-300 uppercase tracking-widest block transition-colors group-hover:text-primary">
                                 Agente ativo no sistema
                             </span>
-                            <span className="text-[9px] font-medium text-slate-400 block mt-0.5">
-                                Usuários inativos não conseguem fazer login
+                            <span className="text-[10px] font-medium text-slate-400 block mt-0.5">
+                                Usuários inativos não conseguem fazer login nem operar o KSZap
                             </span>
                         </div>
                     </label>
-                </form>
-
-                {/* Footer */}
-                <div className="p-8 pt-0 flex gap-3">
-                    <button
-                        type="button"
-                        onClick={onClose}
-                        className="px-6 py-3.5 rounded-2xl border border-slate-200 dark:border-white/10 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:bg-rose-500/5 hover:text-rose-500 active:scale-95 transition-all"
-                    >
-                        Cancelar
-                    </button>
-                    <button
-                        onClick={handleSubmit as any}
-                        disabled={submitting}
-                        className="flex-1 py-3.5 rounded-2xl bg-primary text-white font-black text-[10px] uppercase tracking-[0.2em] shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
-                    >
-                        {submitting ? <RefreshCcw className="animate-spin h-4 w-4" /> : (
-                            <>
-                                <Save size={14} />
-                                {isNew ? 'Confirmar Alistamento' : 'Salvar Alterações'}
-                            </>
-                        )}
-                    </button>
                 </div>
-            </motion.div>
-        </div>
+            </form>
+        </motion.div>
     );
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Mic, Square, Trash2, Send, Play, Pause } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
@@ -17,31 +17,122 @@ export function AudioRecorder({ onSend, onCancel }: AudioRecorderProps) {
     const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
     const [isPlaying, setIsPlaying] = useState(false);
 
+    // Playback state
+    const [playbackTime, setPlaybackTime] = useState(0);
+    const [playbackDuration, setPlaybackDuration] = useState(0);
+
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const timerRef = useRef<NodeJS.Timeout | null>(null);
     const audioRef = useRef<HTMLAudioElement | null>(null);
 
+    // Waveform visualization refs
+    const canvasRef = useRef<HTMLCanvasElement | null>(null);
+    const audioContextRef = useRef<AudioContext | null>(null);
+    const analyserRef = useRef<AnalyserNode | null>(null);
+    const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+    const animationFrameRef = useRef<number | null>(null);
+
+    const formatTime = (seconds: number) => {
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${mins}:${secs.toString().padStart(2, '0')}`;
+    };
+
+    const drawWaveform = useCallback(() => {
+        if (!canvasRef.current || !analyserRef.current) return;
+
+        const canvas = canvasRef.current;
+        const canvasCtx = canvas.getContext('2d');
+        if (!canvasCtx) return;
+
+        const analyser = analyserRef.current;
+        const bufferLength = analyser.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+
+        const draw = () => {
+            if (!isRecording) return;
+            animationFrameRef.current = requestAnimationFrame(draw);
+
+            analyser.getByteFrequencyData(dataArray);
+
+            canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const barWidth = (canvas.width / bufferLength) * 2.5;
+            let barHeight;
+            let x = 0;
+
+            for (let i = 0; i < bufferLength; i++) {
+                barHeight = (dataArray[i] / 255) * canvas.height;
+
+                // Definir cor degradê
+                const grad = canvasCtx.createLinearGradient(0, canvas.height, 0, 0);
+                grad.addColorStop(0, '#3b82f6'); // blue-500
+                grad.addColorStop(1, '#8b5cf6'); // purple-500
+
+                canvasCtx.fillStyle = grad;
+
+                // Desenhar barra centralizada verticalmente
+                const y = (canvas.height - barHeight) / 2;
+
+                // Arredondar pontas simulando barras modernas
+                canvasCtx.beginPath();
+                canvasCtx.roundRect(x, y, barWidth - 1, barHeight < 2 ? 2 : barHeight, 2);
+                canvasCtx.fill();
+
+                x += barWidth + 2;
+            }
+        };
+
+        draw();
+    }, [isRecording]);
+
     const startRecording = async () => {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            const mediaRecorder = new MediaRecorder(stream);
+            const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
             mediaRecorderRef.current = mediaRecorder;
 
+            // Audio Context setup for Visualization
+            const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+            audioContextRef.current = audioCtx;
+            const analyser = audioCtx.createAnalyser();
+            analyser.fftSize = 64; // Menos barras para um visual mais limpo
+            analyserRef.current = analyser;
+            const source = audioCtx.createMediaStreamSource(stream);
+            sourceRef.current = source;
+            source.connect(analyser);
+
             const chunks: BlobPart[] = [];
-            mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
+            mediaRecorder.ondataavailable = (e) => {
+                if (e.data.size > 0) chunks.push(e.data);
+            };
+
             mediaRecorder.onstop = () => {
                 const blob = new Blob(chunks, { type: 'audio/webm' });
                 setAudioBlob(blob);
-                setPlaybackUrl(URL.createObjectURL(blob));
+                const url = URL.createObjectURL(blob);
+                setPlaybackUrl(url);
+
+                // Cleanup AudioContext on stop
+                if (audioContextRef.current?.state !== 'closed') {
+                    audioContextRef.current?.close();
+                }
+                if (animationFrameRef.current) {
+                    cancelAnimationFrame(animationFrameRef.current);
+                }
             };
 
-            mediaRecorder.start();
+            mediaRecorder.start(100); // chunk freq
             setIsRecording(true);
             setRecordingTime(0);
 
             timerRef.current = setInterval(() => {
                 setRecordingTime(prev => prev + 1);
             }, 1000);
+
+            // Iniciar animação do canvas curto atraso pra garantir ref
+            setTimeout(drawWaveform, 50);
+
         } catch (err) {
             console.error('Erro ao acessar microfone:', err);
             toast.error('Erro ao acessar o microfone. Verifique as permissões.');
@@ -55,22 +146,22 @@ export function AudioRecorder({ onSend, onCancel }: AudioRecorderProps) {
             mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
             setIsRecording(false);
             if (timerRef.current) clearInterval(timerRef.current);
+            if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
         }
-    };
-
-    const formatTime = (seconds: number) => {
-        const mins = Math.floor(seconds / 60);
-        const secs = seconds % 60;
-        return `${mins}:${secs.toString().padStart(2, '0')}`;
     };
 
     useEffect(() => {
         startRecording();
         return () => {
             if (timerRef.current) clearInterval(timerRef.current);
-            if (mediaRecorderRef.current) {
+            if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
                 mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+                mediaRecorderRef.current.stop();
             }
+            if (audioContextRef.current?.state !== 'closed') {
+                audioContextRef.current?.close();
+            }
+            if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
         };
     }, []);
 
@@ -80,63 +171,144 @@ export function AudioRecorder({ onSend, onCancel }: AudioRecorderProps) {
         }
     };
 
+    const togglePlayback = () => {
+        if (!audioRef.current) return;
+        if (isPlaying) {
+            audioRef.current.pause();
+        } else {
+            audioRef.current.play();
+        }
+        setIsPlaying(!isPlaying);
+    };
+
+    const handleTimeUpdate = () => {
+        if (audioRef.current) {
+            setPlaybackTime(audioRef.current.currentTime);
+        }
+    };
+
+    const handleLoadedMetadata = () => {
+        if (audioRef.current) {
+            if (audioRef.current.duration === Infinity) {
+                // Workaround for some browsers not getting webm duration immediately
+                audioRef.current.currentTime = 1e101;
+                audioRef.current.addEventListener('timeupdate', function getDuration() {
+                    this.removeEventListener('timeupdate', getDuration);
+                    this.currentTime = 0;
+                    setPlaybackDuration(this.duration);
+                });
+            } else {
+                setPlaybackDuration(audioRef.current.duration);
+            }
+        }
+    };
+
+    const handleEnded = () => {
+        setIsPlaying(false);
+        setPlaybackTime(0);
+        if (audioRef.current) audioRef.current.currentTime = 0;
+    };
+
+    const handleTimelineClick = (e: React.MouseEvent<HTMLDivElement>) => {
+        if (!audioRef.current || playbackDuration === 0) return;
+        const rect = e.currentTarget.getBoundingClientRect();
+        const percent = (e.clientX - rect.left) / rect.width;
+        audioRef.current.currentTime = percent * playbackDuration;
+        setPlaybackTime(audioRef.current.currentTime);
+    };
+
     return (
         <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 20 }}
-            className="flex items-center gap-4 bg-gray-50 dark:bg-white/5 p-4 rounded-3xl border border-blue-500/30 shadow-xl"
+            className="flex items-center gap-3 bg-white dark:bg-slate-800 p-2 md:p-3 rounded-2xl border border-blue-500/20 shadow-xl w-full max-w-sm ml-auto mr-auto md:mr-0 z-20"
         >
-            <div className="flex items-center gap-3 flex-1">
+            {playbackUrl && (
+                <audio
+                    ref={audioRef}
+                    src={playbackUrl}
+                    onTimeUpdate={handleTimeUpdate}
+                    onLoadedMetadata={handleLoadedMetadata}
+                    onEnded={handleEnded}
+                    className="hidden"
+                />
+            )}
+
+            <div className="flex items-center gap-3 flex-1 overflow-hidden pl-2">
                 {isRecording ? (
                     <>
+                        {/* Status de Gravação Ativo */}
                         <motion.div
-                            animate={{ scale: [1, 1.2, 1] }}
-                            transition={{ repeat: Infinity, duration: 1 }}
-                            className="h-3 w-3 bg-red-500 rounded-full"
+                            animate={{ opacity: [1, 0.3, 1] }}
+                            transition={{ repeat: Infinity, duration: 1.5 }}
+                            className="h-2.5 w-2.5 bg-rose-500 rounded-full flex-shrink-0 shadow-[0_0_8px_rgba(244,63,94,0.6)]"
                         />
-                        <span className="text-sm font-black mono text-red-500">{formatTime(recordingTime)}</span>
-                        <div className="flex-1 h-8 bg-gray-200 dark:bg-white/10 rounded-full overflow-hidden flex items-center px-4">
-                            <motion.div
-                                className="h-1 bg-blue-500 rounded-full"
-                                animate={{ width: ['20%', '60%', '40%', '80%', '30%'] }}
-                                transition={{ repeat: Infinity, duration: 2 }}
+                        <span className="text-sm font-black text-rose-500 tracking-widest w-12">{formatTime(recordingTime)}</span>
+
+                        {/* Visualizador Waveform Canvas */}
+                        <div className="flex-1 h-10 w-full rounded-xl overflow-hidden flex items-center justify-center bg-slate-50 dark:bg-black/20">
+                            <canvas
+                                ref={canvasRef}
+                                className="w-full h-full"
+                                width={200}
+                                height={40}
                             />
                         </div>
+
                         <button
                             onClick={stopRecording}
-                            className="p-2 bg-red-100 dark:bg-red-900/30 text-red-600 rounded-xl hover:bg-red-200 transition-all"
+                            className="h-10 w-10 bg-rose-100 hover:bg-rose-200 dark:bg-rose-500/10 dark:hover:bg-rose-500/20 text-rose-600 rounded-full flex items-center justify-center transition-all flex-shrink-0 border border-transparent hover:border-rose-200 dark:hover:border-rose-500/30"
+                            title="Parar e ouvir"
                         >
-                            <Square className="h-5 w-5 fill-current" />
+                            <Square className="h-4 w-4 fill-current" />
                         </button>
                     </>
                 ) : (
                     <>
+                        {/* Mini-player de Pré-visualização */}
                         <button
-                            onClick={() => setIsPlaying(!isPlaying)}
-                            className="p-2 bg-blue-100 dark:bg-blue-900/30 text-blue-600 rounded-xl"
+                            onClick={togglePlayback}
+                            className="h-10 w-10 bg-blue-100 hover:bg-blue-200 dark:bg-blue-500/20 dark:hover:bg-blue-500/30 text-blue-600 dark:text-blue-400 rounded-full flex items-center justify-center transition-all flex-shrink-0"
                         >
-                            {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
+                            {isPlaying ? <Pause className="h-4 w-4 fill-current" /> : <Play className="h-4 w-4 fill-current ml-0.5" />}
                         </button>
-                        <span className="text-sm font-bold text-gray-500">Áudio Gravado</span>
-                        <div className="flex-1" />
+
+                        <div className="flex-1 flex flex-col justify-center px-1">
+                            <div
+                                className="h-1.5 w-full bg-slate-200 dark:bg-slate-700/50 rounded-full overflow-hidden cursor-pointer relative"
+                                onClick={handleTimelineClick}
+                            >
+                                <motion.div
+                                    className="absolute top-0 left-0 h-full bg-blue-500 rounded-full"
+                                    style={{ width: `${playbackDuration > 0 ? (playbackTime / playbackDuration) * 100 : 0}%` }}
+                                    layout
+                                />
+                            </div>
+                            <div className="flex justify-between items-center mt-1">
+                                <span className="text-[10px] font-bold text-slate-400">{formatTime(playbackTime)}</span>
+                                <span className="text-[10px] font-bold text-slate-400">{formatTime(playbackDuration || recordingTime)}</span>
+                            </div>
+                        </div>
                     </>
                 )}
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 border-l border-slate-200 dark:border-slate-700 pl-2">
                 <button
                     onClick={onCancel}
-                    className="p-3 text-gray-400 hover:text-red-500 transition-colors"
+                    className="h-10 w-10 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-full flex items-center justify-center transition-all"
+                    title="Descartar"
                 >
-                    <Trash2 className="h-5 w-5" />
+                    <Trash2 className="h-4 w-4" />
                 </button>
                 {!isRecording && audioBlob && (
                     <button
                         onClick={handleSend}
-                        className="h-12 w-12 bg-blue-600 text-white rounded-full flex items-center justify-center shadow-lg shadow-blue-600/30 active:scale-95 transition-all"
+                        className="h-10 w-10 bg-primary text-white rounded-full flex items-center justify-center shadow-lg shadow-primary/30 active:scale-95 hover:scale-105 transition-all"
+                        title="Enviar Áudio"
                     >
-                        <Send className="h-5 w-5 ml-1" />
+                        <Send className="h-4 w-4 ml-0.5 -mt-0.5" />
                     </button>
                 )}
             </div>

@@ -198,7 +198,7 @@ export default function ChatPage() {
     }
 
     return (
-        <div className="liquid-glass aurora min-h-0 md:min-h-[calc(100vh-8rem)] p-2 md:p-8 rounded-[2rem] md:rounded-[3rem] shadow-2xl">
+        <div className="liquid-glass aurora min-h-[calc(100dvh-6rem)] md:min-h-[calc(100vh-8rem)] p-2 md:p-8 rounded-[2rem] md:rounded-[3rem] shadow-2xl">
             <div className="flex flex-col h-[calc(100vh-6rem)] md:h-[calc(100vh-8rem)] glass-card rounded-[2rem] md:rounded-[3rem] shadow-2xl overflow-hidden relative group">
                 <div className="absolute inset-0 bg-blue-500/5 dark:bg-blue-500/10 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none blur-3xl -z-10" />
 

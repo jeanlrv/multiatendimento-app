@@ -99,163 +99,209 @@ export default function ContactsPage() {
         }
     };
 
-    return (
-        <>
-            <div className="space-y-8 p-6 liquid-glass rounded-[3rem]">
-                {/* MÉTRICAS */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <MetricCard label="Total de Contatos" value={metrics.total} />
-                    <MetricCard label="Alto Risco" value={metrics.highRisk} color="text-red-500" />
-                    <MetricCard label="Página Atual" value={page} />
-                </div>
+    if (isModalOpen) {
+        return (
+            <ContactModal
+                contact={editingContact}
+                onClose={() => setIsModalOpen(false)}
+                onSuccess={(updated?: Contact) => {
+                    setIsModalOpen(false);
+                    fetchContacts();
+                    if (updated && selected?.id === updated.id) {
+                        setSelected(updated);
+                    }
+                }}
+            />
+        );
+    }
 
-                {/* BUSCA E AÇÕES */}
-                <div className="flex flex-col md:flex-row gap-4">
-                    <div className="relative flex-1">
-                        <Search className="absolute left-4 top-3.5 text-gray-400 w-4 h-4" />
-                        <input
-                            value={searchInput}
-                            onChange={(e) => setSearchInput(e.target.value)}
-                            placeholder="Buscar por nome, telefone ou email..."
-                            className="w-full pl-10 p-3 rounded-2xl border dark:bg-black/30 bg-white/50 focus:outline-none focus:ring-2 focus:ring-primary/50"
-                        />
-                    </div>
+    if (showImportModal) {
+        return (
+            <div className="w-full max-w-4xl mx-auto liquid-glass rounded-[2rem] md:rounded-[3rem] p-6 md:p-10 border border-white/10 shadow-2xl relative">
+                <button
+                    onClick={() => setShowImportModal(false)}
+                    className="absolute top-8 right-8 p-3 hover:bg-slate-100 dark:hover:bg-white/5 rounded-2xl transition-all"
+                >
+                    <X size={20} className="text-slate-400" />
+                </button>
+                <div className="mb-8">
+                    <button
+                        onClick={() => setShowImportModal(false)}
+                        className="flex items-center gap-2 text-slate-500 hover:text-primary transition-colors text-xs font-black uppercase tracking-widest mb-4"
+                    >
+                        <ChevronLeft size={16} /> Voltar para Lista
+                    </button>
+                    <h2 className="text-2xl md:text-3xl font-black italic tracking-tighter text-slate-900 dark:text-white">
+                        Importação em <span className="text-primary">Massa (CSV)</span>
+                    </h2>
+                    <p className="text-sm font-bold text-slate-500 mt-2">
+                        Faça o upload do seu arquivo para realizar cadastro e edição (upsert).
+                    </p>
+                </div>
+                <ImportCSVModal
+                    onClose={() => setShowImportModal(false)}
+                    onSuccess={() => { setShowImportModal(false); fetchContacts(); }}
+                />
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-6 md:space-y-8 p-4 md:p-8 liquid-glass rounded-[2rem] md:rounded-[3rem]">
+            {/* MÉTRICAS */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <MetricCard label="Total de Contatos" value={metrics.total} />
+                <MetricCard label="Alto Risco" value={metrics.highRisk} color="text-red-500" />
+                <MetricCard label="Página Atual" value={page} />
+            </div>
+
+            {/* BUSCA E AÇÕES */}
+            <div className="flex flex-col xl:flex-row gap-4">
+                <div className="relative flex-1">
+                    <Search className="absolute left-4 top-4 text-gray-400 w-5 h-5 md:w-4 md:h-4" />
+                    <input
+                        value={searchInput}
+                        onChange={(e) => setSearchInput(e.target.value)}
+                        placeholder="Buscar contatos (nome, número, email)..."
+                        className="w-full pl-12 pr-4 py-4 md:py-3 rounded-[1.5rem] border border-slate-200 dark:border-white/10 dark:bg-black/30 bg-white/50 focus:outline-none focus:ring-2 focus:ring-primary/50 text-slate-900 dark:text-white font-bold"
+                    />
+                </div>
+                <div className="flex flex-wrap md:flex-nowrap gap-3">
                     <button
                         onClick={handleDownloadCSV}
                         disabled={downloadingCSV}
-                        title="Exportar CSV"
-                        className="flex items-center justify-center gap-2 border border-white/10 hover:bg-white/10 text-gray-400 px-5 py-3 rounded-2xl font-bold transition-all active:scale-95 disabled:opacity-50"
+                        title="Exportar"
+                        className="flex-1 md:flex-none flex items-center justify-center gap-2 border border-slate-200 dark:border-white/10 text-slate-600 dark:text-gray-400 bg-white/50 dark:bg-black/20 hover:bg-slate-100 dark:hover:bg-white/10 px-6 py-4 md:py-3 rounded-[1.5rem] font-black uppercase text-[10px] tracking-widest transition-all shadow-sm"
                     >
-                        {downloadingCSV
-                            ? <RefreshCcw className="w-5 h-5 animate-spin" />
-                            : <Download className="w-5 h-5" />
-                        }
+                        {downloadingCSV ? <RefreshCcw className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                        <span className="hidden md:inline">Exportar</span>
                     </button>
                     <button
                         onClick={() => setShowImportModal(true)}
-                        title="Importar CSV"
-                        className="flex items-center justify-center gap-2 border border-white/10 hover:bg-white/10 text-gray-400 px-5 py-3 rounded-2xl font-bold transition-all active:scale-95"
+                        title="Importar"
+                        className="flex-1 md:flex-none flex items-center justify-center gap-2 border border-slate-200 dark:border-white/10 text-slate-600 dark:text-gray-400 bg-white/50 dark:bg-black/20 hover:bg-slate-100 dark:hover:bg-white/10 px-6 py-4 md:py-3 rounded-[1.5rem] font-black uppercase text-[10px] tracking-widest transition-all shadow-sm"
                     >
-                        <Upload className="w-5 h-5" />
+                        <Upload className="w-4 h-4" />
+                        <span className="hidden md:inline">Importar</span>
                     </button>
                     <button
                         onClick={() => { setEditingContact(null); setIsModalOpen(true); }}
-                        className="bg-primary hover:bg-primary/90 text-white px-6 py-3 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg shadow-primary/20"
+                        className="flex-[2] md:flex-none bg-primary text-white px-6 py-4 md:py-3 rounded-[1.5rem] font-black uppercase text-[10px] tracking-widest flex items-center justify-center gap-2 shadow-xl shadow-primary/20 hover:opacity-90 active:scale-95 transition-all w-full md:w-auto"
                     >
-                        <Plus className="w-5 h-5" />
+                        <Plus className="w-5 h-5 md:w-4 md:h-4" />
                         Novo Contato
                     </button>
                 </div>
+            </div>
 
-                {/* TABELA */}
-                <div className="rounded-3xl overflow-hidden border border-white/10 bg-white/5 backdrop-blur-md">
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left">
-                            <thead className="bg-white/10 dark:bg-black/40 text-gray-400 text-xs uppercase tracking-wider">
-                                <tr>
-                                    <th className="p-4">Cliente</th>
-                                    <th className="p-4">Telefone</th>
-                                    <th className="p-4">Risco</th>
-                                    <th className="p-4"></th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-white/5">
-                                {loading ? (
-                                    Array.from({ length: 5 }).map((_, i) => (
-                                        <tr key={i}>
-                                            <td className="p-4">
-                                                <div className="h-4 bg-white/10 rounded animate-pulse w-32 mb-1" />
-                                                <div className="h-3 bg-white/5 rounded animate-pulse w-20" />
-                                            </td>
-                                            <td className="p-4"><div className="h-4 bg-white/10 rounded animate-pulse w-24" /></td>
-                                            <td className="p-4"><div className="h-6 bg-white/10 rounded-full animate-pulse w-12" /></td>
-                                            <td className="p-4"></td>
-                                        </tr>
-                                    ))
-                                ) : contacts.length === 0 ? (
-                                    <tr>
-                                        <td colSpan={4} className="p-12 text-center text-gray-400">
-                                            <User className="w-12 h-12 mx-auto mb-3 opacity-30" />
-                                            <p className="font-bold">Nenhum contato encontrado</p>
-                                            {search && (
-                                                <p className="text-sm mt-1">Tente buscar com outros termos</p>
-                                            )}
+            {/* TABELA */}
+            <div className="rounded-[2rem] overflow-hidden border border-slate-200 dark:border-white/10 bg-white/40 dark:bg-white/5 backdrop-blur-md shadow-xl">
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                        <thead className="bg-slate-100/50 dark:bg-black/40 text-slate-500 dark:text-gray-400 text-[10px] font-black uppercase tracking-[0.2em]">
+                            <tr>
+                                <th className="p-5 md:p-6 whitespace-nowrap">Cliente</th>
+                                <th className="p-5 md:p-6 whitespace-nowrap">Contato</th>
+                                <th className="p-5 md:p-6 text-center whitespace-nowrap">Risco (IA)</th>
+                                <th className="p-5 md:p-6"></th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+                            {loading ? (
+                                Array.from({ length: 5 }).map((_, i) => (
+                                    <tr key={i}>
+                                        <td className="p-5 md:p-6">
+                                            <div className="h-4 bg-slate-200 dark:bg-white/10 rounded animate-pulse w-32 mb-2" />
+                                            <div className="h-3 bg-slate-100 dark:bg-white/5 rounded animate-pulse w-20" />
                                         </td>
+                                        <td className="p-5 md:p-6"><div className="h-4 bg-slate-200 dark:bg-white/10 rounded animate-pulse w-24" /></td>
+                                        <td className="p-5 md:p-6 flex justify-center"><div className="h-6 bg-slate-200 dark:bg-white/10 rounded-full animate-pulse w-16" /></td>
+                                        <td className="p-5 md:p-6"></td>
                                     </tr>
-                                ) : (
-                                    contacts.map((c) => (
-                                        <motion.tr
-                                            key={c.id}
-                                            onClick={() => setSelected(c)}
-                                            initial={{ opacity: 0 }}
-                                            animate={{ opacity: 1 }}
-                                            className="cursor-pointer hover:bg-white/10 dark:hover:bg-white/5 transition-colors"
-                                        >
-                                            <td className="p-4">
-                                                <div className="font-bold">{c.name}</div>
-                                                <div className="text-xs text-gray-500">{c.email || "Sem email"}</div>
-                                            </td>
-                                            <td className="p-4">{c.phoneNumber}</td>
-                                            <td className="p-4">
-                                                <RiskBadge score={c.riskScore || 0} />
-                                            </td>
-                                            <td className="p-4 text-right">
-                                                <div className="flex justify-end gap-2">
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            setEditingContact(c);
-                                                            setIsModalOpen(true);
-                                                        }}
-                                                        className="p-2 hover:bg-white/10 rounded-xl transition-all text-blue-500"
-                                                        title="Editar"
-                                                    >
-                                                        <Edit3 className="w-4 h-4" />
-                                                    </button>
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            handleDelete(c.id);
-                                                        }}
-                                                        className="p-2 hover:bg-white/10 rounded-xl transition-all text-rose-500"
-                                                        title="Excluir"
-                                                    >
-                                                        <Trash className="w-4 h-4" />
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </motion.tr>
-                                    ))
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
+                                ))
+                            ) : contacts.length === 0 ? (
+                                <tr>
+                                    <td colSpan={4} className="p-16 text-center text-slate-400">
+                                        <User className="w-16 h-16 mx-auto mb-4 opacity-20" strokeWidth={1.5} />
+                                        <p className="font-black text-slate-600 dark:text-white mb-2">Carteira Vazia</p>
+                                        <p className="text-sm font-bold opacity-60">Nenhum contato encontrado na pesquisa base.</p>
+                                    </td>
+                                </tr>
+                            ) : (
+                                contacts.map((c) => (
+                                    <motion.tr
+                                        key={c.id}
+                                        onClick={() => setSelected(c)}
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
+                                        className="cursor-pointer hover:bg-white/60 dark:hover:bg-white/5 transition-colors group"
+                                    >
+                                        <td className="p-5 md:p-6">
+                                            <div className="font-black text-slate-900 dark:text-white md:text-base text-sm leading-tight">{c.name}</div>
+                                            <div className="text-[11px] font-bold text-slate-500 mt-1">{c.email || "Sem e-mail arquivado"}</div>
+                                        </td>
+                                        <td className="p-5 md:p-6 font-bold text-slate-700 dark:text-slate-300 md:text-sm text-xs">
+                                            {c.phoneNumber}
+                                        </td>
+                                        <td className="p-5 md:p-6 text-center">
+                                            <RiskBadge score={c.riskScore || 0} />
+                                        </td>
+                                        <td className="p-5 md:p-6 text-right">
+                                            <div className="flex justify-end gap-1 opacity-100 xl:opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setEditingContact(c);
+                                                        setIsModalOpen(true);
+                                                    }}
+                                                    className="p-3 bg-white dark:bg-black/20 hover:bg-slate-100 dark:hover:bg-white/10 rounded-[1rem] transition-all text-blue-500 shadow-sm md:shadow-none"
+                                                    title="Editar"
+                                                >
+                                                    <Edit3 className="w-4 h-4 md:w-5 md:h-5" />
+                                                </button>
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleDelete(c.id);
+                                                    }}
+                                                    className="p-3 bg-white dark:bg-black/20 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-[1rem] transition-all text-rose-500 shadow-sm md:shadow-none"
+                                                    title="Excluir"
+                                                >
+                                                    <Trash className="w-4 h-4 md:w-5 md:h-5" />
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </motion.tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
                 </div>
+            </div>
 
-                {/* PAGINAÇÃO */}
-                <div className="flex justify-between items-center text-sm text-gray-400">
-                    <span>
-                        {loading
-                            ? "Carregando..."
-                            : `Mostrando página ${page} de ${lastPage} (${total} resultado${total !== 1 ? "s" : ""})`
-                        }
-                    </span>
-                    <div className="flex gap-2">
-                        <button
-                            disabled={page <= 1 || loading}
-                            onClick={() => setPage(page - 1)}
-                            className="p-2 glass-card rounded-xl disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white/10 transition-colors"
-                        >
-                            <ChevronLeft className="w-5 h-5" />
-                        </button>
-                        <button
-                            disabled={page >= lastPage || loading}
-                            onClick={() => setPage(page + 1)}
-                            className="p-2 glass-card rounded-xl disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white/10 transition-colors"
-                        >
-                            <ChevronRight className="w-5 h-5" />
-                        </button>
-                    </div>
+            {/* PAGINAÇÃO */}
+            <div className="flex flex-col md:flex-row justify-between items-center gap-4 text-xs font-bold text-slate-500 bg-white/40 dark:bg-white/5 p-4 rounded-[2rem] shadow-sm">
+                <span className="text-center md:text-left">
+                    {loading
+                        ? "Sincronizando banco..."
+                        : `Página ${page} de ${lastPage} (${total} registro${total !== 1 ? "s" : ""})`
+                    }
+                </span>
+                <div className="flex gap-2">
+                    <button
+                        disabled={page <= 1 || loading}
+                        onClick={() => setPage(page - 1)}
+                        className="p-3 bg-white dark:bg-black/40 rounded-[1rem] disabled:opacity-30 flex items-center gap-2 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors shadow-sm"
+                    >
+                        <ChevronLeft className="w-4 h-4" /> <span className="hidden md:inline pr-2">Anterior</span>
+                    </button>
+                    <button
+                        disabled={page >= lastPage || loading}
+                        onClick={() => setPage(page + 1)}
+                        className="p-3 bg-white dark:bg-black/40 rounded-[1rem] disabled:opacity-30 flex items-center gap-2 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors shadow-sm"
+                    >
+                        <span className="hidden md:inline pl-2">Próxima</span> <ChevronRight className="w-4 h-4" />
+                    </button>
                 </div>
             </div>
 
@@ -264,34 +310,13 @@ export default function ContactsPage() {
                     contact={selected}
                     onClose={() => setSelected(null)}
                     onEdit={(c: Contact) => {
+                        setSelected(null);
                         setEditingContact(c);
                         setIsModalOpen(true);
                     }}
                 />
             )}
-
-            {isModalOpen && (
-                <ContactModal
-                    contact={editingContact}
-                    onClose={() => setIsModalOpen(false)}
-                    onSuccess={(updated?: Contact) => {
-                        setIsModalOpen(false);
-                        fetchContacts();
-                        // Atualiza o drawer se o contato editado estava aberto
-                        if (updated && selected?.id === updated.id) {
-                            setSelected(updated);
-                        }
-                    }}
-                />
-            )}
-
-            {showImportModal && (
-                <ImportCSVModal
-                    onClose={() => setShowImportModal(false)}
-                    onSuccess={() => { setShowImportModal(false); fetchContacts(); }}
-                />
-            )}
-        </>
+        </div>
     );
 }
 
@@ -336,108 +361,93 @@ function ImportCSVModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
     };
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-slate-950/30 backdrop-blur-sm" onClick={onClose} />
-            <motion.div
-                initial={{ opacity: 0, scale: 0.95, y: 12 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                className="relative w-full max-w-md bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-[0_32px_80px_rgba(0,0,0,0.2)] border border-slate-200 dark:border-white/10 overflow-hidden"
-            >
-                {/* Header */}
-                <div className="flex items-center justify-between px-8 py-6 border-b border-slate-100 dark:border-white/5">
-                    <div>
-                        <h3 className="text-xl font-black text-slate-900 dark:text-white italic">
-                            Importar <span className="text-primary">Contatos CSV</span>
-                        </h3>
-                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-0.5">
-                            Upsert por número de telefone
-                        </p>
-                    </div>
-                    <button onClick={onClose} className="p-2 hover:bg-slate-100 dark:hover:bg-white/5 rounded-xl transition-all">
-                        <X size={18} className="text-slate-400" />
-                    </button>
-                </div>
+        <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 12 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="relative w-full overflow-hidden"
+        >
+            {/* O cabeçalho e botão de voltar agora são controlados pelo componente pai (ContactsPage) */}
 
-                <div className="p-8 space-y-5">
-                    {/* Drop zone */}
-                    {!result && (
-                        <div
-                            onDrop={handleDrop}
-                            onDragOver={e => e.preventDefault()}
-                            onClick={() => inputRef.current?.click()}
-                            className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all ${file ? 'border-primary/60 bg-primary/5' : 'border-slate-200 dark:border-white/10 hover:border-primary/40 hover:bg-primary/3'}`}
-                        >
-                            <input ref={inputRef} type="file" accept=".csv" className="hidden" onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])} />
-                            {file ? (
-                                <div className="flex flex-col items-center gap-2">
-                                    <FileText size={32} className="text-primary" />
-                                    <p className="font-black text-slate-800 dark:text-white text-sm">{file.name}</p>
-                                    <p className="text-[10px] text-slate-400">{(file.size / 1024).toFixed(1)} KB</p>
-                                </div>
-                            ) : (
-                                <div className="flex flex-col items-center gap-2 text-slate-400">
-                                    <Upload size={32} className="opacity-40" />
-                                    <p className="text-sm font-bold">Arraste o CSV aqui ou clique para selecionar</p>
-                                    <p className="text-[10px]">Colunas: telefone, nome, email, notas</p>
-                                </div>
-                            )}
-                        </div>
-                    )}
 
-                    {/* Resultado */}
-                    {result && (
-                        <div className="space-y-3">
-                            <div className="grid grid-cols-3 gap-3">
-                                {[
-                                    { label: 'Criados', value: result.created, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-                                    { label: 'Atualizados', value: result.updated, color: 'text-blue-500', bg: 'bg-blue-500/10' },
-                                    { label: 'Falhas', value: result.failed, color: 'text-rose-500', bg: 'bg-rose-500/10' },
-                                ].map(m => (
-                                    <div key={m.label} className={`${m.bg} rounded-2xl p-4 text-center`}>
-                                        <p className={`text-2xl font-black ${m.color}`}>{m.value}</p>
-                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{m.label}</p>
-                                    </div>
-                                ))}
+            <div className="p-8 space-y-5">
+                {/* Drop zone */}
+                {!result && (
+                    <div
+                        onDrop={handleDrop}
+                        onDragOver={e => e.preventDefault()}
+                        onClick={() => inputRef.current?.click()}
+                        className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all ${file ? 'border-primary/60 bg-primary/5' : 'border-slate-200 dark:border-white/10 hover:border-primary/40 hover:bg-primary/3'}`}
+                    >
+                        <input ref={inputRef} type="file" accept=".csv" className="hidden" onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])} />
+                        {file ? (
+                            <div className="flex flex-col items-center gap-2">
+                                <FileText size={32} className="text-primary" />
+                                <p className="font-black text-slate-800 dark:text-white text-sm">{file.name}</p>
+                                <p className="text-[10px] text-slate-400">{(file.size / 1024).toFixed(1)} KB</p>
                             </div>
-                            {result.errors.length > 0 && (
-                                <div className="bg-rose-500/10 border border-rose-500/20 rounded-2xl p-4 space-y-1 max-h-32 overflow-y-auto">
-                                    {result.errors.map((e, i) => (
-                                        <p key={i} className="text-[10px] text-rose-500 font-medium flex items-start gap-1.5">
-                                            <AlertCircle size={10} className="mt-0.5 flex-shrink-0" /> {e}
-                                        </p>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    <div className="flex gap-3 pt-1">
-                        <button
-                            onClick={onClose}
-                            className="px-6 py-3.5 rounded-2xl border border-slate-200 dark:border-white/10 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:bg-rose-500/5 hover:text-rose-500 active:scale-95 transition-all"
-                        >
-                            {result ? 'Fechar' : 'Cancelar'}
-                        </button>
-                        {!result ? (
-                            <button
-                                onClick={handleImport}
-                                disabled={!file || uploading}
-                                className="flex-1 py-3.5 rounded-2xl bg-primary text-white font-black text-[10px] uppercase tracking-[0.2em] shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
-                            >
-                                {uploading ? <RefreshCcw className="animate-spin h-4 w-4" /> : <><Upload size={14} /> Importar</>}
-                            </button>
                         ) : (
-                            <button
-                                onClick={onSuccess}
-                                className="flex-1 py-3.5 rounded-2xl bg-emerald-500 text-white font-black text-[10px] uppercase tracking-[0.2em] shadow-xl shadow-emerald-500/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3"
-                            >
-                                <CheckCircle size={14} /> Concluir
-                            </button>
+                            <div className="flex flex-col items-center gap-2 text-slate-400">
+                                <Upload size={32} className="opacity-40" />
+                                <p className="text-sm font-bold">Arraste o CSV aqui ou clique para selecionar</p>
+                                <p className="text-[10px]">Colunas: telefone, nome, email, notas</p>
+                            </div>
                         )}
                     </div>
+                )}
+
+                {/* Resultado */}
+                {result && (
+                    <div className="space-y-3">
+                        <div className="grid grid-cols-3 gap-3">
+                            {[
+                                { label: 'Criados', value: result.created, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+                                { label: 'Atualizados', value: result.updated, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+                                { label: 'Falhas', value: result.failed, color: 'text-rose-500', bg: 'bg-rose-500/10' },
+                            ].map(m => (
+                                <div key={m.label} className={`${m.bg} rounded-2xl p-4 text-center`}>
+                                    <p className={`text-2xl font-black ${m.color}`}>{m.value}</p>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{m.label}</p>
+                                </div>
+                            ))}
+                        </div>
+                        {result.errors.length > 0 && (
+                            <div className="bg-rose-500/10 border border-rose-500/20 rounded-2xl p-4 space-y-1 max-h-32 overflow-y-auto">
+                                {result.errors.map((e, i) => (
+                                    <p key={i} className="text-[10px] text-rose-500 font-medium flex items-start gap-1.5">
+                                        <AlertCircle size={10} className="mt-0.5 flex-shrink-0" /> {e}
+                                    </p>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                <div className="flex gap-3 pt-1">
+                    <button
+                        onClick={onClose}
+                        className="px-6 py-3.5 rounded-2xl border border-slate-200 dark:border-white/10 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:bg-rose-500/5 hover:text-rose-500 active:scale-95 transition-all"
+                    >
+                        {result ? 'Fechar' : 'Cancelar'}
+                    </button>
+                    {!result ? (
+                        <button
+                            onClick={handleImport}
+                            disabled={!file || uploading}
+                            className="flex-1 py-3.5 rounded-2xl bg-primary text-white font-black text-[10px] uppercase tracking-[0.2em] shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+                        >
+                            {uploading ? <RefreshCcw className="animate-spin h-4 w-4" /> : <><Upload size={14} /> Importar</>}
+                        </button>
+                    ) : (
+                        <button
+                            onClick={onSuccess}
+                            className="flex-1 py-3.5 rounded-2xl bg-emerald-500 text-white font-black text-[10px] uppercase tracking-[0.2em] shadow-xl shadow-emerald-500/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3"
+                        >
+                            <CheckCircle size={14} /> Concluir
+                        </button>
+                    )}
                 </div>
-            </motion.div>
-        </div>
+            </div>
+        </motion.div>
     );
 }
 
@@ -641,101 +651,107 @@ function ContactModal({
     };
 
     return (
-        <div className="fixed inset-0 flex items-center justify-center z-[110] p-4">
-            <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-                onClick={onClose}
-            />
-            <motion.div
-                initial={{ scale: 0.9, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                className="w-full max-w-lg bg-white dark:bg-[#0a0a0a] rounded-[2.5rem] p-8 relative z-10 border border-white/10 shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar"
-            >
-                <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-2xl font-black italic tracking-tighter">
+        <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="w-full max-w-4xl mx-auto liquid-glass rounded-[2rem] md:rounded-[3rem] p-6 md:p-10 border border-white/10 shadow-2xl"
+        >
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 border-b border-white/10 pb-6">
+                <div>
+                    <button
+                        onClick={onClose}
+                        className="flex items-center gap-2 text-slate-500 hover:text-primary transition-colors text-xs font-black uppercase tracking-widest mb-2"
+                    >
+                        <ChevronLeft size={16} /> Voltar para Lista
+                    </button>
+                    <h2 className="text-2xl md:text-3xl font-black italic tracking-tighter text-slate-900 dark:text-white">
                         {contact ? "Sinalizar Alteração" : "Incorporar Novo Contato"}
                     </h2>
-                    <button onClick={onClose} className="p-2 hover:bg-black/5 dark:hover:bg-white/5 rounded-xl">
-                        <X className="w-6 h-6" />
+                </div>
+                <div className="flex gap-3">
+                    <button
+                        onClick={onClose}
+                        className="px-6 py-3 border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400 font-black text-[10px] uppercase tracking-[0.2em] rounded-2xl hover:bg-slate-100 dark:hover:bg-white/5 transition-all"
+                    >
+                        Cancelar
+                    </button>
+                    <button
+                        onClick={handleSubmit}
+                        disabled={loading}
+                        className="flex-1 md:flex-none px-8 py-3 bg-primary text-white font-black text-[10px] uppercase tracking-[0.2em] rounded-2xl shadow-xl shadow-primary/20 hover:opacity-90 active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+                    >
+                        {loading ? <RefreshCcw className="animate-spin w-4 h-4" /> : <Save className="w-4 h-4" />}
+                        {contact ? "SALVAR" : "CADASTRAR"}
                     </button>
                 </div>
+            </div>
 
-                <form onSubmit={handleSubmit} className="space-y-5">
-                    <div className="space-y-1">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 ml-2">
-                            Nome Completo
+            <form onSubmit={handleSubmit} className="space-y-6">
+                <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-2 block">
+                        Nome Completo <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                        required
+                        value={formData.name}
+                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                        className="w-full p-4 md:p-5 rounded-2xl bg-white/50 dark:bg-black/20 border border-slate-200 dark:border-white/10 focus:ring-2 focus:ring-primary/50 outline-none transition-all font-bold text-slate-900 dark:text-white"
+                        placeholder="Ex: Jean Aero"
+                    />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-2 block">
+                            WhatsApp / Telefone <span className="text-red-500">*</span>
                         </label>
                         <input
                             required
-                            value={formData.name}
-                            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                            className="w-full p-4 rounded-2xl bg-black/5 dark:bg-white/5 border border-white/10 focus:ring-2 focus:ring-primary/50 outline-none transition-all font-bold"
-                            placeholder="Ex: Jean Aero"
+                            value={formData.phoneNumber}
+                            onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
+                            className="w-full p-4 md:p-5 rounded-2xl bg-white/50 dark:bg-black/20 border border-slate-200 dark:border-white/10 focus:ring-2 focus:ring-primary/50 outline-none transition-all font-bold text-slate-900 dark:text-white"
+                            placeholder="5511999999999"
                         />
                     </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-1">
-                            <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 ml-2">
-                                WhatsApp / Telefone
-                            </label>
-                            <input
-                                required
-                                value={formData.phoneNumber}
-                                onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
-                                className="w-full p-4 rounded-2xl bg-black/5 dark:bg-white/5 border border-white/10 focus:ring-2 focus:ring-primary/50 outline-none transition-all font-bold"
-                                placeholder="5511999999999"
-                            />
-                        </div>
-                        <div className="space-y-1">
-                            <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 ml-2">
-                                E-mail (Opcional)
-                            </label>
-                            <input
-                                type="email"
-                                value={formData.email}
-                                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                className="w-full p-4 rounded-2xl bg-black/5 dark:bg-white/5 border border-white/10 focus:ring-2 focus:ring-primary/50 outline-none transition-all font-bold"
-                                placeholder="jean@aero.com"
-                            />
-                        </div>
-                    </div>
-
-                    <div className="space-y-1">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 ml-2">
-                            Notas (Editáveis)
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-2 block">
+                            E-mail (Opcional)
                         </label>
-                        <textarea
-                            value={formData.notes}
-                            onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                            className="w-full p-4 rounded-2xl bg-black/5 dark:bg-white/5 border border-white/10 focus:ring-2 focus:ring-primary/50 outline-none transition-all font-bold min-h-[100px] resize-none"
-                            placeholder="Anotações rápidas sobre o contato..."
+                        <input
+                            type="email"
+                            value={formData.email}
+                            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                            className="w-full p-4 md:p-5 rounded-2xl bg-white/50 dark:bg-black/20 border border-slate-200 dark:border-white/10 focus:ring-2 focus:ring-primary/50 outline-none transition-all font-bold text-slate-900 dark:text-white"
+                            placeholder="jean@aero.com"
                         />
                     </div>
+                </div>
 
-                    <div className="space-y-1">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 ml-2">
-                            Informações Estratégicas (Fixas)
-                        </label>
-                        <textarea
-                            value={formData.information}
-                            onChange={(e) => setFormData({ ...formData, information: e.target.value })}
-                            className="w-full p-4 rounded-2xl bg-black/5 dark:bg-white/5 border border-white/10 focus:ring-2 focus:ring-primary/50 outline-none transition-all font-bold min-h-[120px] resize-none"
-                            placeholder="Dados de acesso, histórico fixo, observações críticas..."
-                        />
-                    </div>
+                <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-2 block">
+                        Notas (Editáveis pelos Operadores)
+                    </label>
+                    <textarea
+                        value={formData.notes}
+                        onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                        className="w-full p-4 md:p-5 rounded-2xl bg-white/50 dark:bg-black/20 border border-slate-200 dark:border-white/10 focus:ring-2 focus:ring-primary/50 outline-none transition-all font-bold text-slate-900 dark:text-white min-h-[120px] resize-y"
+                        placeholder="Anotações corriqueiras e rápidas sobre o contato..."
+                    />
+                </div>
 
-                    <button
-                        disabled={loading}
-                        className="w-full bg-primary text-white py-5 rounded-[1.5rem] font-black uppercase tracking-[0.2em] shadow-xl shadow-primary/20 hover:opacity-90 active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
-                    >
-                        {loading ? <RefreshCcw className="animate-spin w-5 h-5" /> : <Save className="w-5 h-5" />}
-                        {contact ? "SALVAR ALTERAÇÕES" : "EFETIVAR CADASTRO"}
-                    </button>
-                </form>
-            </motion.div>
-        </div>
+                <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-2 block">
+                        Informações Estratégicas (Fixo e visível para a IA)
+                    </label>
+                    <textarea
+                        value={formData.information}
+                        onChange={(e) => setFormData({ ...formData, information: e.target.value })}
+                        className="w-full p-4 md:p-5 rounded-2xl bg-white/50 dark:bg-black/20 border border-slate-200 dark:border-white/10 focus:ring-2 focus:ring-primary/50 outline-none transition-all font-bold text-slate-900 dark:text-white min-h-[150px] resize-y"
+                        placeholder="Dados de acesso estáticos, histórico permanente, observações críticas."
+                    />
+                </div>
+            </form>
+        </motion.div>
     );
 }

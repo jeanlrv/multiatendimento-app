@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Zap, Plus, Search, Edit2, Trash2, X, Save, RefreshCcw, Copy } from 'lucide-react';
+import { Zap, Plus, Search, Edit2, Trash2, X, Save, RefreshCcw, Copy, ChevronLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import { QuickRepliesService, QuickReply } from '@/services/quick-replies';
 import { useAuth } from '@/contexts/AuthContext';
@@ -60,6 +60,24 @@ export default function MacrosPage() {
         navigator.clipboard.writeText(content);
         toast.success('Copiado para a área de transferência!');
     };
+
+    if (showModal) {
+        return (
+            <MacroModal
+                key={editing?.id ?? 'new'}
+                macro={editing}
+                onClose={() => setShowModal(false)}
+                onSave={(saved) => {
+                    if (editing) {
+                        setMacros(prev => prev.map(m => m.id === saved.id ? saved : m));
+                    } else {
+                        setMacros(prev => [saved, ...prev]);
+                    }
+                    setShowModal(false);
+                }}
+            />
+        );
+    }
 
     return (
         <div className="space-y-10 max-w-5xl mx-auto pb-12">
@@ -190,25 +208,6 @@ export default function MacrosPage() {
                     </AnimatePresence>
                 </div>
             )}
-
-            {/* Modal Criar/Editar */}
-            <AnimatePresence>
-                {showModal && (
-                    <MacroModal
-                        key={editing?.id ?? 'new'}
-                        macro={editing}
-                        onClose={() => setShowModal(false)}
-                        onSave={(saved) => {
-                            if (editing) {
-                                setMacros(prev => prev.map(m => m.id === saved.id ? saved : m));
-                            } else {
-                                setMacros(prev => [saved, ...prev]);
-                            }
-                            setShowModal(false);
-                        }}
-                    />
-                )}
-            </AnimatePresence>
         </div>
     );
 }
@@ -256,92 +255,86 @@ function MacroModal({ macro, onClose, onSave }: ModalProps) {
 
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={onClose}
-                className="absolute inset-0 bg-slate-950/30 backdrop-blur-sm"
-            />
-            <motion.div
-                initial={{ opacity: 0, scale: 0.95, y: 12 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.95, y: 12 }}
-                transition={{ type: 'spring', damping: 24, stiffness: 200 }}
-                className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-[0_32px_80px_rgba(0,0,0,0.2)] border border-slate-200 dark:border-white/10 overflow-hidden"
-            >
-                {/* Header */}
-                <div className="flex items-center justify-between px-8 py-6 border-b border-slate-100 dark:border-white/5">
-                    <div>
-                        <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tighter italic">
-                            {isNew ? 'Nova' : 'Editar'} <span className="text-primary">Macro</span>
-                        </h3>
-                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-0.5">
-                            Ative com / no chat de atendimento
-                        </p>
-                    </div>
-                    <button onClick={onClose} className="p-2 hover:bg-slate-100 dark:hover:bg-white/5 rounded-xl transition-all">
-                        <X size={18} className="text-slate-400" />
+        <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="w-full max-w-4xl mx-auto liquid-glass rounded-[2rem] md:rounded-[3rem] p-6 md:p-10 border border-white/10 shadow-2xl"
+        >
+            {/* Header */}
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 pb-6 border-b border-white/10 gap-4">
+                <div>
+                    <button
+                        onClick={onClose}
+                        type="button"
+                        className="flex items-center gap-2 text-slate-500 hover:text-primary transition-colors text-xs font-black uppercase tracking-widest mb-2"
+                    >
+                        <ChevronLeft size={16} /> Voltar para Lista
                     </button>
+                    <h3 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white tracking-tighter italic">
+                        {isNew ? 'Nova' : 'Editar'} <span className="text-primary">Macro</span>
+                    </h3>
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-0.5">
+                        Ative com / no chat de atendimento
+                    </p>
+                </div>
+            </div>
+
+            {/* Form */}
+            <form onSubmit={handleSubmit} className="p-8 space-y-5">
+                <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                        Atalho *
+                    </label>
+                    <input
+                        required
+                        value={form.shortcut}
+                        onChange={e => setForm({ ...form, shortcut: e.target.value })}
+                        className="w-full px-5 py-3.5 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 outline-none focus:ring-2 focus:ring-primary/20 text-sm font-semibold dark:text-white transition-all"
+                        placeholder="Ex: /ola"
+                    />
+                    {form.shortcut && (
+                        <p className="text-[10px] text-slate-400 ml-1">
+                            Digite <span className="text-primary font-black">{form.shortcut.startsWith('/') ? form.shortcut : `/${form.shortcut}`}</span> no chat para usar.
+                        </p>
+                    )}
                 </div>
 
-                {/* Form */}
-                <form onSubmit={handleSubmit} className="p-8 space-y-5">
-                    <div className="space-y-2">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
-                            Atalho *
-                        </label>
-                        <input
-                            required
-                            value={form.shortcut}
-                            onChange={e => setForm({ ...form, shortcut: e.target.value })}
-                            className="w-full px-5 py-3.5 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 outline-none focus:ring-2 focus:ring-primary/20 text-sm font-semibold dark:text-white transition-all"
-                            placeholder="Ex: /ola"
-                        />
-                        {form.shortcut && (
-                            <p className="text-[10px] text-slate-400 ml-1">
-                                Digite <span className="text-primary font-black">{form.shortcut.startsWith('/') ? form.shortcut : `/${form.shortcut}`}</span> no chat para usar.
-                            </p>
-                        )}
-                    </div>
+                <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                        Conteúdo da Mensagem *
+                    </label>
+                    <textarea
+                        required
+                        rows={5}
+                        value={form.content}
+                        onChange={e => setForm({ ...form, content: e.target.value })}
+                        className="w-full px-5 py-3.5 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 outline-none focus:ring-2 focus:ring-primary/20 text-sm font-medium dark:text-white transition-all resize-none"
+                        placeholder="Olá! Seja bem-vindo ao nosso suporte. Como posso te ajudar hoje?"
+                    />
+                    <p className="text-[10px] text-slate-400 ml-1 text-right">{form.content.length} caracteres</p>
+                </div>
 
-                    <div className="space-y-2">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
-                            Conteúdo da Mensagem *
-                        </label>
-                        <textarea
-                            required
-                            rows={5}
-                            value={form.content}
-                            onChange={e => setForm({ ...form, content: e.target.value })}
-                            className="w-full px-5 py-3.5 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 outline-none focus:ring-2 focus:ring-primary/20 text-sm font-medium dark:text-white transition-all resize-none"
-                            placeholder="Olá! Seja bem-vindo ao nosso suporte. Como posso te ajudar hoje?"
-                        />
-                        <p className="text-[10px] text-slate-400 ml-1 text-right">{form.content.length} caracteres</p>
-                    </div>
-
-                    <div className="flex gap-3 pt-2">
-                        <button
-                            type="button"
-                            onClick={onClose}
-                            className="px-6 py-3.5 rounded-2xl border border-slate-200 dark:border-white/10 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:bg-rose-500/5 hover:text-rose-500 active:scale-95 transition-all"
-                        >
-                            Cancelar
-                        </button>
-                        <button
-                            type="submit"
-                            disabled={submitting}
-                            className="flex-1 py-3.5 rounded-2xl bg-primary text-white font-black text-[10px] uppercase tracking-[0.2em] shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
-                        >
-                            {submitting
-                                ? <RefreshCcw className="animate-spin h-4 w-4" />
-                                : <><Save size={14} /> {isNew ? 'Criar' : 'Salvar'}</>
-                            }
-                        </button>
-                    </div>
-                </form>
-            </motion.div>
-        </div>
+                <div className="flex gap-3 pt-2">
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="px-6 py-3.5 rounded-2xl border border-slate-200 dark:border-white/10 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:bg-rose-500/5 hover:text-rose-500 active:scale-95 transition-all"
+                    >
+                        Cancelar
+                    </button>
+                    <button
+                        type="submit"
+                        disabled={submitting}
+                        className="flex-1 py-3.5 rounded-2xl bg-primary text-white font-black text-[10px] uppercase tracking-[0.2em] shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+                    >
+                        {submitting
+                            ? <RefreshCcw className="animate-spin h-4 w-4" />
+                            : <><Save size={14} /> {isNew ? 'Criar' : 'Salvar'}</>
+                        }
+                    </button>
+                </div>
+            </form>
+        </motion.div>
     );
 }

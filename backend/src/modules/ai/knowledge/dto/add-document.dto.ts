@@ -3,9 +3,25 @@ import { ApiProperty } from '@nestjs/swagger';
 
 export enum DocumentSourceType {
     TEXT = 'TEXT',
+    TXT = 'TXT',
+    MD = 'MD',
+    HTML = 'HTML',
+    CSV = 'CSV',
+    JSON = 'JSON',
+    YAML = 'YAML',
+    XML = 'XML',
+    RTF = 'RTF',
     PDF = 'PDF',
-    URL = 'URL',
     DOCX = 'DOCX',
+    XLSX = 'XLSX',
+    XLS = 'XLS',
+    PPTX = 'PPTX',
+    EPUB = 'EPUB',
+    CODE = 'CODE',
+    AUDIO = 'AUDIO',
+    URL = 'URL',
+    YOUTUBE = 'YOUTUBE',
+    GITHUB = 'GITHUB',
 }
 
 export class AddDocumentDto {

@@ -5,6 +5,8 @@ export interface KnowledgeBase {
     name: string;
     description?: string;
     companyId: string;
+    embeddingProvider?: string;
+    embeddingModel?: string;
     createdAt: string;
     updatedAt: string;
     _count?: {
@@ -53,11 +55,7 @@ export const AIKnowledgeService = {
     uploadDocument: async (baseId: string, file: File) => {
         const formData = new FormData();
         formData.append('file', file);
-        const response = await api.post<AIDocument>(`/ai/knowledge/bases/${baseId}/upload`, formData, {
-            headers: {
-                'Content-Type': 'multipart/form-data',
-            },
-        });
+        const response = await api.post<AIDocument>(`/ai/knowledge/bases/${baseId}/upload`, formData);
         return response.data;
     },
 
@@ -70,8 +68,8 @@ export const AIKnowledgeService = {
         await api.delete(`/ai/knowledge/documents/${id}`);
     },
 
-    reprocessDocument: async (documentId: string) => {
-        const response = await api.post(`/ai/knowledge/documents/${documentId}/reprocess`);
+    reprocessDocument: async (documentId: string): Promise<{ message: string }> => {
+        const response = await api.post<{ message: string }>(`/ai/knowledge/documents/${documentId}/reprocess`);
         return response.data;
     }
 };

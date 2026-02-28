@@ -116,12 +116,14 @@
 
   .aurora::before {
     content: '';
-    @apply absolute -top-1/2 -left-1/2 w-full h-full bg-primary/20 blur-[120px] rounded-full -z-10 animate-pulse;
+    @apply absolute -top-1/2 -left-1/2 w-full h-full bg-primary/20 blur-[60px] md:blur-[120px] rounded-full -z-10 animate-pulse;
+    will-change: transform, opacity;
   }
 
   .aurora::after {
     content: '';
-    @apply absolute -bottom-1/2 -right-1/2 w-full h-full bg-secondary/10 blur-[120px] rounded-full -z-10;
+    @apply absolute -bottom-1/2 -right-1/2 w-full h-full bg-secondary/10 blur-[60px] md:blur-[120px] rounded-full -z-10;
+    will-change: transform, opacity;
   }
 
   .text-gradient-ks {

@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsUUID } from 'class-validator';
+import { IsString, IsOptional } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateKnowledgeBaseDto {
@@ -10,4 +10,14 @@ export class CreateKnowledgeBaseDto {
     @IsString()
     @IsOptional()
     description?: string;
+
+    @ApiProperty({ example: 'openai', required: false })
+    @IsString()
+    @IsOptional()
+    embeddingProvider?: string;
+
+    @ApiProperty({ example: 'text-embedding-3-small', required: false })
+    @IsString()
+    @IsOptional()
+    embeddingModel?: string;
 }

@@ -5,7 +5,7 @@ import { TagsService, Tag } from '@/services/tags';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Plus, Pencil, Trash2, X, Search, Tag as TagIcon } from 'lucide-react';
+import { Plus, Pencil, Trash2, X, Search, Tag as TagIcon, ChevronLeft, Save } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const tagSchema = z.object({
@@ -92,8 +92,93 @@ export default function TagsPage() {
         tag.name.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
+    if (isModalOpen) {
+        return (
+            <div className="space-y-8 max-w-7xl mx-auto relative liquid-glass aurora min-h-[calc(100dvh-6rem)] md:min-h-[calc(100vh-8rem)] pt-6 pb-12">
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                    className="w-full max-w-4xl mx-auto liquid-glass rounded-[2rem] md:rounded-[3rem] p-6 md:p-10 border border-white/10 shadow-2xl flex flex-col"
+                >
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 border-b border-white/10 pb-6">
+                        <div className="flex items-center gap-4">
+                            <div
+                                className="h-14 w-14 md:h-16 md:w-16 rounded-2xl flex items-center justify-center text-3xl md:text-4xl shadow-lg shadow-primary/10 transition-colors text-white"
+                                style={{ backgroundColor: watch('color') || '#3B82F6' }}
+                            >
+                                <TagIcon className="h-6 w-6 md:h-8 md:w-8" />
+                            </div>
+                            <div>
+                                <button
+                                    type="button"
+                                    onClick={closeModal}
+                                    className="flex items-center gap-2 text-slate-500 hover:text-primary transition-colors text-xs font-black uppercase tracking-widest mb-1"
+                                >
+                                    <ChevronLeft size={16} /> Voltar para Lista
+                                </button>
+                                <h3 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white uppercase tracking-tighter italic leading-tight">
+                                    {editingTag ? 'Editar' : 'Nova'} <span className="text-primary italic">Etiqueta</span>
+                                </h3>
+                                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">Categorização Aero de chamados</p>
+                            </div>
+                        </div>
+                        <div className="flex gap-3 mt-4 md:mt-0 w-full md:w-auto">
+                            <button
+                                type="button"
+                                onClick={closeModal}
+                                className="px-6 py-3 border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400 font-black text-[10px] uppercase tracking-[0.2em] rounded-2xl hover:bg-slate-100 dark:hover:bg-white/5 transition-all hidden md:block"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleSubmit(onSubmit)}
+                                className="flex-1 md:flex-none px-8 py-3 bg-primary text-white font-black text-[10px] uppercase tracking-[0.2em] rounded-2xl shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3"
+                            >
+                                <Save className="w-4 h-4" />
+                                {editingTag ? 'Atualizar Aero' : 'Criar Registro'}
+                            </button>
+                        </div>
+                    </div>
+
+                    <form onSubmit={handleSubmit(onSubmit)} className="space-y-8 pb-4">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1">Título da Etiqueta</label>
+                            <input
+                                {...register('name')}
+                                className="w-full px-6 py-4 rounded-[1.5rem] border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 outline-none focus:ring-4 focus:ring-primary/10 transition-all text-sm font-semibold dark:text-white uppercase placeholder:text-slate-400"
+                                placeholder="EX: VIP AERO"
+                            />
+                            {errors.name && <p className="text-red-500 text-[10px] font-bold uppercase tracking-widest mt-2 ml-2">{errors.name.message}</p>}
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1">Identidade Cromática</label>
+                            <div className="flex gap-4">
+                                <div className="relative h-14 w-14 group border-4 border-white dark:border-slate-800 rounded-2xl shadow-lg transition-transform hover:scale-110" style={{ backgroundColor: watch('color') || '#3B82F6' }}>
+                                    <input
+                                        type="color"
+                                        {...register('color')}
+                                        className="absolute inset-0 h-full w-full opacity-0 cursor-pointer"
+                                    />
+                                </div>
+                                <input
+                                    {...register('color')}
+                                    className="flex-1 px-6 py-4 rounded-[1.5rem] border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 outline-none focus:ring-4 focus:ring-primary/10 transition-all text-sm font-semibold dark:text-white uppercase font-mono"
+                                    placeholder="#38BDF8"
+                                />
+                            </div>
+                            {errors.color && <p className="text-red-500 text-[10px] font-bold uppercase tracking-widest mt-2 ml-2">{errors.color.message}</p>}
+                        </div>
+                    </form>
+                </motion.div>
+            </div>
+        );
+    }
+
     return (
-        <div className="space-y-8 relative liquid-glass aurora min-h-0 md:min-h-[calc(100vh-8rem)] pb-12">
+        <div className="space-y-8 max-w-7xl mx-auto relative liquid-glass aurora min-h-[calc(100dvh-6rem)] md:min-h-[calc(100vh-8rem)] pb-12">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10 px-4">
                 <div>
                     <h2 className="text-4xl font-black text-slate-900 dark:text-white tracking-tighter italic">Etiquetas</h2>
@@ -187,90 +272,6 @@ export default function TagsPage() {
                 </div>
             )}
 
-            {/* Modal */}
-            <AnimatePresence>
-                {isModalOpen && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            className="absolute inset-0 bg-slate-950/40 backdrop-blur-md"
-                            onClick={closeModal}
-                        />
-                        <motion.div
-                            initial={{ opacity: 0, scale: 0.9, y: 40 }}
-                            animate={{ opacity: 1, scale: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.9, y: 40 }}
-                            className="relative w-full max-w-md liquid-glass dark:bg-slate-900/90 rounded-[2.5rem] shadow-2xl overflow-hidden border border-white/80 dark:border-white/10"
-                            onClick={e => e.stopPropagation()}
-                        >
-                            <div className="p-8 border-b border-slate-100 dark:border-white/5 flex items-center justify-between">
-                                <h3 className="text-2xl font-black text-slate-900 dark:text-white tracking-tighter">
-                                    {editingTag ? 'Editar Tag' : 'Inovar Tag'}
-                                </h3>
-                                <button
-                                    onClick={closeModal}
-                                    className="p-3 hover:bg-slate-100 dark:hover:bg-white/5 rounded-2xl transition-all"
-                                >
-                                    <X className="h-6 w-6 text-slate-400" />
-                                </button>
-                            </div>
-
-                            <form onSubmit={handleSubmit(onSubmit)} className="p-8 space-y-8">
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1">Título da Etiqueta</label>
-                                    <input
-                                        {...register('name')}
-                                        className="w-full px-6 py-4 rounded-[1.5rem] border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 outline-none focus:ring-4 focus:ring-primary/10 transition-all text-sm font-semibold dark:text-white uppercase placeholder:text-slate-400"
-                                        placeholder="EX: VIP AERO"
-                                    />
-                                    {errors.name && <p className="text-red-500 text-[10px] font-bold uppercase tracking-widest mt-2 ml-2">{errors.name.message}</p>}
-                                </div>
-
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1">Identidade Cromática</label>
-                                    <div className="flex gap-4">
-                                        <div className="relative h-14 w-14 group">
-                                            <input
-                                                type="color"
-                                                {...register('color')}
-                                                className="absolute inset-0 h-full w-full rounded-2xl p-0 border-0 overflow-hidden cursor-pointer opacity-0 z-10"
-                                            />
-                                            <div
-                                                className="h-full w-full rounded-2xl shadow-lg border-4 border-white dark:border-slate-800 transition-transform group-hover:scale-110"
-                                                style={{ backgroundColor: watch('color') }}
-                                            />
-                                        </div>
-                                        <input
-                                            {...register('color')}
-                                            className="flex-1 px-6 py-4 rounded-[1.5rem] border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 outline-none focus:ring-4 focus:ring-primary/10 transition-all text-sm font-semibold dark:text-white uppercase font-mono"
-                                            placeholder="#38BDF8"
-                                        />
-                                    </div>
-                                    {errors.color && <p className="text-red-500 text-[10px] font-bold uppercase tracking-widest mt-2 ml-2">{errors.color.message}</p>}
-                                </div>
-
-                                <div className="pt-4 flex gap-4">
-                                    <button
-                                        type="button"
-                                        onClick={closeModal}
-                                        className="flex-1 py-4.5 rounded-[1.5rem] border border-slate-200 dark:border-white/10 font-bold text-xs uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-white/5 transition-all text-slate-500 shadow-sm"
-                                    >
-                                        Descartar
-                                    </button>
-                                    <button
-                                        type="submit"
-                                        className="flex-1 py-4.5 rounded-[1.5rem] bg-primary text-white font-bold text-sm uppercase tracking-widest shadow-xl shadow-primary/20 hover:bg-primary/90 transition-all active:scale-95"
-                                    >
-                                        {editingTag ? 'Atualizar Aero' : 'Criar Registro'}
-                                    </button>
-                                </div>
-                            </form>
-                        </motion.div>
-                    </div>
-                )}
-            </AnimatePresence>
         </div>
     );
 }

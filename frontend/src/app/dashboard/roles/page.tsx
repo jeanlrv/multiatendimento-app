@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     Shield, ShieldCheck, ShieldPlus, Edit2, Trash2, X, Save,
     RefreshCcw, Search, ChevronDown, ChevronRight, Users,
-    Lock, Unlock, CheckSquare, Square, Zap,
+    Lock, Unlock, CheckSquare, Square, Zap, ChevronLeft
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
@@ -93,8 +93,28 @@ export default function RolesPage() {
     const openCreate = () => { setEditingRole(null); setShowDrawer(true); };
     const openEdit = (role: Role) => { setEditingRole(role); setShowDrawer(true); };
 
+    if (showDrawer) {
+        return (
+            <div className="space-y-10 max-w-7xl mx-auto pb-12 relative liquid-glass aurora min-h-[calc(100dvh-6rem)] md:min-h-[calc(100vh-8rem)] pt-6">
+                <RoleFormView
+                    key={editingRole?.id ?? 'new'}
+                    role={editingRole}
+                    onClose={() => setShowDrawer(false)}
+                    onSave={(saved) => {
+                        if (editingRole) {
+                            setRoles(prev => prev.map(r => r.id === saved.id ? saved : r));
+                        } else {
+                            setRoles(prev => [...prev, saved]);
+                        }
+                        setShowDrawer(false);
+                    }}
+                />
+            </div>
+        );
+    }
+
     return (
-        <div className="space-y-10 max-w-7xl mx-auto pb-12 relative liquid-glass aurora min-h-0 md:min-h-[calc(100vh-8rem)]">
+        <div className="space-y-10 max-w-7xl mx-auto pb-12 relative liquid-glass aurora min-h-[calc(100dvh-6rem)] md:min-h-[calc(100vh-8rem)]">
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 px-4">
                 <div>
@@ -268,24 +288,6 @@ export default function RolesPage() {
                 </div>
             )}
 
-            {/* Drawer — key force-remounts ao trocar de role, garantindo reinicialização do form */}
-            <AnimatePresence>
-                {showDrawer && (
-                    <RoleDrawer
-                        key={editingRole?.id ?? 'new'}
-                        role={editingRole}
-                        onClose={() => setShowDrawer(false)}
-                        onSave={(saved) => {
-                            if (editingRole) {
-                                setRoles(prev => prev.map(r => r.id === saved.id ? saved : r));
-                            } else {
-                                setRoles(prev => [...prev, saved]);
-                            }
-                            setShowDrawer(false);
-                        }}
-                    />
-                )}
-            </AnimatePresence>
         </div>
     );
 }
@@ -298,7 +300,7 @@ interface DrawerProps {
     onSave: (role: Role) => void;
 }
 
-function RoleDrawer({ role, onClose, onSave }: DrawerProps) {
+function RoleFormView({ role, onClose, onSave }: DrawerProps) {
     const isNew = !role;
     const [submitting, setSubmitting] = useState(false);
     const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(PERMISSION_GROUPS.map(g => g.group)));
@@ -391,223 +393,219 @@ function RoleDrawer({ role, onClose, onSave }: DrawerProps) {
     };
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-end">
-            <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={onClose}
-                className="absolute inset-0 bg-slate-950/20 backdrop-blur-sm"
-            />
-            <motion.div
-                initial={{ x: '100%' }}
-                animate={{ x: 0 }}
-                exit={{ x: '100%' }}
-                transition={{ type: 'spring', damping: 26, stiffness: 220 }}
-                className="relative w-full max-w-xl h-full bg-white dark:bg-slate-900 shadow-[-20px_0_80px_rgba(0,0,0,0.12)] overflow-hidden border-l border-slate-200 dark:border-white/10 flex flex-col"
-            >
-                {/* Header */}
-                <div className="p-8 border-b border-slate-100 dark:border-white/5 flex items-center justify-between sticky top-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl z-10">
+        <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="w-full max-w-4xl mx-auto liquid-glass rounded-[2rem] md:rounded-[3rem] p-6 md:p-10 border border-white/10 shadow-2xl flex flex-col"
+        >
+            {/* Header */}
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 border-b border-white/10 pb-6">
+                <div className="flex items-center gap-4">
+                    <div className="h-14 w-14 md:h-16 md:w-16 rounded-2xl flex items-center justify-center text-3xl md:text-4xl shadow-lg shadow-primary/10 transition-colors text-white bg-primary">
+                        {isAdminRole ? <Lock className="h-6 w-6 md:h-8 md:w-8" /> : <Shield className="h-6 w-6 md:h-8 md:w-8" />}
+                    </div>
                     <div>
-                        <h3 className="text-2xl font-black text-slate-900 dark:text-white tracking-tighter italic">
-                            {isNew ? 'Novo' : 'Editar'} <span className="text-primary">Perfil</span>
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="flex items-center gap-2 text-slate-500 hover:text-primary transition-colors text-xs font-black uppercase tracking-widest mb-1"
+                        >
+                            <ChevronLeft size={16} /> Voltar para Perfis
+                        </button>
+                        <h3 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white tracking-tighter italic leading-tight">
+                            {isNew ? 'Novo' : 'Editar'} <span className="text-primary italic">Perfil</span>
                         </h3>
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">
+                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">
                             {isNew ? 'Defina nome e permissões' : `Editando: ${role.name}`}
                         </p>
                     </div>
-                    <button onClick={onClose} className="p-2 hover:bg-slate-100 dark:hover:bg-white/5 rounded-xl transition-all">
-                        <X size={20} className="text-slate-400" />
-                    </button>
                 </div>
-
-                {/* Counter badge */}
-                <div className="px-8 py-3 bg-primary/5 border-b border-primary/10 flex items-center justify-between">
-                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                        Permissões selecionadas
-                    </span>
-                    <div className="flex items-center gap-3">
-                        <span className="text-sm font-black text-primary">
-                            {totalSelected} / {ALL_PERMISSION_KEYS.length}
-                        </span>
-                        {!isAdminRole && (
-                            <div className="flex gap-2">
-                                <button
-                                    type="button"
-                                    onClick={selectAll}
-                                    className="text-[9px] font-black px-3 py-1 rounded-lg bg-primary/10 text-primary border border-primary/20 uppercase tracking-widest hover:bg-primary hover:text-white transition-all"
-                                >
-                                    <Zap size={10} className="inline mr-1" />
-                                    Acesso Total
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={clearAll}
-                                    className="text-[9px] font-black px-3 py-1 rounded-lg bg-rose-500/10 text-rose-500 border border-rose-500/20 uppercase tracking-widest hover:bg-rose-500 hover:text-white transition-all"
-                                >
-                                    Limpar
-                                </button>
-                            </div>
-                        )}
-                    </div>
-                </div>
-
-                {/* Scrollable content */}
-                <div className="flex-1 overflow-y-auto">
-                    <form onSubmit={handleSubmit} className="p-8 space-y-6">
-                        {/* Nome */}
-                        <div className="space-y-2">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nome do Perfil *</label>
-                            <input
-                                required
-                                value={form.name}
-                                onChange={e => setForm({ ...form, name: e.target.value })}
-                                disabled={isAdminRole}
-                                className="w-full px-5 py-3.5 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 outline-none focus:ring-2 focus:ring-primary/20 text-sm font-semibold dark:text-white transition-all disabled:opacity-60"
-                                placeholder="Ex: Atendente Jr."
-                            />
-                        </div>
-
-                        {/* Descrição */}
-                        <div className="space-y-2">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Descrição</label>
-                            <input
-                                value={form.description}
-                                onChange={e => setForm({ ...form, description: e.target.value })}
-                                disabled={isAdminRole}
-                                className="w-full px-5 py-3.5 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 outline-none focus:ring-2 focus:ring-primary/20 text-sm font-semibold dark:text-white transition-all disabled:opacity-60"
-                                placeholder="Breve descrição do perfil (opcional)"
-                            />
-                        </div>
-
-                        {/* Aviso admin protegido */}
-                        {isAdminRole && (
-                            <div className="flex items-start gap-3 p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl">
-                                <Lock size={16} className="text-rose-500 mt-0.5 shrink-0" />
-                                <p className="text-[11px] text-rose-600 dark:text-rose-400 font-bold leading-relaxed">
-                                    Este é o perfil de administrador do sistema. Ele possui acesso total e suas permissões são protegidas automaticamente pelo sistema.
-                                </p>
-                            </div>
-                        )}
-
-                        {/* Permissões por grupos */}
-                        <div className="space-y-3">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2">
-                                <Shield size={11} className="text-primary" /> Permissões por Módulo
-                            </label>
-
-                            {PERMISSION_GROUPS.map(group => {
-                                const groupKeys = group.items.map(i => i.key);
-                                const selectedInGroup = groupKeys.filter(k => form.permissions.has(k)).length;
-                                const allGroupSelected = selectedInGroup === groupKeys.length;
-                                const someGroupSelected = selectedInGroup > 0 && !allGroupSelected;
-                                const expanded = expandedGroups.has(group.group);
-
-                                return (
-                                    <div key={group.group} className="border border-slate-200 dark:border-white/10 rounded-2xl overflow-hidden">
-                                        {/* Group header */}
-                                        <div className="flex items-center justify-between px-4 py-3 bg-slate-50 dark:bg-white/5">
-                                            <button
-                                                type="button"
-                                                onClick={() => toggleGroupExpand(group.group)}
-                                                className="flex items-center gap-3 flex-1 text-left"
-                                            >
-                                                <span className="text-lg">{group.icon}</span>
-                                                <span className="text-[11px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                                                    {group.group}
-                                                </span>
-                                                <span className="text-[9px] font-bold text-slate-400 ml-auto mr-2">
-                                                    {selectedInGroup}/{groupKeys.length}
-                                                </span>
-                                                {expanded
-                                                    ? <ChevronDown size={14} className="text-slate-400 shrink-0" />
-                                                    : <ChevronRight size={14} className="text-slate-400 shrink-0" />
-                                                }
-                                            </button>
-                                            {/* Select all group */}
-                                            {!isAdminRole && (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => toggleGroup(groupKeys)}
-                                                    className="ml-3 shrink-0"
-                                                    title={allGroupSelected ? 'Desmarcar todos' : 'Marcar todos'}
-                                                >
-                                                    {allGroupSelected ? (
-                                                        <CheckSquare size={18} className="text-primary" />
-                                                    ) : someGroupSelected ? (
-                                                        <CheckSquare size={18} className="text-primary/40" />
-                                                    ) : (
-                                                        <Square size={18} className="text-slate-300 dark:text-slate-600" />
-                                                    )}
-                                                </button>
-                                            )}
-                                        </div>
-
-                                        {/* Group items */}
-                                        <AnimatePresence initial={false}>
-                                            {expanded && (
-                                                <motion.div
-                                                    initial={{ height: 0, opacity: 0 }}
-                                                    animate={{ height: 'auto', opacity: 1 }}
-                                                    exit={{ height: 0, opacity: 0 }}
-                                                    transition={{ duration: 0.2 }}
-                                                    className="divide-y divide-slate-100 dark:divide-white/5"
-                                                >
-                                                    {group.items.map(item => {
-                                                        const checked = isAdminRole ? true : form.permissions.has(item.key);
-                                                        return (
-                                                            <label
-                                                                key={item.key}
-                                                                className={`flex items-center gap-4 px-5 py-3 ${isAdminRole ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:bg-primary/5 transition-colors'}`}
-                                                            >
-                                                                <input
-                                                                    type="checkbox"
-                                                                    checked={checked}
-                                                                    onChange={() => togglePermission(item.key)}
-                                                                    disabled={isAdminRole}
-                                                                    className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-0 accent-primary cursor-pointer disabled:cursor-not-allowed"
-                                                                />
-                                                                <div className="flex-1 min-w-0">
-                                                                    <span className={`text-[11px] font-black uppercase tracking-wide ${checked ? 'text-slate-800 dark:text-white' : 'text-slate-400'}`}>
-                                                                        {item.label}
-                                                                    </span>
-                                                                    <p className="text-[9px] text-slate-400 mt-0.5">{item.desc}</p>
-                                                                </div>
-                                                                <span className="text-[8px] font-mono text-slate-300 dark:text-slate-600 shrink-0">{item.key}</span>
-                                                            </label>
-                                                        );
-                                                    })}
-                                                </motion.div>
-                                            )}
-                                        </AnimatePresence>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </form>
-                </div>
-
-                {/* Footer */}
-                <div className="p-8 pt-4 border-t border-slate-100 dark:border-white/5 flex gap-3">
+                <div className="flex gap-3 mt-4 md:mt-0 w-full md:w-auto">
                     <button
                         type="button"
                         onClick={onClose}
-                        className="px-6 py-3.5 rounded-2xl border border-slate-200 dark:border-white/10 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:bg-rose-500/5 hover:text-rose-500 active:scale-95 transition-all"
+                        className="px-6 py-3 border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400 font-black text-[10px] uppercase tracking-[0.2em] rounded-2xl hover:bg-slate-100 dark:hover:bg-white/5 transition-all hidden md:block"
                     >
                         Cancelar
                     </button>
                     <button
                         onClick={handleSubmit as any}
                         disabled={submitting || isAdminRole}
-                        className="flex-1 py-3.5 rounded-2xl bg-primary text-white font-black text-[10px] uppercase tracking-[0.2em] shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+                        className="flex-1 md:flex-none px-8 py-3 bg-primary text-white font-black text-[10px] uppercase tracking-[0.2em] rounded-2xl shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
                     >
-                        {submitting
-                            ? <RefreshCcw className="animate-spin h-4 w-4" />
-                            : <><Save size={14} /> {isNew ? 'Criar Perfil' : 'Salvar Alterações'}</>
-                        }
+                        {submitting ? <RefreshCcw className="animate-spin h-4 w-4" /> : <Save className="w-4 h-4" />}
+                        {isNew ? 'Criar Perfil' : 'Salvar Alterações'}
                     </button>
                 </div>
-            </motion.div>
-        </div>
+            </div>
+
+            {/* Counter badge */}
+            <div className="px-8 py-3 bg-primary/5 border-b border-primary/10 flex items-center justify-between">
+                <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                    Permissões selecionadas
+                </span>
+                <div className="flex items-center gap-3">
+                    <span className="text-sm font-black text-primary">
+                        {totalSelected} / {ALL_PERMISSION_KEYS.length}
+                    </span>
+                    {!isAdminRole && (
+                        <div className="flex gap-2">
+                            <button
+                                type="button"
+                                onClick={selectAll}
+                                className="text-[9px] font-black px-3 py-1 rounded-lg bg-primary/10 text-primary border border-primary/20 uppercase tracking-widest hover:bg-primary hover:text-white transition-all"
+                            >
+                                <Zap size={10} className="inline mr-1" />
+                                Acesso Total
+                            </button>
+                            <button
+                                type="button"
+                                onClick={clearAll}
+                                className="text-[9px] font-black px-3 py-1 rounded-lg bg-rose-500/10 text-rose-500 border border-rose-500/20 uppercase tracking-widest hover:bg-rose-500 hover:text-white transition-all"
+                            >
+                                Limpar
+                            </button>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* Scrollable content */}
+            <div className="flex-1 overflow-y-auto">
+                <form onSubmit={handleSubmit} className="p-8 space-y-6">
+                    {/* Nome */}
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nome do Perfil *</label>
+                        <input
+                            required
+                            value={form.name}
+                            onChange={e => setForm({ ...form, name: e.target.value })}
+                            disabled={isAdminRole}
+                            className="w-full px-5 py-3.5 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 outline-none focus:ring-2 focus:ring-primary/20 text-sm font-semibold dark:text-white transition-all disabled:opacity-60"
+                            placeholder="Ex: Atendente Jr."
+                        />
+                    </div>
+
+                    {/* Descrição */}
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Descrição</label>
+                        <input
+                            value={form.description}
+                            onChange={e => setForm({ ...form, description: e.target.value })}
+                            disabled={isAdminRole}
+                            className="w-full px-5 py-3.5 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 outline-none focus:ring-2 focus:ring-primary/20 text-sm font-semibold dark:text-white transition-all disabled:opacity-60"
+                            placeholder="Breve descrição do perfil (opcional)"
+                        />
+                    </div>
+
+                    {/* Aviso admin protegido */}
+                    {isAdminRole && (
+                        <div className="flex items-start gap-3 p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl">
+                            <Lock size={16} className="text-rose-500 mt-0.5 shrink-0" />
+                            <p className="text-[11px] text-rose-600 dark:text-rose-400 font-bold leading-relaxed">
+                                Este é o perfil de administrador do sistema. Ele possui acesso total e suas permissões são protegidas automaticamente pelo sistema.
+                            </p>
+                        </div>
+                    )}
+
+                    {/* Permissões por grupos */}
+                    <div className="space-y-3">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2">
+                            <Shield size={11} className="text-primary" /> Permissões por Módulo
+                        </label>
+
+                        {PERMISSION_GROUPS.map(group => {
+                            const groupKeys = group.items.map(i => i.key);
+                            const selectedInGroup = groupKeys.filter(k => form.permissions.has(k)).length;
+                            const allGroupSelected = selectedInGroup === groupKeys.length;
+                            const someGroupSelected = selectedInGroup > 0 && !allGroupSelected;
+                            const expanded = expandedGroups.has(group.group);
+
+                            return (
+                                <div key={group.group} className="border border-slate-200 dark:border-white/10 rounded-2xl overflow-hidden">
+                                    {/* Group header */}
+                                    <div className="flex items-center justify-between px-4 py-3 bg-slate-50 dark:bg-white/5">
+                                        <button
+                                            type="button"
+                                            onClick={() => toggleGroupExpand(group.group)}
+                                            className="flex items-center gap-3 flex-1 text-left"
+                                        >
+                                            <span className="text-lg">{group.icon}</span>
+                                            <span className="text-[11px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                                                {group.group}
+                                            </span>
+                                            <span className="text-[9px] font-bold text-slate-400 ml-auto mr-2">
+                                                {selectedInGroup}/{groupKeys.length}
+                                            </span>
+                                            {expanded
+                                                ? <ChevronDown size={14} className="text-slate-400 shrink-0" />
+                                                : <ChevronRight size={14} className="text-slate-400 shrink-0" />
+                                            }
+                                        </button>
+                                        {/* Select all group */}
+                                        {!isAdminRole && (
+                                            <button
+                                                type="button"
+                                                onClick={() => toggleGroup(groupKeys)}
+                                                className="ml-3 shrink-0"
+                                                title={allGroupSelected ? 'Desmarcar todos' : 'Marcar todos'}
+                                            >
+                                                {allGroupSelected ? (
+                                                    <CheckSquare size={18} className="text-primary" />
+                                                ) : someGroupSelected ? (
+                                                    <CheckSquare size={18} className="text-primary/40" />
+                                                ) : (
+                                                    <Square size={18} className="text-slate-300 dark:text-slate-600" />
+                                                )}
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {/* Group items */}
+                                    <AnimatePresence initial={false}>
+                                        {expanded && (
+                                            <motion.div
+                                                initial={{ height: 0, opacity: 0 }}
+                                                animate={{ height: 'auto', opacity: 1 }}
+                                                exit={{ height: 0, opacity: 0 }}
+                                                transition={{ duration: 0.2 }}
+                                                className="divide-y divide-slate-100 dark:divide-white/5"
+                                            >
+                                                {group.items.map(item => {
+                                                    const checked = isAdminRole ? true : form.permissions.has(item.key);
+                                                    return (
+                                                        <label
+                                                            key={item.key}
+                                                            className={`flex items-center gap-4 px-5 py-3 ${isAdminRole ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:bg-primary/5 transition-colors'}`}
+                                                        >
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={checked}
+                                                                onChange={() => togglePermission(item.key)}
+                                                                disabled={isAdminRole}
+                                                                className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-0 accent-primary cursor-pointer disabled:cursor-not-allowed"
+                                                            />
+                                                            <div className="flex-1 min-w-0">
+                                                                <span className={`text-[11px] font-black uppercase tracking-wide ${checked ? 'text-slate-800 dark:text-white' : 'text-slate-400'}`}>
+                                                                    {item.label}
+                                                                </span>
+                                                                <p className="text-[9px] text-slate-400 mt-0.5">{item.desc}</p>
+                                                            </div>
+                                                            <span className="text-[8px] font-mono text-slate-300 dark:text-slate-600 shrink-0">{item.key}</span>
+                                                        </label>
+                                                    );
+                                                })}
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </form>
+            </div>
+
+        </motion.div>
     );
 }

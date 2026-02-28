@@ -190,8 +190,27 @@ export default function SchedulingPage() {
 
     const closeModal = () => { setShowModal(false); setEditingId(null); setForm(initialForm); };
 
+    if (showModal) {
+        return (
+            <div className="w-full relative z-10 p-4 transition-all">
+                <SchedulingModal
+                    form={form}
+                    setForm={setForm}
+                    loading={loading}
+                    editingId={editingId}
+                    users={users}
+                    departments={departments}
+                    contacts={contacts}
+                    searchContacts={searchContacts}
+                    closeModal={closeModal}
+                    handleSave={handleSave}
+                />
+            </div>
+        );
+    }
+
     return (
-        <div className="liquid-glass aurora min-h-0 md:min-h-[calc(100vh-8rem)] p-4 md:p-8 rounded-[2rem] md:rounded-[3rem] shadow-2xl space-y-6">
+        <div className="liquid-glass aurora min-h-[calc(100dvh-6rem)] md:min-h-[calc(100vh-8rem)] p-4 md:p-8 rounded-[2rem] md:rounded-[3rem] shadow-2xl space-y-6">
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div>
@@ -328,24 +347,6 @@ export default function SchedulingPage() {
                 </div>
             </div>
 
-            {/* Modal novo/editar */}
-            <AnimatePresence>
-                {showModal && (
-                    <SchedulingModal
-                        form={form}
-                        setForm={setForm}
-                        loading={loading}
-                        editingId={editingId}
-                        users={users}
-                        departments={departments}
-                        contacts={contacts}
-                        searchContacts={searchContacts}
-                        closeModal={closeModal}
-                        handleSave={handleSave}
-                    />
-                )}
-            </AnimatePresence>
-
             {/* Drawer detalhes */}
             <AnimatePresence>
                 {selectedEvent && (
@@ -367,106 +368,99 @@ export default function SchedulingPage() {
 function SchedulingModal({ form, setForm, loading, editingId, users, departments, contacts, searchContacts, closeModal, handleSave }: any) {
     return (
         <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-            onClick={(e) => { if (e.target === e.currentTarget) closeModal(); }}
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="w-full max-w-4xl mx-auto liquid-glass rounded-[2rem] md:rounded-[3rem] p-6 md:p-10 border border-white/10 shadow-2xl bg-white dark:bg-slate-900 space-y-5"
         >
-            <motion.div
-                initial={{ opacity: 0, scale: 0.95, y: 20 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-3xl shadow-2xl p-8 space-y-5 border border-gray-100 dark:border-white/10"
-            >
-                <div className="flex items-center justify-between">
-                    <h2 className="text-xl font-black tracking-tighter">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center pb-6 border-b border-gray-100 dark:border-white/5 gap-4">
+                <div>
+                    <h2 className="text-2xl md:text-3xl font-black tracking-tighter italic">
                         {editingId ? "Editar Agendamento" : "Novo Agendamento"}
                     </h2>
-                    <button onClick={closeModal} className="p-2 hover:bg-gray-100 dark:hover:bg-white/5 rounded-xl transition-colors">
-                        <X size={18} />
-                    </button>
                 </div>
+                <button onClick={closeModal} className="px-6 py-3 border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400 font-black text-[10px] uppercase tracking-[0.2em] rounded-2xl hover:bg-slate-100 dark:hover:bg-white/5 transition-all">
+                    Voltar para Calendário
+                </button>
+            </div>
 
-                <div className="space-y-4">
-                    {/* Contato */}
-                    <div className="space-y-2">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Contato</label>
-                        <input
-                            placeholder="Buscar contato..."
-                            onChange={e => searchContacts(e.target.value)}
+            <div className="space-y-4">
+                {/* Contato */}
+                <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Contato</label>
+                    <input
+                        placeholder="Buscar contato..."
+                        onChange={e => searchContacts(e.target.value)}
+                        className="w-full border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3 text-sm bg-gray-50 dark:bg-white/5 focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all"
+                    />
+                    {contacts.length > 0 && (
+                        <select
+                            value={form.contactId}
+                            onChange={e => setForm({ ...form, contactId: e.target.value })}
                             className="w-full border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3 text-sm bg-gray-50 dark:bg-white/5 focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all"
-                        />
-                        {contacts.length > 0 && (
-                            <select
-                                value={form.contactId}
-                                onChange={e => setForm({ ...form, contactId: e.target.value })}
-                                className="w-full border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3 text-sm bg-gray-50 dark:bg-white/5 focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all"
-                            >
-                                <option value="">Selecionar contato</option>
-                                {contacts.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                            </select>
-                        )}
-                    </div>
+                        >
+                            <option value="">Selecionar contato</option>
+                            {contacts.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </select>
+                    )}
+                </div>
 
-                    {/* Profissional e Depto em row */}
-                    <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1">
-                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Profissional</label>
-                            <select value={form.userId} onChange={e => setForm({ ...form, userId: e.target.value })}
-                                className="w-full border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2.5 text-sm bg-gray-50 dark:bg-white/5 focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all">
-                                <option value="">Selecionar...</option>
-                                {users.map((u: any) => <option key={u.id} value={u.id}>{u.name}</option>)}
-                            </select>
-                        </div>
-                        <div className="space-y-1">
-                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Departamento</label>
-                            <select value={form.departmentId} onChange={e => setForm({ ...form, departmentId: e.target.value })}
-                                className="w-full border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2.5 text-sm bg-gray-50 dark:bg-white/5 focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all">
-                                <option value="">Selecionar...</option>
-                                {departments.map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
-                            </select>
-                        </div>
-                    </div>
-
-                    {/* Datas */}
-                    <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1">
-                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Início</label>
-                            <input type="datetime-local" value={form.startTime} onChange={e => setForm({ ...form, startTime: e.target.value })}
-                                className="w-full border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2.5 text-sm bg-gray-50 dark:bg-white/5 focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all" />
-                        </div>
-                        <div className="space-y-1">
-                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Fim</label>
-                            <input type="datetime-local" value={form.endTime} onChange={e => setForm({ ...form, endTime: e.target.value })}
-                                className="w-full border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2.5 text-sm bg-gray-50 dark:bg-white/5 focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all" />
-                        </div>
-                    </div>
-
-                    {/* Notes */}
+                {/* Profissional e Depto em row */}
+                <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Observações</label>
-                        <textarea
-                            placeholder="Notas adicionais..."
-                            value={form.notes}
-                            onChange={e => setForm({ ...form, notes: e.target.value })}
-                            rows={3}
-                            className="w-full border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3 text-sm bg-gray-50 dark:bg-white/5 focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all resize-none"
-                        />
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Profissional</label>
+                        <select value={form.userId} onChange={e => setForm({ ...form, userId: e.target.value })}
+                            className="w-full border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2.5 text-sm bg-gray-50 dark:bg-white/5 focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all">
+                            <option value="">Selecionar...</option>
+                            {users.map((u: any) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                        </select>
+                    </div>
+                    <div className="space-y-1">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Departamento</label>
+                        <select value={form.departmentId} onChange={e => setForm({ ...form, departmentId: e.target.value })}
+                            className="w-full border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2.5 text-sm bg-gray-50 dark:bg-white/5 focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all">
+                            <option value="">Selecionar...</option>
+                            {departments.map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                        </select>
                     </div>
                 </div>
 
-                <div className="flex justify-end gap-3 pt-2">
-                    <button onClick={closeModal}
-                        className="px-5 py-2.5 text-sm font-black rounded-xl text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/5 transition-all">
-                        Cancelar
-                    </button>
-                    <button onClick={handleSave} disabled={loading}
-                        className="px-8 py-2.5 bg-primary text-white rounded-xl text-sm font-black uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-lg shadow-primary/30 disabled:opacity-50 disabled:scale-100">
-                        {loading ? "Salvando..." : "Salvar"}
-                    </button>
+                {/* Datas */}
+                <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Início</label>
+                        <input type="datetime-local" value={form.startTime} onChange={e => setForm({ ...form, startTime: e.target.value })}
+                            className="w-full border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2.5 text-sm bg-gray-50 dark:bg-white/5 focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all" />
+                    </div>
+                    <div className="space-y-1">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Fim</label>
+                        <input type="datetime-local" value={form.endTime} onChange={e => setForm({ ...form, endTime: e.target.value })}
+                            className="w-full border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2.5 text-sm bg-gray-50 dark:bg-white/5 focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all" />
+                    </div>
                 </div>
-            </motion.div>
+
+                {/* Notes */}
+                <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Observações</label>
+                    <textarea
+                        placeholder="Notas adicionais..."
+                        value={form.notes}
+                        onChange={e => setForm({ ...form, notes: e.target.value })}
+                        rows={3}
+                        className="w-full border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3 text-sm bg-gray-50 dark:bg-white/5 focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all resize-none"
+                    />
+                </div>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-2">
+                <button onClick={closeModal}
+                    className="px-5 py-2.5 text-sm font-black rounded-xl text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/5 transition-all">
+                    Cancelar
+                </button>
+                <button onClick={handleSave} disabled={loading}
+                    className="px-8 py-2.5 bg-primary text-white rounded-xl text-sm font-black uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-lg shadow-primary/30 disabled:opacity-50 disabled:scale-100">
+                    {loading ? "Salvando..." : "Salvar"}
+                </button>
+            </div>
         </motion.div>
     );
 }

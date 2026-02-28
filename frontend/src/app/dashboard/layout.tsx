@@ -247,23 +247,26 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <Toaster position="top-right" richColors closeButton />
 
                 {/* ── SIDEBAR DESKTOP (md+) ────────────────────────────────── */}
-                <aside className={`${sidebarCollapsed ? 'w-20' : 'w-72'} liquid-glass border-r border-slate-200 dark:border-white/5 flex-shrink-0 hidden md:flex flex-col shadow-2xl relative z-20 transition-all duration-300`}>
-                    <SidebarContent
-                        sidebarCollapsed={sidebarCollapsed}
-                        logoUrl={logoUrl}
-                        companyName={companyName}
-                        companyInitials={companyInitials}
-                        pathname={pathname}
-                        menuItems={menuItems}
-                        logout={logout}
-                        setMobileMenuOpen={setMobileMenuOpen}
-                    />
+                <aside className={`${sidebarCollapsed ? 'w-20' : 'w-72'} flex-shrink-0 hidden md:flex flex-col relative z-30 transition-all duration-300`}>
+                    <div className="absolute inset-0 liquid-glass !rounded-none border-r border-slate-200 dark:border-white/5 shadow-2xl pointer-events-none" />
+                    <div className="relative z-10 w-full h-full flex flex-col pointer-events-auto">
+                        <SidebarContent
+                            sidebarCollapsed={sidebarCollapsed}
+                            logoUrl={logoUrl}
+                            companyName={companyName}
+                            companyInitials={companyInitials}
+                            pathname={pathname}
+                            menuItems={menuItems}
+                            logout={logout}
+                            setMobileMenuOpen={setMobileMenuOpen}
+                        />
+                    </div>
                     <button
                         onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-                        className="absolute -right-3 top-20 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full p-1.5 shadow-lg hover:scale-110 transition-transform z-30"
+                        className="absolute -right-3 top-20 bg-white dark:bg-slate-800 border border-slate-200 dark:border-white/10 rounded-full p-1.5 shadow-lg hover:scale-110 transition-transform z-50 flex items-center justify-center h-6 w-6 pointer-events-auto"
                         title={sidebarCollapsed ? 'Expandir menu' : 'Recolher menu'}
                     >
-                        {sidebarCollapsed ? <ChevronRight className="h-4 w-4 text-gray-600 dark:text-gray-400" /> : <ChevronLeft className="h-4 w-4 text-gray-600 dark:text-gray-400" />}
+                        {sidebarCollapsed ? <ChevronRight size={14} className="text-slate-600 dark:text-slate-400" /> : <ChevronLeft size={14} className="text-slate-600 dark:text-slate-400" />}
                     </button>
                 </aside>
 

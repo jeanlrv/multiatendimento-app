@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Pencil, Trash2, X, Building2, Save, Activity, RefreshCcw } from 'lucide-react';
+import { Plus, Pencil, Trash2, X, Building2, Save, Activity, RefreshCcw, ChevronLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
 
@@ -94,6 +94,108 @@ export function CompanyManager() {
 
     if (loading) return <div className="flex justify-center py-20"><RefreshCcw className="animate-spin text-primary" /></div>;
 
+    if (isFormOpen) {
+        return (
+            <motion.div
+                initial={{ scale: 0.95, opacity: 0, y: 20 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.95, opacity: 0, y: 20 }}
+                className="w-full relative"
+            >
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 border-b border-white/10 pb-6">
+                    <div className="flex items-center gap-4">
+                        <div
+                            className="h-14 w-14 md:h-16 md:w-16 rounded-2xl flex items-center justify-center text-3xl md:text-4xl shadow-lg shadow-primary/10 transition-colors text-white"
+                            style={{ backgroundColor: formData.primaryColor || '#3B82F6' }}
+                        >
+                            <Building2 className="h-6 w-6 md:h-8 md:w-8" />
+                        </div>
+                        <div>
+                            <button
+                                type="button"
+                                onClick={() => setIsFormOpen(false)}
+                                className="flex items-center gap-2 text-slate-500 hover:text-primary transition-colors text-xs font-black uppercase tracking-widest mb-1"
+                            >
+                                <ChevronLeft size={16} /> Voltar para Opções
+                            </button>
+                            <h3 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white uppercase tracking-tighter italic leading-tight">
+                                {editingCompany ? 'Editar' : 'Nova'} <span className="text-primary italic">Unidade</span>
+                            </h3>
+                        </div>
+                    </div>
+                </div>
+
+                <form onSubmit={handleSave} className="space-y-5">
+                    <div>
+                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block ml-2">Razão / Nome Fantasia</label>
+                        <input
+                            required
+                            value={formData.name || ''}
+                            onChange={e => setFormData({ ...formData, name: e.target.value })}
+                            className="w-full px-5 py-3 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 outline-none focus:ring-2 focus:ring-primary/20 text-sm font-semibold dark:text-white placeholder:text-slate-400 transition-all uppercase"
+                        />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block ml-2">Cor Primária</label>
+                            <div className="flex gap-3 items-center">
+                                <input
+                                    type="color"
+                                    value={formData.primaryColor || '#3B82F6'}
+                                    onChange={e => setFormData({ ...formData, primaryColor: e.target.value })}
+                                    className="w-12 h-12 rounded-xl border border-slate-200 dark:border-white/10 cursor-pointer overflow-hidden p-0"
+                                />
+                                <span className="text-xs font-mono text-slate-500 uppercase font-black">{formData.primaryColor || '#3B82F6'}</span>
+                            </div>
+                        </div>
+                        <div>
+                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block ml-2">Cor Secundária</label>
+                            <div className="flex gap-3 items-center">
+                                <input
+                                    type="color"
+                                    value={formData.secondaryColor || '#1E293B'}
+                                    onChange={e => setFormData({ ...formData, secondaryColor: e.target.value })}
+                                    className="w-12 h-12 rounded-xl border border-slate-200 dark:border-white/10 cursor-pointer overflow-hidden p-0"
+                                />
+                                <span className="text-xs font-mono text-slate-500 uppercase font-black">{formData.secondaryColor || '#1E293B'}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block ml-2">Limite Mensal de Tokens (IA)</label>
+                        <input
+                            type="number"
+                            value={formData.limitTokens || ''}
+                            onChange={e => setFormData({ ...formData, limitTokens: e.target.value })}
+                            className="w-full px-5 py-3 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 outline-none focus:ring-2 focus:ring-primary/20 text-sm font-semibold dark:text-white placeholder:text-slate-400 transition-all font-mono"
+                        />
+                    </div>
+
+                    <div className="pt-4 flex gap-4">
+                        <button
+                            type="button"
+                            onClick={() => setIsFormOpen(false)}
+                            className="flex-1 py-4 rounded-xl border border-slate-200 dark:border-white/10 font-bold text-xs uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-white/5 transition-all text-slate-500 shadow-sm"
+                        >
+                            Descartar
+                        </button>
+                        <button
+                            type="submit"
+                            disabled={submitting}
+                            className="flex-1 py-4 rounded-xl bg-primary text-white font-bold text-xs uppercase tracking-widest shadow-xl shadow-primary/20 hover:bg-primary/90 transition-all active:scale-95 flex items-center justify-center gap-3"
+                        >
+                            {submitting ? <RefreshCcw className="animate-spin" size={18} /> : (
+                                <>
+                                    <Save size={18} /> SALVAR UNIDADE
+                                </>
+                            )}
+                        </button>
+                    </div>
+                </form>
+            </motion.div>
+        );
+    }
+
     return (
         <div className="space-y-8">
             <div className="flex items-center justify-between">
@@ -150,98 +252,6 @@ export function CompanyManager() {
                 ))}
             </div>
 
-            {/* Reuso de Fragment para Modal em tela cheia livre do container parent */}
-            <AnimatePresence>
-                {isFormOpen && (
-                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            onClick={() => setIsFormOpen(false)}
-                            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-                        />
-                        <motion.div
-                            initial={{ scale: 0.95, opacity: 0, y: 20 }}
-                            animate={{ scale: 1, opacity: 1, y: 0 }}
-                            exit={{ scale: 0.95, opacity: 0, y: 20 }}
-                            className="bg-white dark:bg-[#0a0a0a] border border-slate-200 dark:border-white/10 rounded-3xl p-8 relative z-10 w-full max-w-lg shadow-2xl overflow-y-auto max-h-[90vh] custom-scrollbar"
-                        >
-                            <button
-                                onClick={() => setIsFormOpen(false)}
-                                className="absolute top-6 right-6 p-2 bg-slate-100 dark:bg-white/5 text-slate-400 hover:text-primary rounded-full transition-all"
-                            >
-                                <X size={16} />
-                            </button>
-
-                            <h3 className="text-xl font-black text-slate-800 dark:text-white uppercase tracking-wider mb-6 italic">
-                                {editingCompany ? 'Editar Unidade Operacional' : 'Nova Unidade Operacional'}
-                            </h3>
-
-                            <form onSubmit={handleSave} className="space-y-5">
-                                <div>
-                                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block ml-2">Razão / Nome Fantasia</label>
-                                    <input
-                                        required
-                                        value={formData.name || ''}
-                                        onChange={e => setFormData({ ...formData, name: e.target.value })}
-                                        className="w-full px-5 py-3 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 outline-none focus:ring-2 focus:ring-primary/20 text-sm font-semibold dark:text-white placeholder:text-slate-400 transition-all uppercase"
-                                    />
-                                </div>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block ml-2">Cor Primária</label>
-                                        <div className="flex gap-3 items-center">
-                                            <input
-                                                type="color"
-                                                value={formData.primaryColor || '#3B82F6'}
-                                                onChange={e => setFormData({ ...formData, primaryColor: e.target.value })}
-                                                className="w-12 h-12 rounded-xl border border-slate-200 dark:border-white/10 cursor-pointer overflow-hidden p-0"
-                                            />
-                                            <span className="text-xs font-mono text-slate-500 uppercase font-black">{formData.primaryColor || '#3B82F6'}</span>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block ml-2">Cor Secundária</label>
-                                        <div className="flex gap-3 items-center">
-                                            <input
-                                                type="color"
-                                                value={formData.secondaryColor || '#1E293B'}
-                                                onChange={e => setFormData({ ...formData, secondaryColor: e.target.value })}
-                                                className="w-12 h-12 rounded-xl border border-slate-200 dark:border-white/10 cursor-pointer overflow-hidden p-0"
-                                            />
-                                            <span className="text-xs font-mono text-slate-500 uppercase font-black">{formData.secondaryColor || '#1E293B'}</span>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div>
-                                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block ml-2">Limite Mensal de Tokens (IA)</label>
-                                    <input
-                                        type="number"
-                                        value={formData.limitTokens || ''}
-                                        onChange={e => setFormData({ ...formData, limitTokens: e.target.value })}
-                                        className="w-full px-5 py-3 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 outline-none focus:ring-2 focus:ring-primary/20 text-sm font-semibold dark:text-white placeholder:text-slate-400 transition-all font-mono"
-                                    />
-                                </div>
-
-                                <div className="pt-4">
-                                    <button
-                                        type="submit"
-                                        disabled={submitting}
-                                        className="w-full py-4 rounded-xl bg-primary text-white font-bold text-xs uppercase tracking-widest shadow-xl shadow-primary/20 hover:bg-primary/90 transition-all active:scale-95 flex items-center justify-center gap-3"
-                                    >
-                                        {submitting ? <RefreshCcw className="animate-spin" size={18} /> : (
-                                            <>
-                                                <Save size={18} /> SALVAR UNIDADE OPERACIONAL
-                                            </>
-                                        )}
-                                    </button>
-                                </div>
-                            </form>
-                        </motion.div>
-                    </div>
-                )}
-            </AnimatePresence>
         </div>
     );
 }

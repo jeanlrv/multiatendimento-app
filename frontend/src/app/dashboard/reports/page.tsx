@@ -74,7 +74,7 @@ export default function ReportsPage() {
     const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
 
     return (
-        <div className="liquid-glass aurora min-h-0 md:min-h-[calc(100vh-8rem)] p-4 md:p-8 rounded-[2rem] md:rounded-[3rem] shadow-2xl space-y-8 max-w-[1600px] mx-auto">
+        <div className="liquid-glass aurora min-h-[calc(100dvh-6rem)] md:min-h-[calc(100vh-8rem)] p-4 md:p-8 rounded-[2rem] md:rounded-[3rem] shadow-2xl space-y-8 max-w-[1600px] mx-auto">
             {/* Header com Filtros */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div>

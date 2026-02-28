@@ -225,7 +225,7 @@ export default function DashboardPage() {
     }
 
     return (
-        <div className="liquid-glass aurora min-h-0 md:min-h-[calc(100vh-8rem)] p-4 md:p-8 rounded-[2rem] md:rounded-[3rem] shadow-2xl space-y-8 max-w-7xl mx-auto">
+        <div className="liquid-glass aurora min-h-[calc(100dvh-6rem)] md:min-h-[calc(100vh-8rem)] p-4 md:p-8 rounded-[2rem] md:rounded-[3rem] shadow-2xl space-y-8 max-w-7xl mx-auto">
             {/* Hero Section Redesenhada */}
             <motion.div
                 initial={{ opacity: 0, scale: 0.98 }}

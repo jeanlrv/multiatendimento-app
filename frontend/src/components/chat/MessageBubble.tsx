@@ -2,6 +2,7 @@ import React from 'react';
 import { CheckCheck, Paperclip, Video, Reply, X, Copy } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
+import { CustomAudioPlayer } from './CustomAudioPlayer';
 
 interface Message {
     id: string;
@@ -61,7 +62,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ msg, index, onRepl
             className={`flex ${msg.fromMe ? 'justify-end' : 'justify-start'}`}
         >
             <div
-                className={`max-w-[75%] rounded-[2rem] px-5 py-3.5 shadow-xl relative group transition-all duration-300 ${bubbleClass}`}
+                className={`max-w-[80%] rounded-2xl px-3.5 py-2 shadow-md relative group transition-all duration-300 ${bubbleClass}`}
             >
                 {/* Badge de origem (IA) */}
                 {isAI && (
@@ -102,10 +103,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ msg, index, onRepl
 
                 {/* Mídia: Áudio */}
                 {msg.messageType === 'AUDIO' && msg.mediaUrl && (
-                    <div className="mb-2 min-w-[220px]">
-                        <audio controls className="w-full h-10 rounded-xl">
-                            <source src={msg.mediaUrl} />
-                        </audio>
+                    <div className="mb-2 min-w-[240px]">
+                        <CustomAudioPlayer url={msg.mediaUrl} fromMe={msg.fromMe} />
                         {msg.transcription && (
                             <p className="mt-1.5 text-[11px] italic opacity-60 leading-relaxed px-1">
                                 🎙 {msg.transcription}

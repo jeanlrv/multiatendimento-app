@@ -2,6 +2,7 @@ import { AIAgentsService } from '@/services/ai-agents'
 import { Key, Plus, Trash2, Copy, Check, Info, AlertCircle, RefreshCcw } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { toast } from 'sonner'
 
 interface ApiKey {
     id: string
@@ -29,12 +30,10 @@ export default function ApiKeysSection({ agentId }: ApiKeysSectionProps) {
         try {
             setLoading(true)
             const data = await AIAgentsService.listApiKeys()
-            // Se agentId for fornecido, filtrar chaves específicas desse agente ou globais?
-            // De acordo com o schema, agentId é opcional. 
-            // Vamos listar todas as chaves da empresa aqui, mas destacar se é desse agente.
             setKeys(data)
         } catch (error) {
             console.error('Erro ao buscar API Keys:', error)
+            toast.error('Erro ao carregar API Keys')
         } finally {
             setLoading(false)
         }
@@ -42,7 +41,7 @@ export default function ApiKeysSection({ agentId }: ApiKeysSectionProps) {
 
     useEffect(() => {
         fetchKeys()
-    }, [])
+    }, [agentId])
 
     const handleCreate = async () => {
         if (!newName) return
@@ -50,27 +49,35 @@ export default function ApiKeysSection({ agentId }: ApiKeysSectionProps) {
             setCreating(true)
             const key = await AIAgentsService.createApiKey({
                 name: newName,
-                agentId: agentId // Associa ao agente atual se estiver no drawer do agente
+                agentId: agentId
             })
             setNewKey(key)
             setNewName('')
             fetchKeys()
+            toast.success('API Key gerada com sucesso')
         } catch (error) {
             console.error('Erro ao criar API Key:', error)
+            toast.error('Erro ao gerar API Key')
         } finally {
             setCreating(false)
         }
     }
 
-    const handleRevoke = async (id: string) => {
-        if (confirm('Deseja realmente revogar esta chave? O acesso será interrompido imediatamente.')) {
-            try {
-                await AIAgentsService.revokeApiKey(id)
-                fetchKeys()
-            } catch (error) {
-                console.error('Erro ao revogar API Key:', error)
-            }
-        }
+    const handleRevoke = (id: string) => {
+        toast('Revogar esta chave? O acesso será interrompido imediatamente.', {
+            action: { label: 'Revogar', onClick: async () => {
+                try {
+                    await AIAgentsService.revokeApiKey(id)
+                    fetchKeys()
+                    toast.success('API Key revogada')
+                } catch (error) {
+                    console.error('Erro ao revogar API Key:', error)
+                    toast.error('Erro ao revogar API Key')
+                }
+            }},
+            cancel: { label: 'Cancelar', onClick: () => {} },
+            duration: 5000,
+        })
     }
 
     const copyToClipboard = (text: string) => {

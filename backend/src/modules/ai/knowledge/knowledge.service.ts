@@ -222,20 +222,6 @@ export class KnowledgeService {
         });
     }
 
-    async updateBaseLanguage(companyId: string, id: string, language: string) {
-        const base = await this.findOneBase(companyId, id);
-        const validLanguages = ['pt-BR', 'en-US', 'es-ES', 'fr-FR', 'de-DE', 'ja-JP', 'zh-CN'];
-
-        if (!validLanguages.includes(language)) {
-            throw new BadRequestException(`Idioma inválido. Use: ${validLanguages.join(', ')}`);
-        }
-
-        return (this.prisma as any).knowledgeBase.update({
-            where: { id },
-            data: { language }
-        });
-    }
-
     async getBaseStats(companyId: string, id: string) {
         const base = await this.findOneBase(companyId, id);
 

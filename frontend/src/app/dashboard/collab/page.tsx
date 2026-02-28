@@ -101,7 +101,7 @@ export default function CollabPage() {
         'Chat';
 
     return (
-        <div className="liquid-glass aurora min-h-0 md:min-h-[calc(100vh-8rem)] p-4 md:p-8 rounded-[2rem] md:rounded-[3rem] shadow-2xl flex flex-col md:flex-row h-auto md:h-[calc(100vh-8rem)] gap-6">
+        <div className="liquid-glass aurora min-h-[calc(100dvh-6rem)] md:min-h-[calc(100vh-8rem)] p-4 md:p-8 rounded-[2rem] md:rounded-[3rem] shadow-2xl flex flex-col md:flex-row h-auto md:h-[calc(100vh-8rem)] gap-6">
             {/* Left panel */}
             <div className="w-80 flex flex-col gap-4">
                 {/* Search */}

@@ -248,7 +248,7 @@ export default function WorkflowsPage() {
     ========================================================= */
 
     return (
-        <div className="liquid-glass aurora min-h-0 md:min-h-[calc(100vh-8rem)] p-4 md:p-8 rounded-[2rem] md:rounded-[3rem] shadow-2xl space-y-10 pb-16">
+        <div className="liquid-glass aurora min-h-[calc(100dvh-6rem)] md:min-h-[calc(100vh-8rem)] p-4 md:p-8 rounded-[2rem] md:rounded-[3rem] shadow-2xl space-y-10 pb-16">
 
             <Toaster position="bottom-right" richColors />
 

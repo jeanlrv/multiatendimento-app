@@ -1,6 +1,6 @@
 import { AIAgent } from '@/services/ai-agents'
 import { motion } from 'framer-motion'
-import { Globe, Copy, Check, Palette, Type, Layout, ExternalLink } from 'lucide-react'
+import { Copy, Check, Palette, Type, Layout, ExternalLink, AlertCircle } from 'lucide-react'
 import { useState } from 'react'
 
 interface WidgetConfigTabProps {
@@ -10,17 +10,27 @@ interface WidgetConfigTabProps {
 
 export default function WidgetConfigTab({ agent, onChange }: WidgetConfigTabProps) {
     const [copied, setCopied] = useState(false)
+    const [hexInput, setHexInput] = useState(agent.embedBrandColor || '#4F46E5')
     const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002/api'
+    const isAgentSaved = !!agent.id && !!agent.embedId
 
-    const embedScript = `<script 
-  src="${backendUrl}/embed/${agent.embedId}/script.js" 
+    const embedScript = isAgentSaved ? `<script
+  src="${backendUrl}/embed/${agent.embedId}/script.js"
   defer
-></script>`
+></script>` : ''
 
     const copyToClipboard = () => {
+        if (!isAgentSaved) return
         navigator.clipboard.writeText(embedScript)
         setCopied(true)
         setTimeout(() => setCopied(false), 2000)
+    }
+
+    const handleHexChange = (value: string) => {
+        setHexInput(value)
+        if (/^#[0-9a-fA-F]{6}$/.test(value)) {
+            onChange({ embedBrandColor: value })
+        }
     }
 
     return (
@@ -40,18 +50,24 @@ export default function WidgetConfigTab({ agent, onChange }: WidgetConfigTabProp
                 {agent.embedEnabled && (
                     <div className="mt-6 space-y-4">
                         <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Script de Incorporação (Embed)</label>
-                        <div className="relative group">
-                            <pre className="bg-slate-950 text-slate-300 p-4 rounded-2xl text-[11px] font-mono overflow-x-auto border border-white/10">
-                                {embedScript}
-                            </pre>
-                            <button
-                                type="button"
-                                onClick={copyToClipboard}
-                                className="absolute top-3 right-3 p-2 bg-white/10 hover:bg-white/20 rounded-xl transition-all text-white border border-white/10"
-                            >
-                                {copied ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
-                            </button>
-                        </div>
+                        {!isAgentSaved ? (
+                            <div className="flex items-center gap-3 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-600/30 rounded-2xl text-xs font-bold text-amber-700 dark:text-amber-300">
+                                <AlertCircle size={16} /> Salve o agente primeiro para gerar o script de incorporação.
+                            </div>
+                        ) : (
+                            <div className="relative group">
+                                <pre className="bg-slate-950 text-slate-300 p-4 rounded-2xl text-[11px] font-mono overflow-x-auto border border-white/10">
+                                    {embedScript}
+                                </pre>
+                                <button
+                                    type="button"
+                                    onClick={copyToClipboard}
+                                    className="absolute top-3 right-3 p-2 bg-white/10 hover:bg-white/20 rounded-xl transition-all text-white border border-white/10"
+                                >
+                                    {copied ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
+                                </button>
+                            </div>
+                        )}
                         <p className="text-[10px] text-slate-400 italic">Cole este código antes da tag &lt;/body&gt; do seu site.</p>
                     </div>
                 )}
@@ -69,14 +85,16 @@ export default function WidgetConfigTab({ agent, onChange }: WidgetConfigTabProp
                             <input
                                 type="color"
                                 value={agent.embedBrandColor || '#4F46E5'}
-                                onChange={(e) => onChange({ embedBrandColor: e.target.value })}
+                                onChange={(e) => { onChange({ embedBrandColor: e.target.value }); setHexInput(e.target.value) }}
                                 className="h-10 w-20 rounded-xl cursor-pointer bg-transparent border-none"
                             />
                             <input
                                 type="text"
-                                value={agent.embedBrandColor || '#4F46E5'}
-                                onChange={(e) => onChange({ embedBrandColor: e.target.value })}
+                                value={hexInput}
+                                onChange={(e) => handleHexChange(e.target.value)}
+                                maxLength={7}
                                 className="flex-1 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-2 text-xs font-mono font-bold"
+                                placeholder="#4F46E5"
                             />
                         </div>
                     </div>
@@ -161,14 +179,20 @@ export default function WidgetConfigTab({ agent, onChange }: WidgetConfigTabProp
             </div>
 
             <div className="pt-4">
-                <a
-                    href={`/embed/${agent.embedId}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-center gap-2 w-full py-3 bg-slate-100 dark:bg-white/5 hover:bg-primary/10 hover:text-primary rounded-xl text-xs font-bold uppercase tracking-widest transition-all"
-                >
-                    <ExternalLink size={14} /> Visualizar Widget em Tela Cheia
-                </a>
+                {isAgentSaved ? (
+                    <a
+                        href={`/embed/${agent.embedId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center justify-center gap-2 w-full py-3 bg-slate-100 dark:bg-white/5 hover:bg-primary/10 hover:text-primary rounded-xl text-xs font-bold uppercase tracking-widest transition-all"
+                    >
+                        <ExternalLink size={14} /> Visualizar Widget em Tela Cheia
+                    </a>
+                ) : (
+                    <div className="flex items-center justify-center gap-2 w-full py-3 bg-slate-100 dark:bg-white/5 rounded-xl text-xs font-bold uppercase tracking-widest text-slate-400 cursor-not-allowed opacity-50">
+                        <ExternalLink size={14} /> Salve o agente para visualizar
+                    </div>
+                )}
             </div>
         </motion.div>
     )

@@ -666,10 +666,10 @@ export default function TicketsPage() {
     return (
         <div className="flex flex-col md:flex-row h-[calc(100vh-6rem)] md:h-[calc(100vh-5rem)] gap-4 md:gap-6 max-w-full relative overflow-hidden">
             {/* Lista de Tickets - Esquerda */}
-            <div className={`w-full md:w-[420px] h-full flex-shrink-0 flex flex-col liquid-glass md:rounded-[2.5rem] overflow-hidden border border-slate-200 dark:border-white/10 shadow-2xl relative aurora transition-all duration-300 ${selectedTicket ? 'hidden md:flex' : 'flex'}`}>
+            <div className={`w-full md:w-[400px] h-full flex-shrink-0 flex flex-col liquid-glass md:rounded-2xl overflow-hidden border border-slate-200 dark:border-white/10 shadow-xl relative aurora transition-all duration-300 ${selectedTicket ? 'hidden md:flex' : 'flex'}`}>
                 {/* Header da Lista */}
-                <div className="p-8 border-b border-slate-200 dark:border-white/5 relative z-10">
-                    <div className="flex items-center justify-between mb-6">
+                <div className="p-5 border-b border-slate-200 dark:border-white/5 relative z-10">
+                    <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center gap-4">
                             {/* Checkbox Selecionar Todos */}
                             <div
@@ -871,12 +871,12 @@ export default function TicketsPage() {
                 </div>
 
                 {/* Lista Scrollável */}
-                <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-3 relative z-10">
+                <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-2 relative z-10">
                     {loading ? (
                         [1, 2, 3, 4, 5].map(i => (
-                            <div key={i} className="p-5 rounded-[2rem] bg-slate-100/50 dark:bg-white/5 border border-transparent animate-pulse space-y-3">
+                            <div key={i} className="p-4 rounded-2xl bg-slate-100/50 dark:bg-white/5 border border-transparent animate-pulse space-y-3">
                                 <div className="flex items-center gap-3">
-                                    <div className="h-12 w-12 rounded-2xl bg-slate-200 dark:bg-white/10" />
+                                    <div className="h-10 w-10 rounded-xl bg-slate-200 dark:bg-white/10" />
                                     <div className="flex-1 space-y-2">
                                         <div className="h-3 w-24 bg-slate-200 dark:bg-white/10 rounded-lg" />
                                         <div className="h-2 w-16 bg-slate-200 dark:bg-white/10 rounded-lg" />
@@ -895,9 +895,9 @@ export default function TicketsPage() {
                             <motion.button
                                 key={ticket.id}
                                 onClick={() => handleSelectTicket(ticket)}
-                                className={`w-full text-left p-5 rounded-[2rem] transition-all border relative group/card ${selectedTicket?.id === ticket.id
-                                    ? 'bg-primary/10 border-primary shadow-xl shadow-primary/5'
-                                    : 'bg-white/40 dark:bg-transparent border-transparent hover:border-white/40 dark:hover:border-white/10'
+                                className={`w-full text-left p-3 rounded-2xl transition-all border relative group/card ${selectedTicket?.id === ticket.id
+                                    ? 'bg-primary/10 border-primary shadow-md shadow-primary/5'
+                                    : 'bg-white/60 dark:bg-transparent border-transparent hover:border-white/40 dark:hover:border-white/10'
                                     } ${selectedTicketIds.includes(ticket.id) ? 'ring-2 ring-primary ring-offset-2 dark:ring-offset-slate-900 border-primary bg-primary/5' : ''}`}
                                 whileHover={{ x: 5 }}
                                 whileTap={{ scale: 0.98 }}
@@ -912,11 +912,11 @@ export default function TicketsPage() {
                                 >
                                     {selectedTicketIds.includes(ticket.id) && <CheckCheck size={12} />}
                                 </div>
-                                <div className={`flex items-start justify-between mb-3 transition-transform ${selectedTicketIds.length > 0 || selectedTicketIds.includes(ticket.id) ? 'pl-6' : ''}`}>
+                                <div className={`flex items-start justify-between mb-2 transition-transform ${selectedTicketIds.length > 0 || selectedTicketIds.includes(ticket.id) ? 'pl-6' : ''}`}>
                                     <div className="flex items-center gap-3">
                                         <div className="relative">
                                             <div
-                                                className={`h-12 w-12 rounded-2xl flex items-center justify-center font-black text-lg transition-all duration-500 ${selectedTicket?.id === ticket.id
+                                                className={`h-10 w-10 rounded-xl flex items-center justify-center font-black text-base transition-all duration-500 ${selectedTicket?.id === ticket.id
                                                     ? 'text-white shadow-lg'
                                                     : 'bg-slate-200 dark:bg-white/5 text-slate-600 dark:text-gray-400'
                                                     }`}
@@ -1013,7 +1013,7 @@ export default function TicketsPage() {
                 onDragOver={onDragOver}
                 onDragLeave={onDragLeave}
                 onDrop={onDrop}
-                className={`flex-1 w-full flex flex-col liquid-glass md:rounded-[2.5rem] overflow-hidden border border-slate-200 dark:border-white/10 shadow-2xl relative transition-all duration-300 ${!selectedTicket ? 'hidden md:flex' : 'flex absolute inset-0 md:relative z-20 md:z-auto bg-slate-50 dark:bg-gray-900 md:bg-transparent dark:md:bg-transparent'}`}
+                className={`flex-1 w-full flex flex-col liquid-glass md:rounded-2xl overflow-hidden border border-slate-200 dark:border-white/10 shadow-xl relative transition-all duration-300 ${!selectedTicket ? 'hidden md:flex' : 'flex absolute inset-0 md:relative z-20 md:z-auto bg-slate-50 dark:bg-gray-900 md:bg-transparent dark:md:bg-transparent'}`}
             >
                 {/* Overlay de Drag and Drop */}
                 <AnimatePresence>
@@ -1046,21 +1046,21 @@ export default function TicketsPage() {
                 ) : (
                     <>
                         {/* Header da Conversa Estilo ZIP */}
-                        <div className="p-4 md:p-5 border-b border-white/40 dark:border-white/5 flex items-center justify-between bg-white/40 dark:bg-black/20 backdrop-blur-xl">
-                            <div className="flex items-center gap-2 md:gap-5">
+                        <div className="p-2 md:p-3 border-b border-white/40 dark:border-white/5 flex items-center justify-between bg-white/40 dark:bg-black/20 backdrop-blur-xl shrink-0">
+                            <div className="flex items-center gap-2 md:gap-3">
                                 <button
                                     onClick={() => setSelectedTicket(null)}
                                     className="md:hidden p-2 rounded-xl text-slate-500 hover:bg-slate-100 dark:hover:bg-white/5 transition-all"
                                 >
-                                    <ArrowLeft size={24} />
+                                    <ArrowLeft size={20} />
                                 </button>
-                                <div className="h-12 w-12 md:h-16 md:w-16 bg-primary text-white rounded-2xl flex items-center justify-center text-xl md:text-2xl font-black shadow-xl shadow-primary/30 relative overflow-hidden flex-shrink-0">
+                                <div className="h-10 w-10 bg-primary text-white rounded-xl flex items-center justify-center text-lg font-black shadow-md shadow-primary/30 relative overflow-hidden flex-shrink-0">
                                     {selectedTicket.contact.name.charAt(0)}
-                                    <div className="absolute inset-0 bg-gradient-to-tr from-white/20 to-transparent" />
+                                    <div className="absolute inset-0 bg-gradient-to-tr from-white/20 to-transparent pointer-events-none" />
                                 </div>
                                 <div>
-                                    <div className="flex items-center gap-3">
-                                        <h3 className="font-black text-xl text-slate-900 dark:text-white tracking-tight leading-none">{selectedTicket.contact.name}</h3>
+                                    <div className="flex items-center gap-2">
+                                        <h3 className="font-black text-lg text-slate-900 dark:text-white tracking-tight leading-none">{selectedTicket.contact.name}</h3>
                                         <div className="flex items-center gap-2">
                                             <span className="text-[11px] font-mono text-slate-400 bg-slate-100 dark:bg-white/5 px-2 py-0.5 rounded-lg border border-slate-200 dark:border-white/10 flex items-center gap-1.5 group/id">
                                                 #{selectedTicket.id.substring(selectedTicket.id.length - 6).toUpperCase()}
@@ -1593,8 +1593,8 @@ export default function TicketsPage() {
                                 </AnimatePresence>
 
                                 {isRecording ? (
-                                    <div className="p-6 bg-white dark:bg-gray-900 border-t border-gray-100 dark:border-white/5">
-                                        <div className="max-w-5xl mx-auto">
+                                    <div className="p-3 bg-white/60 dark:bg-black/40 border-t border-white/40 dark:border-white/5 backdrop-blur-2xl">
+                                        <div className="flex justify-end max-w-6xl mx-auto relative z-10">
                                             <AudioRecorder
                                                 onSend={handleSendAudio}
                                                 onCancel={() => setIsRecording(false)}
@@ -1602,9 +1602,9 @@ export default function TicketsPage() {
                                         </div>
                                     </div>
                                 ) : (
-                                    <div className="p-4 bg-white/60 dark:bg-black/40 border-t border-white/40 dark:border-white/5 backdrop-blur-2xl">
-                                        <div className="flex items-end gap-5 max-w-6xl mx-auto relative z-10">
-                                            <div className="flex-1 min-w-0 bg-white/50 dark:bg-white/5 rounded-[2.5rem] p-2 border border-slate-200 dark:border-white/10 relative">
+                                    <div className="p-3 bg-white/60 dark:bg-black/40 border-t border-white/40 dark:border-white/5 backdrop-blur-2xl">
+                                        <div className="flex items-end gap-3 max-w-6xl mx-auto relative z-10">
+                                            <div className="flex-1 min-w-0 bg-white/50 dark:bg-white/5 rounded-3xl p-1.5 border border-slate-200 dark:border-white/10 relative">
                                                 {/* Preview de Citação (Reply) */}
                                                 {replyingTo && (
                                                     <div className="mx-4 mt-2 mb-2 p-3 bg-slate-100 dark:bg-black/40 rounded-2xl border-l-4 border-primary flex items-start justify-between group/reply animate-in slide-in-from-bottom-2 duration-300">
