@@ -499,8 +499,8 @@ model DocumentChunk {
   pageNumber Int?
   metadata   Json?
 
-  // Embedding real usando o tipo vector() no Postgres
-  embedding Unsupported("vector")?
+  // Fallback: Embedding via Json (PgVector não disponível na infra de destino)
+  embedding Json?
 
   document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
 
