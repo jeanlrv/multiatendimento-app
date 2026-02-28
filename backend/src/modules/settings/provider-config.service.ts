@@ -134,17 +134,38 @@ export class ProviderConfigService {
         models: { id: string; name: string; contextWindow?: number; multimodal?: boolean }[];
     }[]> {
         const companyConfigs = await this.getDecryptedForCompany(companyId);
-
         const { MULTIMODAL_MODELS } = require('../ai/engine/llm-provider.factory');
 
-        return LLM_PROVIDERS.map(p => ({
-            provider: p.id,
-            providerName: p.name,
-            models: p.models.map(m => ({
-                ...m,
-                multimodal: MULTIMODAL_MODELS.includes(m.id.split(':').pop() || m.id),
-            })),
-        }));
+        return LLM_PROVIDERS
+            .filter(p => {
+                const config = companyConfigs.get(p.id);
+                return config && config.isEnabled;
+            })
+            .map(p => {
+                const config = companyConfigs.get(p.id);
+                const models = [...p.models];
+
+                // Se houver um modelo customizado no extraConfig, adiciona-o como primeira opção
+                if (config?.extraConfig?.model) {
+                    const customModelId = `${p.id}:${config.extraConfig.model}`;
+                    if (!models.some(m => m.id === customModelId)) {
+                        models.unshift({
+                            id: customModelId,
+                            name: `${config.extraConfig.model} (Customizado)`,
+                            contextWindow: 32768
+                        });
+                    }
+                }
+
+                return {
+                    provider: p.id,
+                    providerName: p.name,
+                    models: models.map(m => ({
+                        ...m,
+                        multimodal: MULTIMODAL_MODELS.includes(m.id.split(':').pop() || m.id),
+                    })),
+                };
+            });
     }
 
     /** Retorna providers de embedding disponíveis para uma empresa (DB + env vars) */
@@ -153,7 +174,15 @@ export class ProviderConfigService {
         name: string;
         models: { id: string; name: string; dimensions: number }[];
     }[]> {
-        return EMBEDDING_PROVIDERS.map(p => ({ id: p.id, name: p.name, models: p.models }));
+        const companyConfigs = await this.getDecryptedForCompany(companyId);
+
+        return EMBEDDING_PROVIDERS
+            .filter(p => {
+                if (p.id === 'native') return true; // Sempre disponível
+                const config = companyConfigs.get(p.id);
+                return config && config.isEnabled;
+            })
+            .map(p => ({ id: p.id, name: p.name, models: p.models }));
     }
 
     /** Mascara a API key para exibição segura */

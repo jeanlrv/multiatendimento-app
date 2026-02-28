@@ -207,6 +207,15 @@ export const LLM_PROVIDERS: LLMProviderConfig[] = [
             { id: 'ollama:deepseek-r1', name: 'DeepSeek R1 (Local)', contextWindow: 32768 },
         ],
     },
+    {
+        id: 'anythingllm',
+        name: 'AnythingLLM',
+        envKey: 'ANYTHINGLLM_API_KEY',
+        baseURL: 'http://localhost:3001/api/v1',
+        models: [
+            { id: 'anythingllm:model', name: 'Modelo customizado (AnythingLLM)', contextWindow: 32768 },
+        ],
+    },
 ];
 
 @Injectable()
@@ -288,7 +297,7 @@ export class LLMProviderFactory {
      * Remove o prefixo do provider do modelId (ex: "groq:llama-3.1-8b" → "llama-3.1-8b")
      */
     private stripPrefix(modelId: string): string {
-        const prefixes = ['groq:', 'openrouter:', 'ollama:', 'azure:', 'together:', 'lmstudio:', 'perplexity:', 'xai:', 'cohere:', 'huggingface:'];
+        const prefixes = ['groq:', 'openrouter:', 'ollama:', 'azure:', 'together:', 'lmstudio:', 'perplexity:', 'xai:', 'cohere:', 'huggingface:', 'anythingllm:'];
         for (const prefix of prefixes) {
             if (modelId.startsWith(prefix)) return modelId.substring(prefix.length);
         }

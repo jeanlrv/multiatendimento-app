@@ -89,6 +89,15 @@ export const EMBEDDING_PROVIDERS: EmbeddingProviderConfig[] = [
             { id: 'voyage-multilingual-2', name: 'voyage-multilingual-2 (PT-BR)', dimensions: 1024 },
         ],
     },
+    {
+        id: 'anythingllm',
+        name: 'AnythingLLM (RAG)',
+        envKey: 'ANYTHINGLLM_API_KEY',
+        baseURL: 'http://localhost:3001/api/v1',
+        models: [
+            { id: 'anythingllm:embedding', name: 'AnythingLLM Native Embedder', dimensions: 768 },
+        ],
+    },
 ];
 
 @Injectable()

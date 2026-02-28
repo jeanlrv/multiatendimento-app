@@ -26,6 +26,7 @@ const LLM_PROVIDERS = [
     { id: 'cohere', name: 'Cohere', icon: '🌐', color: '#0ea5e9', hasBaseUrl: false, description: 'Command R+ com RAG nativo' },
     { id: 'huggingface', name: 'HuggingFace', icon: '🤗', color: '#fbbf24', hasBaseUrl: false, description: 'Llama, Mistral, Phi-3 open-source' },
     { id: 'ollama', name: 'Ollama (Local)', icon: '🦙', color: '#84cc16', hasBaseUrl: true, baseUrlLabel: 'URL do Ollama', baseUrlPlaceholder: 'http://localhost:11434/v1', description: 'Rode modelos LLM localmente', noApiKey: true },
+    { id: 'anythingllm', name: 'AnythingLLM', icon: '📦', color: '#3b82f6', hasBaseUrl: true, baseUrlLabel: 'URL do AnythingLLM', baseUrlPlaceholder: 'http://localhost:3001/api/v1', description: 'IA full-stack via AnythingLLM Desktop/Docker' },
 ] as const;
 
 const EMBEDDING_PROVIDERS = [
@@ -35,6 +36,7 @@ const EMBEDDING_PROVIDERS = [
     { id: 'azure', name: 'Azure Embeddings', icon: '☁️', color: '#0078d4', hasBaseUrl: true, baseUrlLabel: 'Endpoint Azure', baseUrlPlaceholder: 'https://meu-recurso.openai.azure.com', description: 'text-embedding via Azure' },
     { id: 'voyage', name: 'Voyage AI', icon: '🚢', color: '#7c3aed', hasBaseUrl: false, description: 'voyage-multilingual-2 (PT-BR)' },
     { id: 'ollama', name: 'Ollama Embeddings', icon: '🦙', color: '#84cc16', hasBaseUrl: true, baseUrlLabel: 'URL do Ollama', baseUrlPlaceholder: 'http://localhost:11434/v1', description: 'nomic-embed-text local', noApiKey: true },
+    { id: 'anythingllm', name: 'AnythingLLM RAG', icon: '📦', color: '#3b82f6', hasBaseUrl: true, baseUrlLabel: 'URL do AnythingLLM', baseUrlPlaceholder: 'http://localhost:3001/api/v1', description: 'Nativo do AnythingLLM' },
 ] as const;
 
 // Combinar providers únicos (sem duplicatas de id)
@@ -59,7 +61,7 @@ interface ProviderConfig {
 interface ProviderCardProps {
     meta: typeof ALL_PROVIDERS[number];
     config: ProviderConfig | undefined;
-    onSave: (provider: string, data: { apiKey?: string; baseUrl?: string; isEnabled: boolean }) => Promise<void>;
+    onSave: (provider: string, data: { apiKey?: string; baseUrl?: string; isEnabled: boolean; extraConfig?: any }) => Promise<void>;
     onDelete: (provider: string) => Promise<void>;
 }
 
@@ -69,6 +71,7 @@ function ProviderCard({ meta, config, onSave, onDelete }: ProviderCardProps) {
     const [showKey, setShowKey] = useState(false);
     const [apiKey, setApiKey] = useState('');
     const [baseUrl, setBaseUrl] = useState('');
+    const [customModel, setCustomModel] = useState('');
     const [saving, setSaving] = useState(false);
     const [deleting, setDeleting] = useState(false);
 
@@ -80,6 +83,7 @@ function ProviderCard({ meta, config, onSave, onDelete }: ProviderCardProps) {
         if (expanded) {
             setApiKey(''); // nunca preenche key (segurança)
             setBaseUrl(config?.baseUrl || '');
+            setCustomModel(config?.extraConfig?.model || '');
         }
     }, [expanded, config]);
 
@@ -90,6 +94,7 @@ function ProviderCard({ meta, config, onSave, onDelete }: ProviderCardProps) {
                 apiKey: noApiKey ? undefined : (apiKey || undefined),
                 baseUrl: (meta as any).hasBaseUrl ? (baseUrl || undefined) : undefined,
                 isEnabled: true,
+                extraConfig: customModel ? { model: customModel } : (config?.extraConfig || {}),
             });
             setApiKey('');
             setExpanded(false);
@@ -111,11 +116,10 @@ function ProviderCard({ meta, config, onSave, onDelete }: ProviderCardProps) {
     const isEmbed = EMBEDDING_PROVIDERS.some(p => p.id === meta.id);
 
     return (
-        <div className={`rounded-2xl border transition-all duration-200 overflow-hidden ${
-            isConfigured
-                ? 'border-green-300 dark:border-green-700 bg-green-50/50 dark:bg-green-900/10'
-                : 'border-slate-200 dark:border-white/10 bg-white/50 dark:bg-white/5'
-        }`}>
+        <div className={`rounded-2xl border transition-all duration-200 overflow-hidden ${isConfigured
+            ? 'border-green-300 dark:border-green-700 bg-green-50/50 dark:bg-green-900/10'
+            : 'border-slate-200 dark:border-white/10 bg-white/50 dark:bg-white/5'
+            }`}>
             {/* Header */}
             <div
                 className="flex items-center gap-3 p-4 cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
@@ -201,6 +205,25 @@ function ProviderCard({ meta, config, onSave, onDelete }: ProviderCardProps) {
                                             value={baseUrl}
                                             onChange={e => setBaseUrl(e.target.value)}
                                             placeholder={(meta as any).baseUrlPlaceholder || 'https://...'}
+                                            className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:outline-none focus:border-primary transition-colors"
+                                        />
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Campo de Modelo Customizado p/ AnythingLLM, Ollama, LMStudio, etc */}
+                            {isLLM && ['anythingllm', 'ollama', 'lmstudio'].includes(meta.id) && (
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-1.5">
+                                        Modelo Específico <span className="text-primary normal-case tracking-normal font-semibold">(ex: llama3, deepseek-r1)</span>
+                                    </label>
+                                    <div className="relative">
+                                        <Sparkles size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-primary shadow-sm" />
+                                        <input
+                                            type="text"
+                                            value={customModel}
+                                            onChange={e => setCustomModel(e.target.value)}
+                                            placeholder="Nome do modelo no provider"
                                             className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:outline-none focus:border-primary transition-colors"
                                         />
                                     </div>
@@ -339,11 +362,10 @@ export function AIProvidersSettings() {
                     <button
                         key={tab.id}
                         onClick={() => setActiveSection(tab.id)}
-                        className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                            activeSection === tab.id
-                                ? 'bg-primary text-white shadow-lg shadow-primary/20'
-                                : 'text-slate-500 hover:text-slate-800 dark:hover:text-white'
-                        }`}
+                        className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeSection === tab.id
+                            ? 'bg-primary text-white shadow-lg shadow-primary/20'
+                            : 'text-slate-500 hover:text-slate-800 dark:hover:text-white'
+                            }`}
                     >
                         {tab.icon} {tab.label}
                         {tab.count > 0 && (

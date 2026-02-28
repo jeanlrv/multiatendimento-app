@@ -31,6 +31,7 @@ const clearAuthAndRedirect = () => {
     localStorage.removeItem('user');
     localStorage.removeItem('company');
     document.cookie = 'token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+    document.cookie = 'session=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
     if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
         window.location.href = '/login';
     }

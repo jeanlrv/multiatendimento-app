@@ -2,17 +2,26 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 export function middleware(request: NextRequest) {
-    const token = request.cookies.get('token')?.value;
-    const isAuthPage = request.nextUrl.pathname.startsWith('/login');
-    const isDashboardPage = request.nextUrl.pathname.startsWith('/dashboard');
+    // 'session' cookie dura 7 dias (set no login, persiste mesmo após token 15min expirar)
+    // 'token' cookie dura 15min (alinhado com JWT)
+    const hasSession = request.cookies.get('session')?.value || request.cookies.get('token')?.value;
+    const pathname = request.nextUrl.pathname;
+    const isAuthPage = pathname.startsWith('/login');
+    const isDashboardPage = pathname.startsWith('/dashboard');
+    const isRootPage = pathname === '/';
 
-    // If trying to access dashboard without token, redirect to login
-    if (isDashboardPage && !token) {
+    // Redirecionar root / para dashboard se sessão ativa
+    if (isRootPage && hasSession) {
+        return NextResponse.redirect(new URL('/dashboard', request.url));
+    }
+
+    // Se tentar acessar o dashboard sem sessão, redirecionar para login
+    if (isDashboardPage && !hasSession) {
         return NextResponse.redirect(new URL('/login', request.url));
     }
 
-    // If trying to access login with token, redirect to dashboard
-    if (isAuthPage && token) {
+    // Se tentar acessar login com sessão ativa, redirecionar para dashboard
+    if (isAuthPage && hasSession) {
         return NextResponse.redirect(new URL('/dashboard', request.url));
     }
 
@@ -20,6 +29,6 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-    matcher: ['/dashboard/:path*', '/login'],
+    matcher: ['/', '/dashboard/:path*', '/login'],
 };
 

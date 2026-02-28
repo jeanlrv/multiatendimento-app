@@ -90,8 +90,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             localStorage.setItem('user', JSON.stringify(userData));
             setToken(access_token);
 
-            // Set cookie for middleware
+            // Cookie de curta duração: segurança JWT (15min)
             document.cookie = `token=${access_token}; path=/; max-age=900; SameSite=Lax`;
+            // Cookie de sessão: 7 dias — garante que middleware deixa passar em cold starts do PWA
+            document.cookie = `session=1; path=/; max-age=${7 * 24 * 60 * 60}; SameSite=Lax`;
 
             setUser(userData);
 
@@ -118,6 +120,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.removeItem('user');
         localStorage.removeItem('company');
         document.cookie = 'token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+        document.cookie = 'session=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
 
         // Disconnect all sockets
         import('@/lib/socket').then(({ disconnectAllSockets }) => {

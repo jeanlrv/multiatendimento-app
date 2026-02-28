@@ -147,11 +147,10 @@ export default function AIAgentsPage() {
         return 'Desconhecido';
     };
 
-    const currentEmbeddingProvider = (currentAgent as any)?.embeddingProvider || (embeddingProviders.find(p => p.id === 'native') ? 'native' : embeddingProviders[0]?.id || 'openai');
+    const currentEmbeddingProvider = (currentAgent as any)?.embeddingProvider || 'native';
     const embeddingModelsForProvider = embeddingProviders.find(p => p.id === currentEmbeddingProvider)?.models
         || (embeddingProviders.find(p => p.id === 'native')?.models)
-        || embeddingProviders[0]?.models
-        || [];
+        || (embeddingProviders.length > 0 ? embeddingProviders[0].models : []);
 
     if (!isModalOpen) return (
         <div className="space-y-8 relative liquid-glass aurora min-h-[calc(100dvh-6rem)] md:min-h-[calc(100vh-6rem)] pb-12">
@@ -373,20 +372,20 @@ export default function AIAgentsPage() {
                                     <select
                                         value={currentAgent?.modelId || 'gpt-4o-mini'}
                                         onChange={e => setCurrentAgent({ ...currentAgent, modelId: e.target.value })}
-                                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-white/10 rounded-2xl px-6 py-4 text-sm font-semibold outline-none transition-all dark:text-white appearance-none"
+                                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-white/10 rounded-2xl px-6 py-4 text-sm font-semibold outline-none transition-all dark:text-white appearance-none focus:ring-4 focus:ring-primary/10"
                                     >
                                         {availableModels.length > 0 ? (
                                             availableModels.map(provider => (
-                                                <optgroup key={provider.provider} label={`🔌 ${provider.providerName}`}>
+                                                <optgroup key={provider.provider} label={`🔌 ${provider.providerName}`} className="dark:bg-slate-800 dark:text-slate-300">
                                                     {provider.models.map(model => (
-                                                        <option key={model.id} value={model.id}>{model.name}</option>
+                                                        <option key={model.id} value={model.id} className="dark:bg-slate-800 dark:text-white">{model.name}</option>
                                                     ))}
                                                 </optgroup>
                                             ))
                                         ) : (
-                                            <optgroup label="🔌 OpenAI">
-                                                <option value="gpt-4o-mini">GPT-4o Mini (Rápido & Econômico)</option>
-                                                <option value="gpt-4o">GPT-4o (Poderoso & Preciso)</option>
+                                            <optgroup label="🔌 OpenAI" className="dark:bg-slate-800 dark:text-slate-300">
+                                                <option value="gpt-4o-mini" className="dark:bg-slate-800 dark:text-white">GPT-4o Mini (Rápido & Econômico)</option>
+                                                <option value="gpt-4o" className="dark:bg-slate-800 dark:text-white">GPT-4o (Poderoso & Preciso)</option>
                                             </optgroup>
                                         )}
                                     </select>
@@ -468,13 +467,13 @@ export default function AIAgentsPage() {
                                                     const firstModel = embeddingProviders.find(p => p.id === e.target.value)?.models[0]?.id || '';
                                                     setCurrentAgent({ ...currentAgent, embeddingProvider: e.target.value, embeddingModel: firstModel } as any);
                                                 }}
-                                                className="w-full mt-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-sm font-semibold outline-none dark:text-white appearance-none"
+                                                className="w-full mt-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-sm font-semibold outline-none dark:text-white appearance-none focus:ring-4 focus:ring-primary/10"
                                             >
                                                 {embeddingProviders.length === 0 && (
-                                                    <option value="">Nenhum provider configurado</option>
+                                                    <option value="" className="dark:bg-slate-800 dark:text-white">Nenhum provider configurado</option>
                                                 )}
                                                 {embeddingProviders.map(p => (
-                                                    <option key={p.id} value={p.id}>{p.name}</option>
+                                                    <option key={p.id} value={p.id} className="dark:bg-slate-800 dark:text-white">{p.name}</option>
                                                 ))}
                                             </select>
                                         </div>
@@ -483,13 +482,13 @@ export default function AIAgentsPage() {
                                             <select
                                                 value={(currentAgent as any)?.embeddingModel || embeddingModelsForProvider[0]?.id || ''}
                                                 onChange={e => setCurrentAgent({ ...currentAgent, embeddingModel: e.target.value } as any)}
-                                                className="w-full mt-1 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-sm font-semibold outline-none dark:text-white appearance-none"
+                                                className="w-full mt-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-sm font-semibold outline-none dark:text-white appearance-none focus:ring-4 focus:ring-primary/10"
                                             >
                                                 {embeddingModelsForProvider.length === 0 && (
-                                                    <option value="">Nenhum modelo disponível</option>
+                                                    <option value="" className="dark:bg-slate-800 dark:text-white">Nenhum modelo disponível</option>
                                                 )}
                                                 {embeddingModelsForProvider.map((m: { id: string; name: string; dimensions: number }) => (
-                                                    <option key={m.id} value={m.id}>{m.name}</option>
+                                                    <option key={m.id} value={m.id} className="dark:bg-slate-800 dark:text-white">{m.name}</option>
                                                 ))}
                                             </select>
                                         </div>
