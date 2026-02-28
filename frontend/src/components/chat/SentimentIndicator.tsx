@@ -3,7 +3,7 @@
 import { motion } from 'framer-motion';
 import { Smile, Meh, Frown, Sparkles } from 'lucide-react';
 
-interface SentimentIndicatorProps {
+export interface SentimentIndicatorProps {
     sentiment?: string;
     score?: number;
     className?: string;
