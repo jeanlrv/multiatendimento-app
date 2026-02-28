@@ -257,10 +257,12 @@ export default function AIKnowledgePage() {
     };
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        e.stopPropagation();
         if (e.target.files && e.target.files.length > 0) {
+            const filesArray = Array.from(e.target.files);
             setUploadFiles(prev => {
                 const existing = new Set(prev.map(f => f.name));
-                const added = Array.from(e.target.files!).filter(f => !existing.has(f.name));
+                const added = filesArray.filter(f => !existing.has(f.name));
                 return [...prev, ...added];
             });
             // Reset input para permitir re-seleção do mesmo arquivo
@@ -395,7 +397,11 @@ export default function AIKnowledgePage() {
                             <>
                                 {/* Zona de upload — aceita todos os tipos, múltiplos arquivos */}
                                 <div
-                                    onClick={() => fileInputRef.current?.click()}
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        fileInputRef.current?.click();
+                                    }}
                                     className="border-2 border-dashed border-slate-200 dark:border-white/10 rounded-3xl p-10 flex flex-col items-center justify-center cursor-pointer hover:bg-primary/5 transition-all group"
                                 >
                                     <input
