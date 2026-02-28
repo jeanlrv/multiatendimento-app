@@ -65,6 +65,11 @@ export const AIAgentsService = {
         return response.data;
     },
 
+    getEmbeddingProviders: async (): Promise<{ id: string; name: string; models: { id: string; name: string; dimensions: number }[] }[]> => {
+        const response = await api.get('/ai/embedding-providers');
+        return response.data;
+    },
+
     chat: async (agentId: string, message: string, history: { role: string; content: string }[] = []) => {
         const response = await api.post(`/ai/agents/${agentId}/chat`, { message, history });
         return response.data;

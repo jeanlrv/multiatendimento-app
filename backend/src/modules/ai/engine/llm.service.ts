@@ -30,9 +30,11 @@ export class LLMService {
         history: { role: 'user' | 'assistant' | 'system', content: string }[] = [],
         temperature: number = 0.7,
         context: string = '',
+        apiKeyOverride?: string,
+        baseUrlOverride?: string,
     ): Promise<string> {
         try {
-            const chat = this.providerFactory.createModel(modelId, temperature);
+            const chat = this.providerFactory.createModel(modelId, temperature, apiKeyOverride, baseUrlOverride);
 
             const messages = [];
 
@@ -83,15 +85,17 @@ export class LLMService {
         imageUrls: string[] = [],
         history: { role: 'user' | 'assistant' | 'system', content: string }[] = [],
         temperature: number = 0.7,
+        apiKeyOverride?: string,
+        baseUrlOverride?: string,
     ): Promise<string> {
         try {
             // Verifica se o modelo suporta multimodal
             if (!isMultimodalModel(modelId)) {
                 this.logger.warn(`Modelo ${modelId} não suporta multimodal. Usando fallback para texto.`);
-                return this.generateResponse(modelId, systemPrompt, userMessage, history, temperature);
+                return this.generateResponse(modelId, systemPrompt, userMessage, history, temperature, '', apiKeyOverride, baseUrlOverride);
             }
 
-            const chat = this.providerFactory.createModel(modelId, temperature);
+            const chat = this.providerFactory.createModel(modelId, temperature, apiKeyOverride, baseUrlOverride);
 
             const messages: BaseMessage[] = [];
 

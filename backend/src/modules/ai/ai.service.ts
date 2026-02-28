@@ -4,6 +4,7 @@ import { CreateAIAgentDto } from './dto/create-ai-agent.dto';
 import { UpdateAIAgentDto } from './dto/update-ai-agent.dto';
 import { LLMService } from './engine/llm.service';
 import { VectorStoreService } from './engine/vector-store.service';
+import { ProviderConfigService } from '../settings/provider-config.service';
 import { Observable } from 'rxjs';
 import axios from 'axios';
 import * as FormData from 'form-data';
@@ -16,6 +17,7 @@ export class AIService {
         private prisma: PrismaService,
         private llmService: LLMService,
         private vectorStoreService: VectorStoreService,
+        private providerConfigService: ProviderConfigService,
     ) { }
 
     // AIAgent CRUD
@@ -123,6 +125,12 @@ export class AIService {
         try {
             this.logger.log(`Chat com agente "${agent.name}" usando modelo: ${agent.modelId || 'gpt-4o-mini'}`);
 
+            // Carrega configs de provider da empresa (API keys do banco)
+            const companyConfigs = await this.providerConfigService.getDecryptedForCompany(companyId);
+            const llmProviderId = this.detectProviderFromModelId(agent.modelId || 'gpt-4o-mini');
+            const llmConfig = companyConfigs.get(llmProviderId);
+            const embeddingConfig = companyConfigs.get(agent.embeddingProvider || 'openai');
+
             let context = '';
             // Se o agente tiver uma base de conhecimento vinculada, buscamos contexto (RAG)
             if (agent.knowledgeBaseId) {
@@ -134,6 +142,8 @@ export class AIService {
                     5,
                     agent.embeddingProvider || 'openai',
                     agent.embeddingModel,
+                    embeddingConfig?.apiKey || undefined,
+                    embeddingConfig?.baseUrl || undefined,
                 );
                 context = chunks.map(c => c.content).join('\n---\n');
             }
@@ -147,7 +157,9 @@ export class AIService {
                     content: h.content
                 })),
                 agent.temperature || 0.7,
-                context
+                context,
+                llmConfig?.apiKey || undefined,
+                llmConfig?.baseUrl || undefined,
             );
 
             // Registrar uso de tokens (se disponível)
@@ -193,6 +205,10 @@ export class AIService {
         try {
             this.logger.log(`Chat multimodal com agente "${agent.name}" usando modelo: ${agent.modelId || 'gpt-4o-mini'}`);
 
+            const companyConfigs = await this.providerConfigService.getDecryptedForCompany(companyId);
+            const llmProviderId = this.detectProviderFromModelId(agent.modelId || 'gpt-4o-mini');
+            const llmConfig = companyConfigs.get(llmProviderId);
+
             const response = await this.llmService.generateMultimodalResponse(
                 agent.modelId || 'gpt-4o-mini',
                 agent.prompt || 'Você é um assistente virtual prestativo.',
@@ -202,7 +218,9 @@ export class AIService {
                     role: h.role === 'user' || h.role === 'client' ? 'user' : 'assistant',
                     content: h.content
                 })),
-                agent.temperature || 0.7
+                agent.temperature || 0.7,
+                llmConfig?.apiKey || undefined,
+                llmConfig?.baseUrl || undefined,
             );
 
             // Registrar uso de tokens (estimativa maior para multimodal)
@@ -391,6 +409,26 @@ export class AIService {
             agentUsage,
             modelUsage
         };
+    }
+
+    /**
+     * Detecta o providerId a partir do modelId (espelha lógica do LLMProviderFactory.detectProvider).
+     */
+    private detectProviderFromModelId(modelId: string): string {
+        const prefixMap: Record<string, string> = {
+            'groq:': 'groq', 'openrouter:': 'openrouter', 'ollama:': 'ollama',
+            'azure:': 'azure', 'together:': 'together', 'lmstudio:': 'lmstudio',
+            'perplexity:': 'perplexity', 'xai:': 'xai', 'cohere:': 'cohere',
+            'huggingface:': 'huggingface',
+        };
+        for (const [prefix, providerId] of Object.entries(prefixMap)) {
+            if (modelId.startsWith(prefix)) return providerId;
+        }
+        if (modelId.startsWith('claude')) return 'anthropic';
+        if (modelId.startsWith('gemini')) return 'gemini';
+        if (modelId.startsWith('deepseek')) return 'deepseek';
+        if (modelId.startsWith('mistral') || modelId.startsWith('codestral')) return 'mistral';
+        return 'openai';
     }
 
     /**

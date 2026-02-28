@@ -5,12 +5,14 @@ import { IntegrationsService } from './integrations.service';
 import { IntegrationsController } from './integrations.controller';
 import { QuickRepliesService } from './quick-replies.service';
 import { QuickRepliesController } from './quick-replies.controller';
+import { ProviderConfigService } from './provider-config.service';
+import { ProviderConfigController } from './provider-config.controller';
 import { DatabaseModule } from '../../database/database.module';
 
 @Module({
-    imports: [],
-    controllers: [SettingsController, IntegrationsController, QuickRepliesController],
-    providers: [SettingsService, IntegrationsService, QuickRepliesService],
-    exports: [SettingsService, IntegrationsService, QuickRepliesService],
+    imports: [DatabaseModule],
+    controllers: [SettingsController, IntegrationsController, QuickRepliesController, ProviderConfigController],
+    providers: [SettingsService, IntegrationsService, QuickRepliesService, ProviderConfigService],
+    exports: [SettingsService, IntegrationsService, QuickRepliesService, ProviderConfigService],
 })
 export class SettingsModule { }

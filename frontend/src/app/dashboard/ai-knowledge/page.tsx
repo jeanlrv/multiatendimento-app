@@ -2,39 +2,10 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { AIKnowledgeService, KnowledgeBase, AIDocument } from '@/services/ai-knowledge';
+import { AIAgentsService } from '@/services/ai-agents';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Database, Plus, Trash2, FileText, Globe, FileUp, Loader2, CheckCircle, Activity, ChevronRight, ChevronLeft, Save, Zap, FileCode, UploadCloud, RefreshCw, Music, Youtube, Github, FileSpreadsheet, Presentation, BookOpen, Braces, AlignLeft, X } from 'lucide-react';
 import { toast } from 'sonner';
-
-// Modelos de embedding disponíveis por provider (para criação de base)
-const KB_EMBEDDING_MODELS: Record<string, { id: string; label: string }[]> = {
-    openai: [
-        { id: 'text-embedding-3-small', label: 'text-embedding-3-small (Econômico)' },
-        { id: 'text-embedding-3-large', label: 'text-embedding-3-large (Preciso)' },
-        { id: 'text-embedding-ada-002', label: 'text-embedding-ada-002 (Legado)' },
-    ],
-    ollama: [
-        { id: 'nomic-embed-text', label: 'nomic-embed-text' },
-        { id: 'mxbai-embed-large', label: 'mxbai-embed-large' },
-        { id: 'all-minilm', label: 'all-minilm' },
-    ],
-    gemini: [
-        { id: 'models/text-embedding-004', label: 'text-embedding-004' },
-        { id: 'models/embedding-001', label: 'embedding-001 (Legado)' },
-    ],
-    cohere: [
-        { id: 'embed-multilingual-v3.0', label: 'embed-multilingual-v3.0' },
-        { id: 'embed-english-v3.0', label: 'embed-english-v3.0' },
-    ],
-    azure: [
-        { id: 'text-embedding-3-small', label: 'text-embedding-3-small' },
-        { id: 'text-embedding-3-large', label: 'text-embedding-3-large' },
-    ],
-    voyage: [
-        { id: 'voyage-3', label: 'voyage-3' },
-        { id: 'voyage-3-lite', label: 'voyage-3-lite (Econômico)' },
-    ],
-};
 
 // Mapeamento de sourceType → ícone e cor
 const SOURCE_TYPE_META: Record<string, { icon: React.ElementType; color: string; label: string }> = {
@@ -116,14 +87,19 @@ export default function AIKnowledgePage() {
     const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null);
     const [docMode, setDocMode] = useState<'files' | 'web'>('files');
     const [uploadFiles, setUploadFiles] = useState<File[]>([]);
+    const [embeddingProviders, setEmbeddingProviders] = useState<{ id: string; name: string; models: { id: string; name: string; dimensions: number }[] }[]>([]);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const fetchBases = async () => {
         try {
             setLoading(true);
-            const data = await AIKnowledgeService.findAllBases();
+            const [data, embProviders] = await Promise.all([
+                AIKnowledgeService.findAllBases(),
+                AIAgentsService.getEmbeddingProviders().catch(() => []),
+            ]);
             setBases(data);
+            setEmbeddingProviders(embProviders);
         } catch (error) {
             console.error('Erro ao buscar bases:', error);
             toast.error('Erro ao carregar bases de conhecimento');
@@ -322,25 +298,27 @@ export default function AIKnowledgePage() {
                         <p className="text-[10px] text-slate-400">Modelo de vetorização usado para indexar documentos e realizar buscas semânticas.</p>
                         <div className="grid grid-cols-2 gap-3">
                             <select
-                                value={currentBase?.embeddingProvider || 'openai'}
-                                onChange={e => setCurrentBase({ ...currentBase, embeddingProvider: e.target.value, embeddingModel: '' })}
+                                value={currentBase?.embeddingProvider || embeddingProviders[0]?.id || 'openai'}
+                                onChange={e => {
+                                    const firstModel = embeddingProviders.find(p => p.id === e.target.value)?.models[0]?.id || '';
+                                    setCurrentBase({ ...currentBase, embeddingProvider: e.target.value, embeddingModel: firstModel });
+                                }}
                                 className="w-full p-4 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 font-bold text-sm outline-none appearance-none"
                             >
-                                <option value="openai">OpenAI</option>
-                                <option value="ollama">Ollama (Local)</option>
-                                <option value="gemini">Gemini</option>
-                                <option value="cohere">Cohere</option>
-                                <option value="azure">Azure OpenAI</option>
-                                <option value="voyage">Voyage AI</option>
+                                {embeddingProviders.length === 0 && <option value="">Nenhum provider configurado</option>}
+                                {embeddingProviders.map(p => (
+                                    <option key={p.id} value={p.id}>{p.name}</option>
+                                ))}
                             </select>
                             <select
                                 value={currentBase?.embeddingModel || ''}
                                 onChange={e => setCurrentBase({ ...currentBase, embeddingModel: e.target.value })}
                                 className="w-full p-4 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 font-bold text-sm outline-none appearance-none"
                             >
-                                {(KB_EMBEDDING_MODELS[currentBase?.embeddingProvider || 'openai'] || KB_EMBEDDING_MODELS.openai).map(m => (
-                                    <option key={m.id} value={m.id}>{m.label}</option>
+                                {(embeddingProviders.find(p => p.id === (currentBase?.embeddingProvider || embeddingProviders[0]?.id))?.models || []).map((m: { id: string; name: string; dimensions: number }) => (
+                                    <option key={m.id} value={m.id}>{m.name}</option>
                                 ))}
+                                {embeddingProviders.length === 0 && <option value="">Nenhum modelo disponível</option>}
                             </select>
                         </div>
                     </div>

@@ -92,12 +92,19 @@ export class EmbeddingProviderFactory {
      * Cria instância do provedor de embedding correto.
      * @param providerId ID do provider (openai, ollama, gemini, cohere, azure, voyage)
      * @param modelId ID do modelo de embedding
+     * @param apiKeyOverride API key da empresa (vinda do banco), sobrepõe env var global
+     * @param baseUrlOverride Base URL override (para Ollama/Azure)
      */
-    createEmbeddings(providerId: string = 'openai', modelId?: string): Embeddings {
+    createEmbeddings(
+        providerId: string = 'openai',
+        modelId?: string,
+        apiKeyOverride?: string,
+        baseUrlOverride?: string,
+    ): Embeddings {
         const provider = EMBEDDING_PROVIDERS.find(p => p.id === providerId);
         if (!provider) {
             this.logger.warn(`Provider de embedding desconhecido: ${providerId}. Usando OpenAI.`);
-            return this.createOpenAIEmbeddings('text-embedding-3-small');
+            return this.createOpenAIEmbeddings('text-embedding-3-small', apiKeyOverride);
         }
 
         const model = modelId || provider.models[0].id;
@@ -105,30 +112,30 @@ export class EmbeddingProviderFactory {
 
         switch (providerId) {
             case 'openai':
-                return this.createOpenAIEmbeddings(model);
+                return this.createOpenAIEmbeddings(model, apiKeyOverride);
             case 'ollama':
-                return this.createOllamaEmbeddings(model);
+                return this.createOllamaEmbeddings(model, baseUrlOverride);
             case 'gemini':
-                return this.createGeminiEmbeddings(model);
+                return this.createGeminiEmbeddings(model, apiKeyOverride);
             case 'cohere':
-                return this.createCohereEmbeddings(model);
+                return this.createCohereEmbeddings(model, apiKeyOverride);
             case 'azure':
-                return this.createAzureEmbeddings(model);
+                return this.createAzureEmbeddings(model, apiKeyOverride, baseUrlOverride);
             case 'voyage':
-                return this.createVoyageEmbeddings(model);
+                return this.createVoyageEmbeddings(model, apiKeyOverride);
             default:
-                return this.createOpenAIEmbeddings('text-embedding-3-small');
+                return this.createOpenAIEmbeddings('text-embedding-3-small', apiKeyOverride);
         }
     }
 
-    private createOpenAIEmbeddings(model: string): Embeddings {
-        const apiKey = this.configService.get<string>('OPENAI_API_KEY');
-        if (!apiKey) throw new Error('OPENAI_API_KEY não configurada.');
+    private createOpenAIEmbeddings(model: string, apiKeyOverride?: string): Embeddings {
+        const apiKey = apiKeyOverride || this.configService.get<string>('OPENAI_API_KEY');
+        if (!apiKey) throw new Error('OPENAI_API_KEY não configurada. Configure em Configurações > Integrações.');
         return new OpenAIEmbeddings({ openAIApiKey: apiKey, modelName: model });
     }
 
-    private createOllamaEmbeddings(model: string): Embeddings {
-        const baseURL = this.configService.get<string>('OLLAMA_BASE_URL') || 'http://localhost:11434/v1';
+    private createOllamaEmbeddings(model: string, baseUrlOverride?: string): Embeddings {
+        const baseURL = baseUrlOverride || this.configService.get<string>('OLLAMA_BASE_URL') || 'http://localhost:11434/v1';
         // Ollama expõe endpoint OpenAI-compat para embeddings
         return new OpenAIEmbeddings({
             openAIApiKey: 'ollama',
@@ -137,24 +144,24 @@ export class EmbeddingProviderFactory {
         });
     }
 
-    private createGeminiEmbeddings(model: string): Embeddings {
-        const apiKey = this.configService.get<string>('GEMINI_API_KEY');
-        if (!apiKey) throw new Error('GEMINI_API_KEY não configurada.');
+    private createGeminiEmbeddings(model: string, apiKeyOverride?: string): Embeddings {
+        const apiKey = apiKeyOverride || this.configService.get<string>('GEMINI_API_KEY');
+        if (!apiKey) throw new Error('GEMINI_API_KEY não configurada. Configure em Configurações > Integrações.');
         const { GoogleGenerativeAIEmbeddings } = require('@langchain/google-genai');
         return new GoogleGenerativeAIEmbeddings({ apiKey, model });
     }
 
-    private createCohereEmbeddings(model: string): Embeddings {
-        const apiKey = this.configService.get<string>('COHERE_API_KEY');
-        if (!apiKey) throw new Error('COHERE_API_KEY não configurada.');
+    private createCohereEmbeddings(model: string, apiKeyOverride?: string): Embeddings {
+        const apiKey = apiKeyOverride || this.configService.get<string>('COHERE_API_KEY');
+        if (!apiKey) throw new Error('COHERE_API_KEY não configurada. Configure em Configurações > Integrações.');
         const { CohereEmbeddings } = require('@langchain/cohere');
         return new CohereEmbeddings({ apiKey, model });
     }
 
-    private createAzureEmbeddings(model: string): Embeddings {
-        const apiKey = this.configService.get<string>('AZURE_OPENAI_API_KEY');
-        const endpoint = this.configService.get<string>('AZURE_OPENAI_ENDPOINT');
-        if (!apiKey || !endpoint) throw new Error('AZURE_OPENAI_API_KEY ou AZURE_OPENAI_ENDPOINT não configurados.');
+    private createAzureEmbeddings(model: string, apiKeyOverride?: string, endpointOverride?: string): Embeddings {
+        const apiKey = apiKeyOverride || this.configService.get<string>('AZURE_OPENAI_API_KEY');
+        const endpoint = endpointOverride || this.configService.get<string>('AZURE_OPENAI_ENDPOINT');
+        if (!apiKey || !endpoint) throw new Error('AZURE_OPENAI_API_KEY ou AZURE_OPENAI_ENDPOINT não configurados. Configure em Configurações > Integrações.');
         const { AzureOpenAIEmbeddings } = require('@langchain/openai');
         return new AzureOpenAIEmbeddings({
             azureOpenAIApiKey: apiKey,
@@ -164,9 +171,9 @@ export class EmbeddingProviderFactory {
         });
     }
 
-    private createVoyageEmbeddings(model: string): Embeddings {
-        const apiKey = this.configService.get<string>('VOYAGE_API_KEY');
-        if (!apiKey) throw new Error('VOYAGE_API_KEY não configurada.');
+    private createVoyageEmbeddings(model: string, apiKeyOverride?: string): Embeddings {
+        const apiKey = apiKeyOverride || this.configService.get<string>('VOYAGE_API_KEY');
+        if (!apiKey) throw new Error('VOYAGE_API_KEY não configurada. Configure em Configurações > Integrações.');
         // Voyage AI é compatível com a API de embeddings da OpenAI
         return new OpenAIEmbeddings({
             openAIApiKey: apiKey,

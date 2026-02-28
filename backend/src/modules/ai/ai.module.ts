@@ -10,9 +10,10 @@ import { ConfigModule } from '@nestjs/config';
 import { S3Service } from './storage/s3.service';
 import { EmbedModule } from './embed/embed.module';
 import { ApiKeysModule } from './api-keys/api-keys.module';
+import { SettingsModule } from '../settings/settings.module';
 
 @Module({
-    imports: [DatabaseModule, AIEngineModule, KnowledgeModule, ConfigModule, forwardRef(() => EmbedModule), ApiKeysModule],
+    imports: [DatabaseModule, AIEngineModule, KnowledgeModule, ConfigModule, forwardRef(() => EmbedModule), ApiKeysModule, SettingsModule],
 
     controllers: [AIController],
 

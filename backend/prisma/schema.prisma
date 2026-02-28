@@ -270,6 +270,9 @@ model Company {
 
   apiKeys APIKey[]
 
+  // Configurações de providers de IA por empresa
+  providerConfigs ProviderConfig[]
+
   @@map("companies")
 }
 
@@ -1044,4 +1047,27 @@ model SavedFilter {
   @@index([userId])
   @@index([companyId])
   @@map("saved_filters")
+}
+
+// ============================================
+// CONFIGURAÇÕES DE PROVIDERS DE IA POR EMPRESA
+// ============================================
+
+model ProviderConfig {
+  id          String   @id @default(uuid())
+  companyId   String
+  provider    String   // e.g. 'openai', 'anthropic', 'gemini', 'ollama'
+  category    String   @default("llm") // 'llm', 'embedding', 'both'
+  apiKey      String?  @db.Text // Armazenado criptografado (AES-256-GCM)
+  baseUrl     String?  // Para providers locais (Ollama, LM Studio) ou Azure
+  extraConfig Json?    // Dados extras: { azureEndpoint, azureDeployment, ... }
+  isEnabled   Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, provider])
+  @@index([companyId])
+  @@map("provider_configs")
 }

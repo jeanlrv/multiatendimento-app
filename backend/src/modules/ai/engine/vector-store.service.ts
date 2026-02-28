@@ -16,8 +16,10 @@ export class VectorStoreService {
         text: string,
         provider: string = 'openai',
         model?: string,
+        apiKeyOverride?: string,
+        baseUrlOverride?: string,
     ): Promise<number[]> {
-        const embeddings = this.embeddingFactory.createEmbeddings(provider, model);
+        const embeddings = this.embeddingFactory.createEmbeddings(provider, model, apiKeyOverride, baseUrlOverride);
         return embeddings.embedQuery(text);
     }
 
@@ -32,6 +34,8 @@ export class VectorStoreService {
      * @param limit Quantidade de chunks a retornar
      * @param embeddingProvider Provider usado para gerar o embedding da query
      * @param embeddingModel Modelo de embedding
+     * @param apiKeyOverride API key da empresa para o provider de embedding
+     * @param baseUrlOverride Base URL da empresa (para Ollama/Azure)
      */
     async searchSimilarity(
         prisma: any,
@@ -41,10 +45,12 @@ export class VectorStoreService {
         limit: number = 5,
         embeddingProvider: string = 'openai',
         embeddingModel?: string,
+        apiKeyOverride?: string,
+        baseUrlOverride?: string,
     ): Promise<{ content: string; score: number; documentId: string; documentTitle?: string }[]> {
         try {
             // 1. Gera embedding da query
-            const queryEmbedding = await this.generateEmbedding(queryText, embeddingProvider, embeddingModel);
+            const queryEmbedding = await this.generateEmbedding(queryText, embeddingProvider, embeddingModel, apiKeyOverride, baseUrlOverride);
 
             // 2. Busca todos os chunks com embedding disponível
             const whereClause: any = {

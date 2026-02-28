@@ -9,40 +9,11 @@ import { toast } from 'sonner';
 import WidgetConfigTab from './components/WidgetConfigTab';
 import ApiKeysSection from './components/ApiKeysSection';
 
-// Modelos de embedding disponíveis por provider
-const EMBEDDING_MODELS: Record<string, { id: string; label: string }[]> = {
-    openai: [
-        { id: 'text-embedding-3-small', label: 'text-embedding-3-small (Econômico)' },
-        { id: 'text-embedding-3-large', label: 'text-embedding-3-large (Preciso)' },
-        { id: 'text-embedding-ada-002', label: 'text-embedding-ada-002 (Legado)' },
-    ],
-    ollama: [
-        { id: 'nomic-embed-text', label: 'nomic-embed-text' },
-        { id: 'mxbai-embed-large', label: 'mxbai-embed-large' },
-        { id: 'all-minilm', label: 'all-minilm' },
-    ],
-    gemini: [
-        { id: 'models/text-embedding-004', label: 'text-embedding-004' },
-        { id: 'models/embedding-001', label: 'embedding-001 (Legado)' },
-    ],
-    cohere: [
-        { id: 'embed-multilingual-v3.0', label: 'embed-multilingual-v3.0' },
-        { id: 'embed-english-v3.0', label: 'embed-english-v3.0' },
-    ],
-    azure: [
-        { id: 'text-embedding-3-small', label: 'text-embedding-3-small' },
-        { id: 'text-embedding-3-large', label: 'text-embedding-3-large' },
-    ],
-    voyage: [
-        { id: 'voyage-3', label: 'voyage-3' },
-        { id: 'voyage-3-lite', label: 'voyage-3-lite (Econômico)' },
-    ],
-};
-
 export default function AIAgentsPage() {
     const [agents, setAgents] = useState<AIAgent[]>([]);
     const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>([]);
     const [availableModels, setAvailableModels] = useState<AIProviderModels[]>([]);
+    const [embeddingProviders, setEmbeddingProviders] = useState<{ id: string; name: string; models: { id: string; name: string; dimensions: number }[] }[]>([]);
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [currentAgent, setCurrentAgent] = useState<Partial<AIAgent> | null>(null);
@@ -58,14 +29,16 @@ export default function AIAgentsPage() {
     const fetchData = async () => {
         try {
             setLoading(true);
-            const [agentsData, kbData, modelsData] = await Promise.all([
+            const [agentsData, kbData, modelsData, embProviders] = await Promise.all([
                 AIAgentsService.findAll(),
                 AIKnowledgeService.findAllBases(),
                 AIAgentsService.getModels().catch(() => []),
+                AIAgentsService.getEmbeddingProviders().catch(() => []),
             ]);
             setAgents(agentsData);
             setKnowledgeBases(kbData);
             setAvailableModels(modelsData);
+            setEmbeddingProviders(embProviders);
         } catch (error) {
             console.error('Erro ao buscar dados:', error);
             toast.error('Erro ao carregar dados');
@@ -174,8 +147,10 @@ export default function AIAgentsPage() {
         return 'Desconhecido';
     };
 
-    const currentEmbeddingProvider = (currentAgent as any)?.embeddingProvider || 'openai';
-    const embeddingModelsForProvider = EMBEDDING_MODELS[currentEmbeddingProvider] || EMBEDDING_MODELS.openai;
+    const currentEmbeddingProvider = (currentAgent as any)?.embeddingProvider || embeddingProviders[0]?.id || 'openai';
+    const embeddingModelsForProvider = embeddingProviders.find(p => p.id === currentEmbeddingProvider)?.models
+        || embeddingProviders[0]?.models
+        || [];
 
     if (!isModalOpen) return (
         <div className="space-y-8 relative liquid-glass aurora min-h-[calc(100dvh-6rem)] md:min-h-[calc(100vh-6rem)] pb-12">
@@ -488,15 +463,18 @@ export default function AIAgentsPage() {
                                             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Provider</label>
                                             <select
                                                 value={currentEmbeddingProvider}
-                                                onChange={e => setCurrentAgent({ ...currentAgent, embeddingProvider: e.target.value, embeddingModel: EMBEDDING_MODELS[e.target.value]?.[0]?.id || '' } as any)}
+                                                onChange={e => {
+                                                    const firstModel = embeddingProviders.find(p => p.id === e.target.value)?.models[0]?.id || '';
+                                                    setCurrentAgent({ ...currentAgent, embeddingProvider: e.target.value, embeddingModel: firstModel } as any);
+                                                }}
                                                 className="w-full mt-1 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-sm font-semibold outline-none dark:text-white appearance-none"
                                             >
-                                                <option value="openai">OpenAI</option>
-                                                <option value="ollama">Ollama (Local)</option>
-                                                <option value="gemini">Gemini</option>
-                                                <option value="cohere">Cohere</option>
-                                                <option value="azure">Azure OpenAI</option>
-                                                <option value="voyage">Voyage AI</option>
+                                                {embeddingProviders.length === 0 && (
+                                                    <option value="">Nenhum provider configurado</option>
+                                                )}
+                                                {embeddingProviders.map(p => (
+                                                    <option key={p.id} value={p.id}>{p.name}</option>
+                                                ))}
                                             </select>
                                         </div>
                                         <div>
@@ -506,8 +484,11 @@ export default function AIAgentsPage() {
                                                 onChange={e => setCurrentAgent({ ...currentAgent, embeddingModel: e.target.value } as any)}
                                                 className="w-full mt-1 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-sm font-semibold outline-none dark:text-white appearance-none"
                                             >
-                                                {embeddingModelsForProvider.map(m => (
-                                                    <option key={m.id} value={m.id}>{m.label}</option>
+                                                {embeddingModelsForProvider.length === 0 && (
+                                                    <option value="">Nenhum modelo disponível</option>
+                                                )}
+                                                {embeddingModelsForProvider.map((m: { id: string; name: string; dimensions: number }) => (
+                                                    <option key={m.id} value={m.id}>{m.name}</option>
                                                 ))}
                                             </select>
                                         </div>

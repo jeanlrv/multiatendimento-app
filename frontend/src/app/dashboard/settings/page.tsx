@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import {
-    Mail, Settings, Zap, SlidersHorizontal, Palette, Building2
+    Mail, Settings, Zap, SlidersHorizontal, Palette, Building2, Brain
 } from 'lucide-react';
 
 // Atomic Components
@@ -13,15 +13,17 @@ import { GeneralParams } from '@/components/settings/GeneralParams';
 import { SystemSettings } from '@/components/settings/SystemSettings';
 import { BrandingSettings } from '@/components/settings/BrandingSettings';
 import { CompanyManager } from '@/components/settings/CompanyManager';
+import { AIProvidersSettings } from '@/components/settings/AIProvidersSettings';
 
 export default function SettingsPage() {
-    const [activeTab, setActiveTab] = useState<'companies' | 'smtp' | 'integrations' | 'system' | 'params' | 'branding'>('companies');
+    const [activeTab, setActiveTab] = useState<'companies' | 'smtp' | 'integrations' | 'system' | 'params' | 'branding' | 'ai-providers'>('companies');
 
     const tabs = [
         { id: 'companies', label: 'Unidades Operacionais', icon: <Building2 size={16} /> },
         { id: 'branding', label: 'Identidade Visual', icon: <Palette size={16} /> },
         { id: 'smtp', label: 'E-mail (SMTP)', icon: <Mail size={16} /> },
         { id: 'integrations', label: 'Integrações', icon: <Zap size={16} /> },
+        { id: 'ai-providers', label: 'IA & Modelos', icon: <Brain size={16} /> },
         { id: 'params', label: 'Parâmetros', icon: <SlidersHorizontal size={16} /> },
         { id: 'system', label: 'Sistema', icon: <Settings size={16} /> },
     ];
@@ -66,6 +68,7 @@ export default function SettingsPage() {
                 {activeTab === 'branding' && <BrandingSettings />}
                 {activeTab === 'smtp' && <SmtpSettings />}
                 {activeTab === 'integrations' && <IntegrationsManager />}
+                {activeTab === 'ai-providers' && <AIProvidersSettings />}
                 {activeTab === 'params' && <GeneralParams />}
                 {activeTab === 'system' && <SystemSettings />}
             </motion.div>

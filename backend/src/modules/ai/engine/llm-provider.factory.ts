@@ -219,8 +219,15 @@ export class LLMProviderFactory {
      * Cria uma instância do modelo LLM correto baseado no modelId.
      * O modelId pode usar prefixos como "groq:", "openrouter:", "ollama:", "azure:", etc.
      * para identificar o provider, ou nomes diretos como "gpt-4o", "claude-*", "gemini-*".
+     * @param apiKeyOverride API key da empresa (vinda do banco), sobrepõe a env var global
+     * @param baseUrlOverride Base URL da empresa (para Ollama/LM Studio/Azure endpoint)
      */
-    createModel(modelId: string, temperature: number = 0.7): BaseChatModel {
+    createModel(
+        modelId: string,
+        temperature: number = 0.7,
+        apiKeyOverride?: string,
+        baseUrlOverride?: string,
+    ): BaseChatModel {
         const provider = this.detectProvider(modelId);
         const actualModelName = this.stripPrefix(modelId);
 
@@ -228,18 +235,18 @@ export class LLMProviderFactory {
 
         switch (provider.id) {
             case 'anthropic':
-                return this.createAnthropicModel(actualModelName, temperature);
+                return this.createAnthropicModel(actualModelName, temperature, apiKeyOverride);
             case 'gemini':
-                return this.createGeminiModel(actualModelName, temperature);
+                return this.createGeminiModel(actualModelName, temperature, apiKeyOverride);
             case 'azure':
-                return this.createAzureModel(actualModelName, temperature);
+                return this.createAzureModel(actualModelName, temperature, apiKeyOverride, baseUrlOverride);
             case 'cohere':
-                return this.createCohereModel(actualModelName, temperature);
+                return this.createCohereModel(actualModelName, temperature, apiKeyOverride);
             case 'huggingface':
-                return this.createHuggingFaceModel(actualModelName, temperature);
+                return this.createHuggingFaceModel(actualModelName, temperature, apiKeyOverride);
             default:
                 // OpenAI e todos os OpenAI-compat
-                return this.createOpenAICompatModel(provider, actualModelName, temperature);
+                return this.createOpenAICompatModel(provider, actualModelName, temperature, apiKeyOverride, baseUrlOverride);
         }
     }
 
@@ -295,17 +302,18 @@ export class LLMProviderFactory {
         provider: LLMProviderConfig,
         modelName: string,
         temperature: number,
+        apiKeyOverride?: string,
+        baseUrlOverride?: string,
     ): BaseChatModel {
-        const apiKey = this.configService.get<string>(provider.envKey);
+        const apiKey = apiKeyOverride || this.configService.get<string>(provider.envKey);
         if (!apiKey && provider.id !== 'ollama' && provider.id !== 'lmstudio') {
-            throw new Error(`Chave de API não configurada para ${provider.name}. Configure a variável ${provider.envKey}.`);
+            throw new Error(`Chave de API não configurada para ${provider.name}. Configure a variável ${provider.envKey} ou adicione em Configurações > Integrações.`);
         }
 
-        const baseURL = provider.id === 'lmstudio'
-            ? (this.configService.get<string>('LMSTUDIO_BASE_URL') || provider.baseURL)
-            : provider.id === 'ollama'
-                ? (this.configService.get<string>('OLLAMA_BASE_URL') || provider.baseURL)
-                : provider.baseURL;
+        const baseURL = baseUrlOverride
+            || (provider.id === 'lmstudio' ? (this.configService.get<string>('LMSTUDIO_BASE_URL') || provider.baseURL) : undefined)
+            || (provider.id === 'ollama' ? (this.configService.get<string>('OLLAMA_BASE_URL') || provider.baseURL) : undefined)
+            || provider.baseURL;
 
         const config: any = {
             modelName: modelName,
@@ -323,13 +331,18 @@ export class LLMProviderFactory {
     /**
      * Cria modelo Azure OpenAI.
      */
-    private createAzureModel(modelName: string, temperature: number): BaseChatModel {
-        const apiKey = this.configService.get<string>('AZURE_OPENAI_API_KEY');
-        const endpoint = this.configService.get<string>('AZURE_OPENAI_ENDPOINT');
+    private createAzureModel(
+        modelName: string,
+        temperature: number,
+        apiKeyOverride?: string,
+        endpointOverride?: string,
+    ): BaseChatModel {
+        const apiKey = apiKeyOverride || this.configService.get<string>('AZURE_OPENAI_API_KEY');
+        const endpoint = endpointOverride || this.configService.get<string>('AZURE_OPENAI_ENDPOINT');
         const deploymentName = this.configService.get<string>('AZURE_OPENAI_DEPLOYMENT_NAME') || modelName;
 
         if (!apiKey || !endpoint) {
-            throw new Error('AZURE_OPENAI_API_KEY ou AZURE_OPENAI_ENDPOINT não configurados.');
+            throw new Error('AZURE_OPENAI_API_KEY ou AZURE_OPENAI_ENDPOINT não configurados. Configure em Configurações > Integrações.');
         }
 
         const { AzureChatOpenAI } = require('@langchain/openai');
@@ -345,10 +358,10 @@ export class LLMProviderFactory {
     /**
      * Cria modelo Anthropic via LangChain.
      */
-    private createAnthropicModel(modelName: string, temperature: number): BaseChatModel {
-        const apiKey = this.configService.get<string>('ANTHROPIC_API_KEY');
+    private createAnthropicModel(modelName: string, temperature: number, apiKeyOverride?: string): BaseChatModel {
+        const apiKey = apiKeyOverride || this.configService.get<string>('ANTHROPIC_API_KEY');
         if (!apiKey) {
-            throw new Error('Chave de API Anthropic não configurada. Configure ANTHROPIC_API_KEY.');
+            throw new Error('Chave de API Anthropic não configurada. Configure em Configurações > Integrações.');
         }
         const { ChatAnthropic } = require('@langchain/anthropic');
         return new ChatAnthropic({
@@ -361,10 +374,10 @@ export class LLMProviderFactory {
     /**
      * Cria modelo Google Gemini via LangChain.
      */
-    private createGeminiModel(modelName: string, temperature: number): BaseChatModel {
-        const apiKey = this.configService.get<string>('GEMINI_API_KEY');
+    private createGeminiModel(modelName: string, temperature: number, apiKeyOverride?: string): BaseChatModel {
+        const apiKey = apiKeyOverride || this.configService.get<string>('GEMINI_API_KEY');
         if (!apiKey) {
-            throw new Error('Chave de API Gemini não configurada. Configure GEMINI_API_KEY.');
+            throw new Error('Chave de API Gemini não configurada. Configure em Configurações > Integrações.');
         }
         const { ChatGoogleGenerativeAI } = require('@langchain/google-genai');
         return new ChatGoogleGenerativeAI({
@@ -377,10 +390,10 @@ export class LLMProviderFactory {
     /**
      * Cria modelo Cohere via LangChain.
      */
-    private createCohereModel(modelName: string, temperature: number): BaseChatModel {
-        const apiKey = this.configService.get<string>('COHERE_API_KEY');
+    private createCohereModel(modelName: string, temperature: number, apiKeyOverride?: string): BaseChatModel {
+        const apiKey = apiKeyOverride || this.configService.get<string>('COHERE_API_KEY');
         if (!apiKey) {
-            throw new Error('Chave de API Cohere não configurada. Configure COHERE_API_KEY.');
+            throw new Error('Chave de API Cohere não configurada. Configure em Configurações > Integrações.');
         }
         const { ChatCohere } = require('@langchain/cohere');
         return new ChatCohere({
@@ -393,10 +406,10 @@ export class LLMProviderFactory {
     /**
      * Cria modelo HuggingFace via LangChain Community.
      */
-    private createHuggingFaceModel(modelName: string, temperature: number): BaseChatModel {
-        const apiKey = this.configService.get<string>('HUGGINGFACE_API_KEY');
+    private createHuggingFaceModel(modelName: string, temperature: number, apiKeyOverride?: string): BaseChatModel {
+        const apiKey = apiKeyOverride || this.configService.get<string>('HUGGINGFACE_API_KEY');
         if (!apiKey) {
-            throw new Error('Chave de API HuggingFace não configurada. Configure HUGGINGFACE_API_KEY.');
+            throw new Error('Chave de API HuggingFace não configurada. Configure em Configurações > Integrações.');
         }
         const { HuggingFaceInference } = require('@langchain/community/llms/hf');
         return new HuggingFaceInference({
