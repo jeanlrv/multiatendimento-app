@@ -31,6 +31,8 @@ export function AudioRecorder({ onSend, onCancel }: AudioRecorderProps) {
     const analyserRef = useRef<AnalyserNode | null>(null);
     const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
     const animationFrameRef = useRef<number | null>(null);
+    // Ref to track recording state inside animation loop (avoids stale closure)
+    const isRecordingRef = useRef(false);
 
     const formatTime = (seconds: number) => {
         const mins = Math.floor(seconds / 60);
@@ -50,7 +52,8 @@ export function AudioRecorder({ onSend, onCancel }: AudioRecorderProps) {
         const dataArray = new Uint8Array(bufferLength);
 
         const draw = () => {
-            if (!isRecording) return;
+            // Use ref instead of state to avoid stale closure
+            if (!isRecordingRef.current) return;
             animationFrameRef.current = requestAnimationFrame(draw);
 
             analyser.getByteFrequencyData(dataArray);
@@ -64,17 +67,14 @@ export function AudioRecorder({ onSend, onCancel }: AudioRecorderProps) {
             for (let i = 0; i < bufferLength; i++) {
                 barHeight = (dataArray[i] / 255) * canvas.height;
 
-                // Definir cor degradê
                 const grad = canvasCtx.createLinearGradient(0, canvas.height, 0, 0);
-                grad.addColorStop(0, '#3b82f6'); // blue-500
-                grad.addColorStop(1, '#8b5cf6'); // purple-500
+                grad.addColorStop(0, '#3b82f6');
+                grad.addColorStop(1, '#8b5cf6');
 
                 canvasCtx.fillStyle = grad;
 
-                // Desenhar barra centralizada verticalmente
                 const y = (canvas.height - barHeight) / 2;
 
-                // Arredondar pontas simulando barras modernas
                 canvasCtx.beginPath();
                 canvasCtx.roundRect(x, y, barWidth - 1, barHeight < 2 ? 2 : barHeight, 2);
                 canvasCtx.fill();
@@ -84,12 +84,24 @@ export function AudioRecorder({ onSend, onCancel }: AudioRecorderProps) {
         };
 
         draw();
-    }, [isRecording]);
+    }, []);
 
     const startRecording = async () => {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+
+            // Pick the best supported MIME type (iOS Safari needs audio/mp4)
+            const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+                ? 'audio/webm;codecs=opus'
+                : MediaRecorder.isTypeSupported('audio/webm')
+                    ? 'audio/webm'
+                    : MediaRecorder.isTypeSupported('audio/mp4')
+                        ? 'audio/mp4'
+                        : '';
+
+            const mediaRecorder = mimeType
+                ? new MediaRecorder(stream, { mimeType })
+                : new MediaRecorder(stream);
             mediaRecorderRef.current = mediaRecorder;
 
             // Audio Context setup for Visualization
@@ -108,12 +120,11 @@ export function AudioRecorder({ onSend, onCancel }: AudioRecorderProps) {
             };
 
             mediaRecorder.onstop = () => {
-                const blob = new Blob(chunks, { type: 'audio/webm' });
+                const blob = new Blob(chunks, { type: mimeType || 'audio/webm' });
                 setAudioBlob(blob);
                 const url = URL.createObjectURL(blob);
                 setPlaybackUrl(url);
 
-                // Cleanup AudioContext on stop
                 if (audioContextRef.current?.state !== 'closed') {
                     audioContextRef.current?.close();
                 }
@@ -122,7 +133,8 @@ export function AudioRecorder({ onSend, onCancel }: AudioRecorderProps) {
                 }
             };
 
-            mediaRecorder.start(100); // chunk freq
+            mediaRecorder.start(100);
+            isRecordingRef.current = true;
             setIsRecording(true);
             setRecordingTime(0);
 
@@ -130,8 +142,8 @@ export function AudioRecorder({ onSend, onCancel }: AudioRecorderProps) {
                 setRecordingTime(prev => prev + 1);
             }, 1000);
 
-            // Iniciar animação do canvas curto atraso pra garantir ref
-            setTimeout(drawWaveform, 50);
+            // Start waveform animation after state ref is set
+            drawWaveform();
 
         } catch (err) {
             console.error('Erro ao acessar microfone:', err);
@@ -141,7 +153,8 @@ export function AudioRecorder({ onSend, onCancel }: AudioRecorderProps) {
     };
 
     const stopRecording = () => {
-        if (mediaRecorderRef.current && isRecording) {
+        if (mediaRecorderRef.current && isRecordingRef.current) {
+            isRecordingRef.current = false;
             mediaRecorderRef.current.stop();
             mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
             setIsRecording(false);
@@ -153,6 +166,7 @@ export function AudioRecorder({ onSend, onCancel }: AudioRecorderProps) {
     useEffect(() => {
         startRecording();
         return () => {
+            isRecordingRef.current = false;
             if (timerRef.current) clearInterval(timerRef.current);
             if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
                 mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());

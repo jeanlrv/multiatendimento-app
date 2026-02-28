@@ -129,6 +129,47 @@
   .text-gradient-ks {
     @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-blue-400 font-black;
   }
+
+  /* Background gradient for the entire app shell */
+  .sober-gradient {
+    @apply bg-slate-50 dark:bg-slate-950;
+    background-image: radial-gradient(ellipse at 20% 50%, rgba(56, 189, 248, 0.04) 0%, transparent 60%),
+                      radial-gradient(ellipse at 80% 20%, rgba(99, 102, 241, 0.04) 0%, transparent 60%);
+  }
+  .dark .sober-gradient {
+    background-image: radial-gradient(ellipse at 20% 50%, rgba(56, 189, 248, 0.07) 0%, transparent 60%),
+                      radial-gradient(ellipse at 80% 20%, rgba(99, 102, 241, 0.07) 0%, transparent 60%);
+  }
+
+  /* Capsule quick-nav in header */
+  .ks-capsule {
+    @apply flex items-center gap-1 bg-white/50 dark:bg-white/5 backdrop-blur-xl border border-slate-200 dark:border-white/10 rounded-full p-1 shadow-sm;
+  }
+
+  /* Custom scrollbar */
+  .custom-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--primary) / 0.3) transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--primary) / 0.3);
+    border-radius: 99px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(var(--primary) / 0.5);
+  }
+
+  /* iOS safe area for bottom nav */
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
 }
 
 /* ============================= */

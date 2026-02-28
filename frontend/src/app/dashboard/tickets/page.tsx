@@ -121,6 +121,8 @@ export default function TicketsPage() {
     const [selectedTicketIds, setSelectedTicketIds] = useState<string[]>([]);
     const [showCopilot, setShowCopilot] = useState(false);
     const [sending, setSending] = useState(false);
+    const [showOptionsMenu, setShowOptionsMenu] = useState(false);
+    const optionsMenuRef = useRef<HTMLDivElement>(null);
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
     // Anexos
@@ -652,6 +654,18 @@ export default function TicketsPage() {
         return () => document.removeEventListener('mousedown', handler);
     }, [showEmojiPicker]);
 
+    // Fecha menu de opções ao clicar fora
+    useEffect(() => {
+        if (!showOptionsMenu) return;
+        const handler = (e: MouseEvent) => {
+            if (optionsMenuRef.current && !optionsMenuRef.current.contains(e.target as Node)) {
+                setShowOptionsMenu(false);
+            }
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [showOptionsMenu]);
+
     useEffect(() => {
         scrollToBottom();
     }, [messages]);
@@ -664,11 +678,11 @@ export default function TicketsPage() {
     };
 
     return (
-        <div className="flex flex-col md:flex-row h-[calc(100vh-6rem)] md:h-[calc(100vh-5rem)] gap-4 md:gap-6 max-w-full relative overflow-hidden">
+        <div className="flex flex-col md:flex-row h-full gap-3 md:gap-4 max-w-full relative overflow-hidden">
             {/* Lista de Tickets - Esquerda */}
-            <div className={`w-full md:w-[400px] h-full flex-shrink-0 flex flex-col liquid-glass md:rounded-2xl overflow-hidden border border-slate-200 dark:border-white/10 shadow-xl relative aurora transition-all duration-300 ${selectedTicket ? 'hidden md:flex' : 'flex'}`}>
+            <div className={`w-full md:w-[340px] lg:w-[380px] h-full flex-shrink-0 flex flex-col liquid-glass md:rounded-2xl overflow-hidden border border-slate-200 dark:border-white/10 shadow-xl relative aurora transition-all duration-300 ${selectedTicket ? 'hidden md:flex' : 'flex'}`}>
                 {/* Header da Lista */}
-                <div className="p-5 border-b border-slate-200 dark:border-white/5 relative z-10">
+                <div className="p-3 md:p-4 border-b border-slate-200 dark:border-white/5 relative z-10">
                     <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center gap-4">
                             {/* Checkbox Selecionar Todos */}
@@ -697,8 +711,8 @@ export default function TicketsPage() {
                         </button>
                     </div>
 
-                    {/* Barra de Busca Premium */}
-                    <div className="relative mb-5 group">
+                    {/* Barra de Busca */}
+                    <div className="relative mb-3 group">
                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-primary transition-colors" />
                         <input
                             type="text"
@@ -854,17 +868,17 @@ export default function TicketsPage() {
                     </AnimatePresence>
 
                     {/* Filtros Estilo Cápsula */}
-                    <div className="flex items-center gap-1.5 bg-slate-200/40 dark:bg-white/5 p-1.5 rounded-2xl border border-white/50 dark:border-white/5">
+                    <div className="flex items-center gap-1 bg-slate-200/40 dark:bg-white/5 p-1 rounded-xl border border-white/50 dark:border-white/5">
                         {['OPEN', 'IN_PROGRESS', 'PAUSED', 'RESOLVED'].map((s) => (
                             <button
                                 key={s}
                                 onClick={() => setFilter(s)}
-                                className={`flex-1 py-2.5 rounded-xl text-[10px] font-black transition-all duration-300 tracking-widest uppercase ${filter === s
+                                className={`flex-1 py-2 rounded-lg text-[9px] font-black transition-all duration-300 tracking-wide uppercase ${filter === s
                                     ? 'bg-white dark:bg-primary text-slate-900 dark:text-white shadow-lg shadow-black/5'
                                     : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
                                     }`}
                             >
-                                {s === 'OPEN' ? 'Abertos' : s === 'IN_PROGRESS' ? 'Em Atend.' : s === 'PAUSED' ? 'Pausados' : 'Finalizados'}
+                                {s === 'OPEN' ? 'Abertos' : s === 'IN_PROGRESS' ? 'Em Atend.' : s === 'PAUSED' ? 'Pausados' : 'Final.'}
                             </button>
                         ))}
                     </div>
@@ -1045,23 +1059,23 @@ export default function TicketsPage() {
                     </div>
                 ) : (
                     <>
-                        {/* Header da Conversa Estilo ZIP */}
-                        <div className="p-2 md:p-3 border-b border-white/40 dark:border-white/5 flex items-center justify-between bg-white/40 dark:bg-black/20 backdrop-blur-xl shrink-0">
-                            <div className="flex items-center gap-2 md:gap-3">
+                        {/* Header da Conversa */}
+                        <div className="p-2 md:p-3 border-b border-white/40 dark:border-white/5 flex items-center justify-between gap-2 bg-white/40 dark:bg-black/20 backdrop-blur-xl shrink-0 min-w-0">
+                            <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1">
                                 <button
                                     onClick={() => setSelectedTicket(null)}
-                                    className="md:hidden p-2 rounded-xl text-slate-500 hover:bg-slate-100 dark:hover:bg-white/5 transition-all"
+                                    className="md:hidden p-2 rounded-xl text-slate-500 hover:bg-slate-100 dark:hover:bg-white/5 transition-all flex-shrink-0"
                                 >
-                                    <ArrowLeft size={20} />
+                                    <ArrowLeft size={18} />
                                 </button>
-                                <div className="h-10 w-10 bg-primary text-white rounded-xl flex items-center justify-center text-lg font-black shadow-md shadow-primary/30 relative overflow-hidden flex-shrink-0">
+                                <div className="h-9 w-9 bg-primary text-white rounded-xl flex items-center justify-center text-base font-black shadow-md shadow-primary/30 relative overflow-hidden flex-shrink-0">
                                     {selectedTicket.contact.name.charAt(0)}
                                     <div className="absolute inset-0 bg-gradient-to-tr from-white/20 to-transparent pointer-events-none" />
                                 </div>
-                                <div>
-                                    <div className="flex items-center gap-2">
-                                        <h3 className="font-black text-lg text-slate-900 dark:text-white tracking-tight leading-none">{selectedTicket.contact.name}</h3>
-                                        <div className="flex items-center gap-2">
+                                <div className="min-w-0 flex-1">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                        <h3 className="font-black text-sm md:text-base text-slate-900 dark:text-white tracking-tight leading-none truncate max-w-[120px] md:max-w-[200px]">{selectedTicket.contact.name}</h3>
+                                        <div className="flex items-center gap-1.5 flex-wrap">
                                             <span className="text-[11px] font-mono text-slate-400 bg-slate-100 dark:bg-white/5 px-2 py-0.5 rounded-lg border border-slate-200 dark:border-white/10 flex items-center gap-1.5 group/id">
                                                 #{selectedTicket.id.substring(selectedTicket.id.length - 6).toUpperCase()}
                                                 <button
@@ -1107,7 +1121,7 @@ export default function TicketsPage() {
                                             )}
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-3 mt-1.5 min-h-[1.5rem]">
+                                    <div className="flex items-center gap-2 mt-1 flex-wrap min-h-[1.25rem]">
                                         {isEditingSubject ? (
                                             <div className="flex items-center gap-2 flex-1">
                                                 <input
@@ -1160,15 +1174,16 @@ export default function TicketsPage() {
                                     </div>
                                 </div>
                             </div>
-                            <div className="flex items-center gap-3">
-                                <div className="flex items-center gap-2">
-                                    <div className={`flex items-center transition-all ${isSearching ? 'w-48 opacity-100' : 'w-0 opacity-0 overflow-hidden'}`}>
+                            <div className="flex items-center gap-1.5 md:gap-2 flex-shrink-0">
+                                {/* Busca na conversa */}
+                                <div className="flex items-center gap-1">
+                                    <div className={`flex items-center transition-all ${isSearching ? 'w-32 md:w-44 opacity-100' : 'w-0 opacity-0 overflow-hidden'}`}>
                                         <input
                                             type="text"
-                                            placeholder="Buscar na conversa..."
+                                            placeholder="Buscar..."
                                             value={messageSearch}
                                             onChange={(e) => setMessageSearch(e.target.value)}
-                                            className="bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-1.5 text-xs w-full focus:ring-2 focus:ring-primary/20 outline-none"
+                                            className="bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-2.5 py-1.5 text-xs w-full focus:ring-2 focus:ring-primary/20 outline-none"
                                             autoFocus
                                         />
                                     </div>
@@ -1177,10 +1192,10 @@ export default function TicketsPage() {
                                             setIsSearching(!isSearching);
                                             if (isSearching) setMessageSearch('');
                                         }}
-                                        className={`p-3 rounded-2xl transition-all ${isSearching ? 'bg-primary text-white shadow-lg' : 'bg-white/50 dark:bg-white/5 text-slate-400 hover:text-primary'}`}
+                                        className={`p-2 rounded-xl transition-all ${isSearching ? 'bg-primary text-white shadow-lg' : 'bg-white/50 dark:bg-white/5 text-slate-400 hover:text-primary'}`}
                                         title="Buscar mensagens"
                                     >
-                                        {isSearching ? <X size={18} /> : <Search size={18} />}
+                                        {isSearching ? <X size={16} /> : <Search size={16} />}
                                     </button>
                                 </div>
                                 <button
@@ -1188,7 +1203,7 @@ export default function TicketsPage() {
                                     className={`p-2 rounded-xl transition-all ${showContactHistory ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5'}`}
                                     title="Informações do Contato"
                                 >
-                                    <Info size={20} />
+                                    <Info size={16} />
                                 </button>
                                 {selectedTicket.status === 'RESOLVED' && (
                                     <button
@@ -1201,15 +1216,15 @@ export default function TicketsPage() {
                                                 toast.error("Erro ao reabrir ticket");
                                             }
                                         }}
-                                        className="flex items-center gap-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 px-4 py-2 rounded-2xl border border-emerald-500/20 transition-all font-black text-[10px] uppercase tracking-widest active:scale-95 shadow-lg shadow-emerald-500/10"
+                                        className="hidden md:flex items-center gap-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 px-3 py-1.5 rounded-xl border border-emerald-500/20 transition-all font-black text-[9px] uppercase tracking-widest active:scale-95"
                                     >
-                                        <ArrowRightLeft size={14} />
-                                        Reabrir Ticket
+                                        <ArrowRightLeft size={12} />
+                                        Reabrir
                                     </button>
                                 )}
 
                                 {/* Modo IA / Humano */}
-                                <div className="flex items-center bg-slate-100/50 dark:bg-white/5 p-1 rounded-2xl border border-white/50 dark:border-white/5 backdrop-blur-md shrink-0">
+                                <div className="flex items-center bg-slate-100/50 dark:bg-white/5 p-0.5 rounded-xl border border-white/50 dark:border-white/5 backdrop-blur-md shrink-0">
                                     {['AI', 'HUMANO'].map((m) => (
                                         <button
                                             key={m}
@@ -1222,8 +1237,8 @@ export default function TicketsPage() {
                                                     toast.error('Erro ao alternar modo');
                                                 }
                                             }}
-                                            className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${selectedTicket.mode === m
-                                                ? 'bg-white dark:bg-primary text-black shadow-md'
+                                            className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${selectedTicket.mode === m
+                                                ? 'bg-white dark:bg-primary text-black dark:text-white shadow-md'
                                                 : 'text-slate-400 hover:text-slate-600 dark:hover:text-white'
                                                 }`}
                                         >
@@ -1232,9 +1247,9 @@ export default function TicketsPage() {
                                     ))}
                                 </div>
 
-                                {/* Indicador de sentimento */}
+                                {/* Indicador de sentimento — apenas desktop */}
                                 {(selectedTicket as any).evaluation && (
-                                    <div className="shrink-0">
+                                    <div className="shrink-0 hidden lg:block">
                                         <SentimentIndicator
                                             sentiment={(selectedTicket as any).evaluation.aiSentiment}
                                             score={(selectedTicket as any).evaluation.aiSentimentScore}
@@ -1244,14 +1259,24 @@ export default function TicketsPage() {
                                 )}
 
                                 {/* Menu de Ações Secundárias */}
-                                <div className="relative group/actions shrink-0">
-                                    <button className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 rounded-xl transition-all border border-slate-200 dark:border-white/5">
-                                        <SlidersHorizontal className="h-4 w-4 text-slate-500" />
-                                        <span className="text-[10px] font-black uppercase tracking-widest">Opções</span>
+                                <div ref={optionsMenuRef} className="relative shrink-0">
+                                    <button
+                                        onClick={() => setShowOptionsMenu(v => !v)}
+                                        className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all border text-slate-700 dark:text-slate-300 ${showOptionsMenu ? 'bg-primary/10 border-primary/30 text-primary dark:text-primary' : 'bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 border-slate-200 dark:border-white/5'}`}
+                                    >
+                                        <SlidersHorizontal className="h-4 w-4" />
+                                        <span className="text-[10px] font-black uppercase tracking-widest hidden lg:block">Opções</span>
                                     </button>
 
                                     {/* Dropdown Flutuante */}
-                                    <div className="absolute top-full right-0 mt-2 w-64 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border border-slate-200 dark:border-white/10 shadow-2xl rounded-2xl p-2 opacity-0 pointer-events-none group-hover/actions:opacity-100 group-hover/actions:pointer-events-auto transition-all z-50 transform origin-top-right scale-95 group-hover/actions:scale-100 flex flex-col gap-1">
+                                    <AnimatePresence>
+                                    {showOptionsMenu && (
+                                    <motion.div
+                                        initial={{ opacity: 0, scale: 0.95, y: -4 }}
+                                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                                        exit={{ opacity: 0, scale: 0.95, y: -4 }}
+                                        transition={{ duration: 0.15 }}
+                                        className="absolute top-full right-0 mt-1 w-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 shadow-2xl rounded-2xl p-2 z-[60] flex flex-col gap-1">
 
                                         {/* Pausar */}
                                         <button
@@ -1354,7 +1379,9 @@ export default function TicketsPage() {
                                                 )}
                                             </div>
                                         </div>
-                                    </div>
+                                    </motion.div>
+                                    )}
+                                    </AnimatePresence>
                                 </div>
 
                                 {/* Ações Rápidas em Destaque */}
@@ -1635,22 +1662,22 @@ export default function TicketsPage() {
                                                     <button
                                                         onClick={() => fileInputRef.current?.click()}
                                                         disabled={uploadingFile}
-                                                        className={`p-4 transition-all hover:scale-110 ${uploadingFile ? 'text-primary animate-pulse' : 'text-slate-400 hover:text-primary'} disabled:opacity-50`}
+                                                        className={`p-2.5 transition-all hover:scale-110 ${uploadingFile ? 'text-primary animate-pulse' : 'text-slate-400 hover:text-primary'} disabled:opacity-50`}
                                                         title="Anexar arquivo"
                                                     >
-                                                        {uploadingFile ? <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /> : <Paperclip className="h-6 w-6" />}
+                                                        {uploadingFile ? <div className="h-5 w-5 border-2 border-primary border-t-transparent rounded-full animate-spin" /> : <Paperclip className="h-5 w-5" />}
                                                     </button>
 
                                                     {/* Toggle Nota Interna */}
                                                     <button
                                                         onClick={() => setIsInternal(!isInternal)}
-                                                        className={`p-2 rounded-xl transition-all flex items-center gap-2 border ${isInternal
+                                                        className={`p-2 rounded-xl transition-all flex items-center gap-1.5 border ${isInternal
                                                             ? 'bg-amber-100 dark:bg-amber-900/40 border-amber-300 dark:border-amber-700/50 text-amber-600 dark:text-amber-400'
                                                             : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 border-transparent'
                                                             }`}
                                                         title="Alternar Nota Interna"
                                                     >
-                                                        <Bot size={18} />
+                                                        <Bot size={16} />
                                                         <span className="text-[9px] font-black uppercase tracking-widest hidden lg:block">Privado</span>
                                                     </button>
 
@@ -1817,8 +1844,8 @@ export default function TicketsPage() {
                                                                     // Tab key behavior can be standard now
                                                                 }
                                                             }}
-                                                            placeholder={isInternal ? "Sua nota privada (interna)..." : "Inicie sua transmissão Aero..."}
-                                                            className={`w-full bg-transparent outline-none resize-none text-sm font-black tracking-tight ${isInternal ? 'text-amber-700 dark:text-amber-300' : 'text-slate-900 dark:text-white'} placeholder:text-slate-400/60 min-h-[56px] py-4`}
+                                                            placeholder={isInternal ? "Sua nota privada (interna)..." : "Digite sua mensagem..."}
+                                                            className={`w-full bg-transparent outline-none resize-none text-sm font-medium tracking-normal ${isInternal ? 'text-amber-700 dark:text-amber-300' : 'text-slate-900 dark:text-white'} placeholder:text-slate-400/60 min-h-[44px] py-3`}
                                                             rows={1}
                                                             maxLength={2000}
                                                         />
@@ -1829,16 +1856,17 @@ export default function TicketsPage() {
                                                     <div className="flex items-center gap-1">
                                                         <button
                                                             onClick={() => setShowScheduleModal(true)}
-                                                            className="p-4 text-emerald-500 hover:text-emerald-600 transition-all hover:scale-110"
+                                                            className="p-2.5 text-emerald-500 hover:text-emerald-600 transition-all hover:scale-110"
                                                             title="Agendar Compromisso"
                                                         >
-                                                            <Calendar className="h-6 w-6" />
+                                                            <Calendar className="h-5 w-5" />
                                                         </button>
                                                         <button
                                                             onClick={() => setIsRecording(true)}
-                                                            className="p-4 text-slate-400 hover:text-red-500 transition-all hover:scale-110"
+                                                            className="p-2.5 text-slate-400 hover:text-red-500 transition-all hover:scale-110"
+                                                            title="Gravar áudio"
                                                         >
-                                                            <Mic className="h-6 w-6" />
+                                                            <Mic className="h-5 w-5" />
                                                         </button>
                                                         <div className="relative flex items-center">
                                                             <button
@@ -1847,9 +1875,9 @@ export default function TicketsPage() {
                                                                     e.preventDefault();
                                                                     setShowEmojiPicker(!showEmojiPicker);
                                                                 }}
-                                                                className={`p-4 transition-all hover:scale-110 ${showEmojiPicker ? 'text-primary' : 'text-slate-400 hover:text-primary'}`}
+                                                                className={`p-2.5 transition-all hover:scale-110 ${showEmojiPicker ? 'text-primary' : 'text-slate-400 hover:text-primary'}`}
                                                             >
-                                                                <Smile className="h-6 w-6" />
+                                                                <Smile className="h-5 w-5" />
                                                             </button>
 
                                                             <AnimatePresence>
@@ -1876,12 +1904,12 @@ export default function TicketsPage() {
                                             <button
                                                 onClick={handleSendMessage}
                                                 disabled={!newMessage.trim() || sending}
-                                                className="h-[72px] w-[72px] bg-primary text-white rounded-full flex items-center justify-center hover:bg-primary/90 active:scale-90 transition-all shadow-2xl shadow-primary/40 disabled:opacity-50"
+                                                className="h-12 w-12 md:h-14 md:w-14 bg-primary text-white rounded-full flex items-center justify-center hover:bg-primary/90 active:scale-90 transition-all shadow-xl shadow-primary/40 disabled:opacity-50 flex-shrink-0"
                                             >
                                                 {sending ? (
-                                                    <div className="h-8 w-8 border-4 border-white/30 border-t-white rounded-full animate-spin" />
+                                                    <div className="h-5 w-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                                                 ) : (
-                                                    <Send className="h-8 w-8 ml-1" />
+                                                    <Send className="h-5 w-5 ml-0.5" />
                                                 )}
                                             </button>
                                         </div>

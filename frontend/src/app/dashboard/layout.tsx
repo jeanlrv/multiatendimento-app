@@ -243,7 +243,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
     return (
         <SessionTimeoutGuard>
-            <div className="min-h-screen sober-gradient flex transition-colors duration-300 text-slate-900 dark:text-white">
+            <div className="h-screen sober-gradient flex overflow-hidden transition-colors duration-300 text-slate-900 dark:text-white">
                 <Toaster position="top-right" richColors closeButton />
 
                 {/* ── SIDEBAR DESKTOP (md+) ────────────────────────────────── */}
@@ -314,7 +314,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 </AnimatePresence>
 
                 {/* ── MAIN CONTENT ─────────────────────────────────────────── */}
-                <div className="flex-1 flex flex-col relative z-10 overflow-hidden min-w-0">
+                <div className="flex-1 flex flex-col relative z-10 overflow-hidden min-w-0 h-full">
 
                     {/* ── HEADER ───────────────────────────────────────────── */}
                     <header className="h-16 md:h-24 flex items-center justify-between px-4 md:px-10 relative z-20 flex-shrink-0">
@@ -388,7 +388,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     </header>
 
                     {/* ── CONTEÚDO + ESPAÇO PARA BOTTOM NAV ───────────────── */}
-                    <main className="px-3 md:px-10 pb-24 md:pb-10 flex-1 overflow-x-hidden overflow-y-auto custom-scrollbar">
+                    <main className="px-3 md:px-6 pb-20 md:pb-6 flex-1 overflow-x-hidden overflow-y-auto custom-scrollbar min-h-0">
                         {children}
                     </main>
                 </div>
