@@ -148,13 +148,22 @@ export class ProviderConfigService {
                 // Se houver um modelo customizado no extraConfig, adiciona-o como primeira opção
                 if (config?.extraConfig?.model) {
                     const customModelId = `${p.id}:${config.extraConfig.model}`;
-                    if (!models.some(m => m.id === customModelId)) {
-                        models.unshift({
-                            id: customModelId,
-                            name: `${config.extraConfig.model} (Customizado)`,
-                            contextWindow: 32768
-                        });
-                    }
+                    // Remove duplicatas se o modelo padrão tiver o mesmo nome
+                    const filteredModels = models.filter(m => m.id !== customModelId);
+                    filteredModels.unshift({
+                        id: customModelId,
+                        name: `${config.extraConfig.model} (Customizado)`,
+                        contextWindow: 128000 // Aumento default para customizados
+                    });
+
+                    return {
+                        provider: p.id,
+                        providerName: p.name,
+                        models: filteredModels.map(m => ({
+                            ...m,
+                            multimodal: MULTIMODAL_MODELS.includes(m.id.split(':').pop() || m.id),
+                        })),
+                    };
                 }
 
                 return {
@@ -182,7 +191,24 @@ export class ProviderConfigService {
                 const config = companyConfigs.get(p.id);
                 return config && config.isEnabled;
             })
-            .map(p => ({ id: p.id, name: p.name, models: p.models }));
+            .map(p => {
+                const config = companyConfigs.get(p.id);
+                const models = [...p.models];
+
+                // Para AnythingLLM e Ollama, se houver modelo customizado, adicionar/ajustar
+                if (config?.extraConfig?.model && (p.id === 'anythingllm' || p.id === 'ollama')) {
+                    const customId = `${p.id}:${config.extraConfig.model}`;
+                    if (!models.some(m => m.id === customId)) {
+                        models.unshift({
+                            id: customId,
+                            name: `${config.extraConfig.model} (Custom)`,
+                            dimensions: p.id === 'anythingllm' ? 768 : 1024
+                        });
+                    }
+                }
+
+                return { id: p.id, name: p.name, models };
+            });
     }
 
     /** Mascara a API key para exibição segura */

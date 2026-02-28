@@ -132,11 +132,18 @@ export default function AIAgentsPage() {
 
     const getModelDisplayName = (modelId?: string) => {
         if (!modelId) return availableModels[0]?.models[0]?.name || 'Não configurado';
+
+        // Verifica se é um modelo formatado como "provider:model"
+        const parts = modelId.split(':');
+        const searchId = parts.length > 1 ? modelId : modelId;
+
         for (const provider of availableModels) {
-            const model = provider.models.find(m => m.id === modelId);
+            const model = provider.models.find(m => m.id === searchId);
             if (model) return model.name;
         }
-        return modelId;
+
+        // Fallback: remove prefixo se houver
+        return parts.length > 1 ? parts[1] : modelId;
     };
 
     const getProviderName = (modelId?: string) => {
@@ -151,6 +158,16 @@ export default function AIAgentsPage() {
     const embeddingModelsForProvider = embeddingProviders.find(p => p.id === currentEmbeddingProvider)?.models
         || (embeddingProviders.find(p => p.id === 'native')?.models)
         || (embeddingProviders.length > 0 ? embeddingProviders[0].models : []);
+
+    // Garantir que um modelo padrão esteja selecionado ao mudar o provider
+    useEffect(() => {
+        if (isModalOpen && currentAgent) {
+            const currentModels = embeddingProviders.find(p => p.id === currentEmbeddingProvider)?.models || [];
+            if (currentModels.length > 0 && !(currentAgent as any).embeddingModel) {
+                setCurrentAgent(prev => ({ ...prev, embeddingModel: currentModels[0].id } as any));
+            }
+        }
+    }, [currentEmbeddingProvider, embeddingProviders, isModalOpen]);
 
     if (!isModalOpen) return (
         <div className="space-y-8 relative liquid-glass aurora min-h-[calc(100dvh-6rem)] md:min-h-[calc(100vh-6rem)] pb-12">
@@ -391,7 +408,7 @@ export default function AIAgentsPage() {
                                                 {availableModels.map(provider => (
                                                     <optgroup key={provider.provider} label={`🔌 ${provider.providerName}`} className="dark:bg-slate-800 dark:text-slate-300">
                                                         {provider.models.map(model => (
-                                                            <option key={model.id} value={model.id} className="dark:bg-slate-800 dark:text-white">{model.name}</option>
+                                                            <option key={model.id} value={model.id} className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white">{model.name}</option>
                                                         ))}
                                                     </optgroup>
                                                 ))}
@@ -494,10 +511,10 @@ export default function AIAgentsPage() {
                                                 className="w-full mt-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-sm font-semibold outline-none dark:text-white appearance-none focus:ring-4 focus:ring-primary/10"
                                             >
                                                 {embeddingModelsForProvider.length === 0 && (
-                                                    <option value="" className="dark:bg-slate-800 dark:text-white">Nenhum modelo disponível</option>
+                                                    <option value="" className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white">Nenhum modelo disponível</option>
                                                 )}
                                                 {embeddingModelsForProvider.map((m: { id: string; name: string; dimensions: number }) => (
-                                                    <option key={m.id} value={m.id} className="dark:bg-slate-800 dark:text-white">{m.name}</option>
+                                                    <option key={m.id} value={m.id} className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white">{m.name}</option>
                                                 ))}
                                             </select>
                                         </div>

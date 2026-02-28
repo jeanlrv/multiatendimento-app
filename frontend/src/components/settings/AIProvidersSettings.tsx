@@ -94,7 +94,7 @@ function ProviderCard({ meta, config, onSave, onDelete }: ProviderCardProps) {
                 apiKey: noApiKey ? undefined : (apiKey || undefined),
                 baseUrl: (meta as any).hasBaseUrl ? (baseUrl || undefined) : undefined,
                 isEnabled: true,
-                extraConfig: customModel ? { model: customModel } : (config?.extraConfig || {}),
+                extraConfig: { ...config?.extraConfig, model: customModel || undefined },
             });
             setApiKey('');
             setExpanded(false);
@@ -293,7 +293,7 @@ export function AIProvidersSettings() {
 
     useEffect(() => { fetchConfigs(); }, [fetchConfigs]);
 
-    const handleSave = async (provider: string, data: { apiKey?: string; baseUrl?: string; isEnabled: boolean }) => {
+    const handleSave = async (provider: string, data: { apiKey?: string; baseUrl?: string; isEnabled: boolean; extraConfig?: any }) => {
         try {
             const res = await api.put(`/settings/ai-providers/${provider}`, data);
             setConfigs(prev => {

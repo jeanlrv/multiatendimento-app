@@ -91,7 +91,7 @@ export const EMBEDDING_PROVIDERS: EmbeddingProviderConfig[] = [
     },
     {
         id: 'anythingllm',
-        name: 'AnythingLLM (RAG)',
+        name: 'AnythingLLM RAG',
         envKey: 'ANYTHINGLLM_API_KEY',
         baseURL: 'http://localhost:3001/api/v1',
         models: [
