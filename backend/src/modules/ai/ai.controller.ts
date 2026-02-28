@@ -12,6 +12,8 @@ import { Public } from '../../common/decorators/public.decorator';
 import { ApiKeyGuard } from './api-keys/api-key.guard';
 import { ProviderConfigService } from '../settings/provider-config.service';
 import { ConfigService } from '@nestjs/config';
+import { RequirePermission } from '../../common/decorators/permissions.decorator';
+import { Permission } from '../auth/constants/permissions';
 
 @ApiTags('AI')
 @Controller('ai')
@@ -30,30 +32,35 @@ export class AIController {
 
 
     @Post('agents')
+    @RequirePermission(Permission.AI_MANAGE)
     @ApiOperation({ summary: 'Criar um novo agente de IA' })
     create(@Req() req: any, @Body() createAIAgentDto: CreateAIAgentDto) {
         return this.aiService.createAgent(req.user.companyId, createAIAgentDto);
     }
 
     @Get('agents')
+    @RequirePermission(Permission.AI_READ)
     @ApiOperation({ summary: 'Listar todos os agentes de IA' })
     findAll(@Req() req: any) {
         return this.aiService.findAllAgents(req.user.companyId);
     }
 
     @Get('agents/:id')
+    @RequirePermission(Permission.AI_READ)
     @ApiOperation({ summary: 'Obter detalhes de um agente de IA' })
     findOne(@Req() req: any, @Param('id') id: string) {
         return this.aiService.findOneAgent(req.user.companyId, id);
     }
 
     @Patch('agents/:id')
+    @RequirePermission(Permission.AI_MANAGE)
     @ApiOperation({ summary: 'Atualizar um agente de IA' })
     update(@Req() req: any, @Param('id') id: string, @Body() updateAIAgentDto: UpdateAIAgentDto) {
         return this.aiService.updateAgent(req.user.companyId, id, updateAIAgentDto);
     }
 
     @Delete('agents/:id')
+    @RequirePermission(Permission.AI_MANAGE)
     @ApiOperation({ summary: 'Remover um agente de IA' })
     remove(@Req() req: any, @Param('id') id: string) {
         return this.aiService.removeAgent(req.user.companyId, id);
@@ -62,9 +69,10 @@ export class AIController {
     // ========== Chat ==========
 
     @Post('agents/:id/chat')
+    @RequirePermission(Permission.AI_CHAT)
     @ApiOperation({ summary: 'Interagir com o agente de IA' })
     chat(@Req() req: any, @Param('id') id: string, @Body() chatRequest: ChatRequestDto) {
-        return this.aiService.chat(req.user.companyId, id, chatRequest.message, chatRequest.history || []);
+        return this.aiService.chat(req.user.companyId, id, chatRequest.message, chatRequest.history || [], chatRequest.conversationId);
     }
 
     @Public()
@@ -84,6 +92,7 @@ export class AIController {
 
 
     @Sse('agents/:id/stream')
+    @RequirePermission(Permission.AI_CHAT)
     @ApiOperation({ summary: 'Streaming de respostas da IA' })
     streamChat(@Req() req: any, @Param('id') id: string, @Body() chatRequest: ChatRequestDto): Observable<any> {
         return this.aiService.streamChat(req.user.companyId, id, chatRequest.message, chatRequest.history || []);
@@ -92,6 +101,7 @@ export class AIController {
     // ========== Models & Usage ==========
 
     @Get('models')
+    @RequirePermission(Permission.AI_READ)
     @ApiOperation({ summary: 'Listar modelos de IA disponíveis por provider (filtra por configurações da empresa)' })
     async getModels(@Req() req: any) {
         try {
@@ -107,6 +117,7 @@ export class AIController {
     }
 
     @Get('embedding-providers')
+    @RequirePermission(Permission.AI_READ)
     @ApiOperation({ summary: 'Listar providers de embedding disponíveis (filtra por configurações da empresa)' })
     async getEmbeddingProviders(@Req() req: any) {
         try {
@@ -122,12 +133,14 @@ export class AIController {
     }
 
     @Get('usage')
+    @RequirePermission(Permission.AI_READ)
     @ApiOperation({ summary: 'Obter uso de tokens/IA da empresa' })
     getUsage(@Req() req: any) {
         return this.aiService.getUsage(req.user.companyId);
     }
 
     @Get('metrics')
+    @RequirePermission(Permission.AI_READ)
     @ApiOperation({ summary: 'Obter métricas detalhadas de uso da IA' })
     async getMetrics(@Req() req: any) {
         return await this.aiService.getDetailedMetrics(req.user.companyId);
@@ -136,6 +149,7 @@ export class AIController {
     // ========== Multimodal Chat ==========
 
     @Post('agents/:id/chat-multimodal')
+    @RequirePermission(Permission.AI_CHAT)
     @ApiOperation({ summary: 'Interagir com o agente de IA (suporte a imagens)' })
     @ApiBody({
         schema: {

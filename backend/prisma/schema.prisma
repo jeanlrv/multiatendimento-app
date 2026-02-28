@@ -250,6 +250,7 @@ model Company {
   limitTokens        Int                 @default(100000)
   limitTokensPerHour Int                 @default(10000)
   limitTokensPerDay  Int                 @default(100000)
+  dailyCostAlertUsd  Float               @default(0)  // 0 = alertas desativados
   logoUrl            String?
   primaryColor       String              @default("#3B82F6") // Padrão KSZap Blue
   secondaryColor     String              @default("#1E293B") // Padrão Slate 800
@@ -542,6 +543,8 @@ model AIAgent {
   embedPosition       String    @default("bottom-right") // bottom-right | bottom-left
   embedAllowedDomains String[]  @default([])  // vazio = qualquer domínio
   embedRateLimit      Int       @default(20)  // msgs por 10min por sessão
+  allowModelDowngrade Boolean   @default(false) // permite downgrade automático para queries simples
+  limitTokensPerDay   Int       @default(0)     // 0 = usa limite da empresa
 
   apiKeys       APIKey[]
 
@@ -914,13 +917,15 @@ model AIUsage {
 // ============================================
 
 model Conversation {
-  id          String   @id @default(uuid())
-  companyId   String
-  userId      String
-  agentId     String
-  title       String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                  String   @id @default(uuid())
+  companyId           String
+  userId              String
+  agentId             String
+  title               String
+  summary             String?  @db.Text   // resumo progressivo das mensagens antigas
+  summaryMessageCount Int      @default(0) // nº de msgs cobertas pelo sumário
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   company      Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
   user         User                  @relation(fields: [userId], references: [id], onDelete: Cascade)

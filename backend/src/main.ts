@@ -90,11 +90,10 @@ async function bootstrap() {
         // Global prefix
         app.setGlobalPrefix('api');
 
-        // Validation pipe
         app.useGlobalPipes(
             new ValidationPipe({
                 whitelist: true,
-                forbidNonWhitelisted: true,
+                forbidNonWhitelisted: false,
                 transform: true,
             }),
         );

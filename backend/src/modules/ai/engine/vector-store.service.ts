@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { createHash } from 'crypto';
 import { EmbeddingProviderFactory } from './embedding-provider.factory';
 
 @Injectable()
@@ -8,12 +9,24 @@ export class VectorStoreService {
     /** Score mínimo de relevância. Chunks abaixo disso são descartados (evita contexto irrelevante). */
     private readonly MIN_SCORE_THRESHOLD = 0.3;
 
+    // --- Query Embedding Cache ---
+    /** SHA256(provider:model:text) → embedding, 24h TTL */
+    private readonly embeddingCache = new Map<string, { embedding: number[]; expiresAt: number }>();
+    private readonly EMBEDDING_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h
+    private readonly EMBEDDING_CACHE_LIMIT = 2000;
+
+    // --- RAG Results Cache ---
+    /** SHA256(knowledgeBaseId?:companyId:queryText) → results, 5min TTL */
+    private readonly ragCache = new Map<string, { results: any[]; expiresAt: number }>();
+    private readonly RAG_CACHE_TTL_MS = 5 * 60 * 1000; // 5min
+
     constructor(
         private embeddingFactory: EmbeddingProviderFactory,
     ) { }
 
     /**
      * Gera um embedding para um texto usando o provider configurado.
+     * Resultado é cacheado por 24h para evitar chamadas repetidas à API.
      */
     async generateEmbedding(
         text: string,
@@ -22,8 +35,37 @@ export class VectorStoreService {
         apiKeyOverride?: string,
         baseUrlOverride?: string,
     ): Promise<number[]> {
+        const cacheKey = createHash('sha256').update(`${provider}:${model ?? ''}:${text}`).digest('hex');
+        const cached = this.embeddingCache.get(cacheKey);
+        if (cached && cached.expiresAt > Date.now()) {
+            return cached.embedding;
+        }
+
         const embeddings = this.embeddingFactory.createEmbeddings(provider, model, apiKeyOverride, baseUrlOverride);
-        return embeddings.embedQuery(text);
+        const embedding = await embeddings.embedQuery(text);
+
+        // Evict LRU entry se cache cheio
+        if (this.embeddingCache.size >= this.EMBEDDING_CACHE_LIMIT) {
+            const firstKey = this.embeddingCache.keys().next().value;
+            if (firstKey) this.embeddingCache.delete(firstKey);
+        }
+        this.embeddingCache.set(cacheKey, { embedding, expiresAt: Date.now() + this.EMBEDDING_CACHE_TTL_MS });
+        return embedding;
+    }
+
+    /**
+     * Invalida o cache de resultados RAG para uma base de conhecimento específica.
+     * Chamado quando documentos são adicionados/removidos da base.
+     */
+    invalidateRagCache(knowledgeBaseId?: string, companyId?: string): void {
+        if (!knowledgeBaseId && !companyId) {
+            this.ragCache.clear();
+            return;
+        }
+        const prefix = knowledgeBaseId ?? companyId!;
+        for (const key of this.ragCache.keys()) {
+            if (key.includes(prefix)) this.ragCache.delete(key);
+        }
     }
 
     /**
@@ -56,8 +98,19 @@ export class VectorStoreService {
         scoreThreshold?: number,
     ): Promise<{ content: string; score: number; documentId: string; documentTitle?: string }[]> {
         const threshold = scoreThreshold ?? this.MIN_SCORE_THRESHOLD;
+
+        // RAG cache key — não inclui apiKey por segurança
+        const ragCacheKey = createHash('sha256')
+            .update(`${knowledgeBaseId ?? companyId}:${queryText}:${limit}:${threshold}`)
+            .digest('hex');
+        const cachedRag = this.ragCache.get(ragCacheKey);
+        if (cachedRag && cachedRag.expiresAt > Date.now()) {
+            this.logger.debug('[VectorStore] RAG cache hit');
+            return cachedRag.results;
+        }
+
         try {
-            // 1. Gera embedding da query
+            // 1. Gera embedding da query (com cache de 24h)
             const queryEmbedding = await this.generateEmbedding(queryText, embeddingProvider, embeddingModel, apiKeyOverride, baseUrlOverride);
 
             // Sanitiza o idioma para evitar SQL injection (só letras minúsculas)
@@ -165,7 +218,9 @@ export class VectorStoreService {
                 `[VectorStore] ${candidates.length} candidatos → ${relevant.length} relevantes (>=${threshold}) → ${deduplicated.length} após dedup → Top ${Math.min(deduplicated.length, limit)}`
             );
 
-            return deduplicated.slice(0, limit);
+            const results = deduplicated.slice(0, limit);
+            this.ragCache.set(ragCacheKey, { results, expiresAt: Date.now() + this.RAG_CACHE_TTL_MS });
+            return results;
         } catch (error) {
             this.logger.error(`Erro na busca híbrida por similaridade: ${error.message}`);
             return [];

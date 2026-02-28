@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Embeddings } from '@langchain/core/embeddings';
 import { OpenAIEmbeddings } from '@langchain/openai';
@@ -104,10 +104,24 @@ export const EMBEDDING_PROVIDERS: EmbeddingProviderConfig[] = [
 const nativePipelineCache = new Map<string, Promise<any>>();
 
 @Injectable()
-export class EmbeddingProviderFactory {
+export class EmbeddingProviderFactory implements OnModuleInit {
     private readonly logger = new Logger(EmbeddingProviderFactory.name);
 
     constructor(private configService: ConfigService) { }
+
+    /** Aquece o modelo nativo na inicialização para eliminar cold-start de 5-15s na primeira request */
+    onModuleInit() {
+        const defaultModel = 'Xenova/all-MiniLM-L6-v2';
+        this.logger.log(`[Warm-up] Pré-carregando pipeline nativo: ${defaultModel}`);
+        // Fire-and-forget — falha silenciosa (ambiente sem suporte a transformers não bloqueia o boot)
+        nativePipelineCache.get(defaultModel)?.catch(() => { }) ??
+            nativePipelineCache.set(defaultModel,
+                import('@xenova/transformers')
+                    .then(({ pipeline }) => pipeline('feature-extraction', defaultModel))
+                    .then(() => this.logger.log(`[Warm-up] Pipeline nativo pronto: ${defaultModel}`))
+                    .catch(e => this.logger.warn(`[Warm-up] Pipeline nativo indisponível: ${e.message}`))
+            );
+    }
 
     /**
      * Cria instância do provedor de embedding correto.

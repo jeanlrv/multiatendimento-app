@@ -104,7 +104,10 @@ export default function AIAgentsPage() {
         try {
             setSubmitting(true);
             if (currentAgent?.id) {
-                await AIAgentsService.update(currentAgent.id, currentAgent);
+                // Remover campos não pertencentes ao DTO (retornados pelo Prisma mas não aceitos na atualização)
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                const { id: _id, companyId: _co, createdAt: _cr, updatedAt: _up, embedId: _ei, allowModelDowngrade: _amd, limitTokensPerDay: _ltd, ...payload } = currentAgent as any;
+                await AIAgentsService.update(currentAgent.id, payload);
                 toast.success('Agente atualizado com sucesso');
             } else {
                 await AIAgentsService.create(currentAgent!);

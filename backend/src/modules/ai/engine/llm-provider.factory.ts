@@ -218,16 +218,83 @@ export const LLM_PROVIDERS: LLMProviderConfig[] = [
     },
 ];
 
+interface CircuitState {
+    errors: number;
+    windowStart: number;
+    isOpen: boolean;
+    openedAt?: number;
+}
+
 @Injectable()
 export class LLMProviderFactory {
     private readonly logger = new Logger(LLMProviderFactory.name);
 
+    // --- Instance cache ---
+    private readonly instanceCache = new Map<string, BaseChatModel>();
+    private readonly INSTANCE_CACHE_LIMIT = 50;
+
+    // --- Circuit breaker (per provider) ---
+    private readonly circuits = new Map<string, CircuitState>();
+    /** Número de erros em CIRCUIT_WINDOW_MS para abrir o circuito. */
+    private readonly CIRCUIT_ERROR_THRESHOLD = 5;
+    /** Janela de contagem de erros (1 minuto). */
+    private readonly CIRCUIT_WINDOW_MS = 60_000;
+    /** Tempo de cooldown após circuito aberto (30s). */
+    private readonly CIRCUIT_COOLDOWN_MS = 30_000;
+
     constructor(private configService: ConfigService) { }
 
     /**
+     * Registra um erro para o circuit breaker do provider.
+     * Chamado externamente por LLMService quando uma chamada falha.
+     */
+    recordError(providerId: string): void {
+        const now = Date.now();
+        let state = this.circuits.get(providerId) ?? { errors: 0, windowStart: now, isOpen: false };
+
+        // Reset janela se expirou
+        if (now - state.windowStart > this.CIRCUIT_WINDOW_MS) {
+            state = { errors: 0, windowStart: now, isOpen: false };
+        }
+
+        state.errors++;
+
+        if (state.errors >= this.CIRCUIT_ERROR_THRESHOLD) {
+            state.isOpen = true;
+            state.openedAt = now;
+            this.logger.warn(`[CircuitBreaker] Circuito ABERTO para provider: ${providerId} (${state.errors} erros em ${this.CIRCUIT_WINDOW_MS / 1000}s)`);
+        }
+
+        this.circuits.set(providerId, state);
+    }
+
+    /**
+     * Verifica se o circuit breaker está aberto para um provider.
+     * Se o cooldown expirou, fecha automaticamente (half-open).
+     */
+    private checkCircuit(providerId: string): void {
+        const state = this.circuits.get(providerId);
+        if (!state?.isOpen) return;
+
+        const elapsed = Date.now() - (state.openedAt ?? 0);
+        if (elapsed >= this.CIRCUIT_COOLDOWN_MS) {
+            // Half-open: deixa uma tentativa passar
+            state.isOpen = false;
+            state.errors = 0;
+            state.windowStart = Date.now();
+            this.circuits.set(providerId, state);
+            this.logger.log(`[CircuitBreaker] Circuito FECHADO (cooldown expirado) para provider: ${providerId}`);
+            return;
+        }
+
+        throw new Error(
+            `Provider ${providerId} está temporariamente indisponível (circuit breaker aberto). Aguarde ${Math.ceil((this.CIRCUIT_COOLDOWN_MS - elapsed) / 1000)}s.`
+        );
+    }
+
+    /**
      * Cria uma instância do modelo LLM correto baseado no modelId.
-     * O modelId pode usar prefixos como "groq:", "openrouter:", "ollama:", "azure:", etc.
-     * para identificar o provider, ou nomes diretos como "gpt-4o", "claude-*", "gemini-*".
+     * Instâncias são cacheadas por modelId+temperature+apiKey para evitar recriar a cada chamada.
      * @param apiKeyOverride API key da empresa (vinda do banco), sobrepõe a env var global
      * @param baseUrlOverride Base URL da empresa (para Ollama/LM Studio/Azure endpoint)
      */
@@ -238,25 +305,52 @@ export class LLMProviderFactory {
         baseUrlOverride?: string,
     ): BaseChatModel {
         const provider = this.detectProvider(modelId);
-        const actualModelName = this.stripPrefix(modelId);
 
+        // Verificar circuit breaker antes de criar/retornar instância
+        this.checkCircuit(provider.id);
+
+        // Cache key — usa 'env' quando não há override para distinguir contextos diferentes
+        const cacheKey = `${modelId}:${temperature}:${apiKeyOverride ?? 'env'}:${baseUrlOverride ?? ''}`;
+        const cached = this.instanceCache.get(cacheKey);
+        if (cached) return cached;
+
+        const actualModelName = this.stripPrefix(modelId);
         this.logger.log(`Criando modelo: ${modelId} (provider: ${provider.id}, model: ${actualModelName})`);
 
+        let instance: BaseChatModel;
         switch (provider.id) {
             case 'anthropic':
-                return this.createAnthropicModel(actualModelName, temperature, apiKeyOverride);
+                instance = this.createAnthropicModel(actualModelName, temperature, apiKeyOverride);
+                break;
             case 'gemini':
-                return this.createGeminiModel(actualModelName, temperature, apiKeyOverride);
+                instance = this.createGeminiModel(actualModelName, temperature, apiKeyOverride);
+                break;
             case 'azure':
-                return this.createAzureModel(actualModelName, temperature, apiKeyOverride, baseUrlOverride);
+                instance = this.createAzureModel(actualModelName, temperature, apiKeyOverride, baseUrlOverride);
+                break;
             case 'cohere':
-                return this.createCohereModel(actualModelName, temperature, apiKeyOverride);
+                instance = this.createCohereModel(actualModelName, temperature, apiKeyOverride);
+                break;
             case 'huggingface':
-                return this.createHuggingFaceModel(actualModelName, temperature, apiKeyOverride);
+                instance = this.createHuggingFaceModel(actualModelName, temperature, apiKeyOverride);
+                break;
             default:
                 // OpenAI e todos os OpenAI-compat
-                return this.createOpenAICompatModel(provider, actualModelName, temperature, apiKeyOverride, baseUrlOverride);
+                instance = this.createOpenAICompatModel(provider, actualModelName, temperature, apiKeyOverride, baseUrlOverride);
         }
+
+        // Evict LRU entry se cache cheio
+        if (this.instanceCache.size >= this.INSTANCE_CACHE_LIMIT) {
+            const firstKey = this.instanceCache.keys().next().value;
+            if (firstKey) this.instanceCache.delete(firstKey);
+        }
+        this.instanceCache.set(cacheKey, instance);
+        return instance;
+    }
+
+    /** Retorna o providerId para um modelId (para uso externo pelo LLMService). */
+    getProviderId(modelId: string): string {
+        return this.detectProvider(modelId).id;
     }
 
     /**

@@ -1,5 +1,6 @@
-import { Injectable, Logger, ForbiddenException } from '@nestjs/common';
+import { Injectable, Logger, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateAIAgentDto } from './dto/create-ai-agent.dto';
 import { UpdateAIAgentDto } from './dto/update-ai-agent.dto';
@@ -14,11 +15,27 @@ import * as FormData from 'form-data';
 export class AIService {
     private readonly logger = new Logger(AIService.name);
 
+    /**
+     * Model routing: quando o agente permite downgrade e a query é simples,
+     * substitui modelos pesados por equivalentes econômicos.
+     */
+    private readonly MODEL_DOWNGRADE: Record<string, string> = {
+        'gpt-4o': 'gpt-4o-mini',
+        'gpt-4.1': 'gpt-4.1-mini',
+        'claude-sonnet-4-20250514': 'claude-3-5-haiku-20241022',
+        'claude-3-5-sonnet-20241022': 'claude-3-5-haiku-20241022',
+        'gemini-1.5-pro': 'gemini-2.0-flash',
+        'mistral-large-latest': 'mistral-small-latest',
+        'deepseek-reasoner': 'deepseek-chat',
+        'cohere:command-r-plus': 'cohere:command-r',
+    };
+
     constructor(
         private prisma: PrismaService,
         private llmService: LLMService,
         private vectorStoreService: VectorStoreService,
         private providerConfigService: ProviderConfigService,
+        private eventEmitter: EventEmitter2,
     ) { }
 
     // AIAgent CRUD
@@ -46,11 +63,12 @@ export class AIService {
     async updateAgent(companyId: string, id: string, data: UpdateAIAgentDto) {
         // Verifica que o agente pertence à empresa antes de atualizar
         const agent = await this.findOneAgent(companyId, id);
-        if (!agent) throw new Error('Agente não encontrado');
+        if (!agent) throw new NotFoundException('Agente não encontrado');
 
+        // Spread para plain object — evita problemas de class-transformer passando instância de classe para o Prisma
         return (this.prisma as any).aIAgent.update({
             where: { id },
-            data
+            data: { ...data }
         });
     }
 
@@ -92,12 +110,115 @@ export class AIService {
     };
     private readonly DEFAULT_MAX_CONTEXT_CHARS = 30000; // ~8k tokens, seguro para modelos desconhecidos
 
-    /** Invalidação de cache semântico quando a base de conhecimento é atualizada */
+    /** Invalidação de cache semântico + RAG quando a base de conhecimento é atualizada */
     @OnEvent('knowledge.updated')
     handleKnowledgeUpdated(payload: { knowledgeBaseId: string; companyId: string }) {
         const before = this.semanticCache.size;
         this.semanticCache.clear();
-        this.logger.log(`[Cache] Cache semântico limpo após atualização da KB ${payload.knowledgeBaseId} (${before} entradas removidas)`);
+        this.vectorStoreService.invalidateRagCache(payload.knowledgeBaseId, payload.companyId);
+        this.logger.log(`[Cache] Cache semântico + RAG limpos após atualização da KB ${payload.knowledgeBaseId} (${before} entradas removidas)`);
+    }
+
+    /**
+     * Verifica se o custo diário da empresa ultrapassou o limite configurado.
+     * Emite uma notificação de alerta se o threshold for excedido (fire-and-forget).
+     */
+    private async checkCostAlert(companyId: string, estimatedCost: number): Promise<void> {
+        try {
+            const company = await (this.prisma as any).company.findUnique({
+                where: { id: companyId },
+                select: { dailyCostAlertUsd: true },
+            });
+            if (!company?.dailyCostAlertUsd || company.dailyCostAlertUsd <= 0) return;
+
+            const startOfDay = new Date();
+            startOfDay.setHours(0, 0, 0, 0);
+            const dailyCost = await (this.prisma as any).aIUsage.aggregate({
+                where: { companyId, createdAt: { gte: startOfDay } },
+                _sum: { cost: true },
+            });
+            const totalDailyCost = (dailyCost._sum.cost ?? 0) + estimatedCost;
+            if (totalDailyCost >= company.dailyCostAlertUsd) {
+                // Cria notificação de alerta no banco (deduplicada: apenas uma por dia)
+                const existingAlert = await (this.prisma as any).notification.findFirst({
+                    where: {
+                        companyId,
+                        event: 'ai.cost_alert',
+                        createdAt: { gte: startOfDay },
+                    },
+                });
+                if (!existingAlert) {
+                    await (this.prisma as any).notification.create({
+                        data: {
+                            companyId,
+                            type: 'WARNING',
+                            event: 'ai.cost_alert',
+                            title: 'Alerta de custo de IA',
+                            body: `O custo diário de IA atingiu $${totalDailyCost.toFixed(4)} (limite: $${company.dailyCostAlertUsd.toFixed(4)}).`,
+                            data: { totalDailyCost, threshold: company.dailyCostAlertUsd },
+                        },
+                    });
+                    this.eventEmitter.emit('ai.cost_alert', { companyId, totalDailyCost, threshold: company.dailyCostAlertUsd });
+                    this.logger.warn(`[CostAlert] Empresa ${companyId}: custo diário $${totalDailyCost.toFixed(4)} ≥ limite $${company.dailyCostAlertUsd}`);
+                }
+            }
+        } catch (e) {
+            this.logger.warn(`[CostAlert] Falha ao verificar alerta de custo: ${e.message}`);
+        }
+    }
+
+    /**
+     * Sumarização progressiva: quando uma conversa atinge 30+ mensagens,
+     * gera um resumo comprimido de forma assíncrona (fire-and-forget).
+     * O resumo é armazenado em Conversation.summary e injetado no system prompt nas próximas chamadas.
+     */
+    private triggerProgressiveSummarization(
+        conversationId: string,
+        companyId: string,
+        agentId: string,
+        history: any[],
+        existingSummary?: string,
+    ): void {
+        // Executa de forma assíncrona sem bloquear a resposta ao usuário
+        setImmediate(async () => {
+            try {
+                const agent = await this.findOneAgent(companyId, agentId);
+                if (!agent?.isActive) return;
+
+                const modelId = agent.modelId || 'gpt-4o-mini';
+                const companyConfigs = await this.providerConfigService.getDecryptedForCompany(companyId);
+                const llmConfig = companyConfigs.get(this.detectProviderFromModelId(modelId));
+
+                // Compõe texto a resumir: resumo anterior (se houver) + histórico recente
+                const contextText = existingSummary
+                    ? `Resumo anterior: ${existingSummary}\n\nMensagens recentes:\n`
+                    : 'Mensagens da conversa:\n';
+                const historyText = history
+                    .slice(-20) // últimas 20 mensagens
+                    .map(m => `${m.role === 'user' ? 'Usuário' : 'Assistente'}: ${m.content}`)
+                    .join('\n');
+
+                const summary = await this.llmService.generateResponse(
+                    modelId,
+                    'Você é um assistente que cria resumos concisos de conversas. Responda apenas com o resumo, sem prefixos ou comentários.',
+                    `${contextText}${historyText}\n\nResuma os pontos principais desta conversa em no máximo 5 frases.`,
+                    [], 0.3, undefined,
+                    llmConfig?.apiKey || undefined,
+                    llmConfig?.baseUrl || undefined,
+                );
+
+                await (this.prisma as any).conversation.updateMany({
+                    where: { id: conversationId, companyId },
+                    data: {
+                        summary,
+                        summaryMessageCount: history.length,
+                    },
+                });
+                this.logger.log(`[Summarization] Conversa ${conversationId} resumida (${history.length} msgs → ${summary.length} chars)`);
+            } catch (e) {
+                this.logger.warn(`[Summarization] Falha ao sumarizar conversa ${conversationId}: ${e.message}`);
+            }
+        });
     }
 
     /** FASE 3/7 - Compressor de Contexto histórico (com preservação de contexto inicial) */
@@ -210,8 +331,9 @@ export class AIService {
 
     /**
      * Motor de Chat Nativo: Usa LangChain com suporte multi-provider.
+     * @param conversationId ID da conversa no playground (opcional) — habilita sumarização progressiva.
      */
-    async chat(companyId: string, agentId: string, message: string, history: any[] = []) {
+    async chat(companyId: string, agentId: string, message: string, history: any[] = [], conversationId?: string) {
         if (!message || message.trim().length === 0) {
             throw new Error('Mensagem não pode ser vazia');
         }
@@ -246,13 +368,30 @@ export class AIService {
 
             // Fase 4: Token Budget Manager
             const budget = this.allocateTokenBudget(message);
-            const finalModelId = agent.modelId || 'gpt-4o-mini';
+            let finalModelId = agent.modelId || 'gpt-4o-mini';
+
+            // Model routing: downgrade para modelo econômico em queries simples
+            if (agent.allowModelDowngrade && budget.chunkLimit === 2 && this.MODEL_DOWNGRADE[finalModelId]) {
+                const downgraded = this.MODEL_DOWNGRADE[finalModelId];
+                this.logger.debug(`[ModelRouting] Downgrade: ${finalModelId} → ${downgraded} (query simples)`);
+                finalModelId = downgraded;
+            }
 
             this.logger.log(`Chat "${agent.name}" | modelo: ${finalModelId} | chunks: ${budget.chunkLimit}`);
 
             const companyConfigs = await this.providerConfigService.getDecryptedForCompany(companyId);
             const llmConfig = companyConfigs.get(this.detectProviderFromModelId(finalModelId));
             const embeddingConfig = companyConfigs.get(agent.embeddingProvider || 'openai');
+
+            // Sumarização progressiva: carrega resumo da conversa se disponível
+            let conversationSummary: string | undefined;
+            if (conversationId) {
+                const conv = await (this.prisma as any).conversation.findFirst({
+                    where: { id: conversationId, companyId },
+                    select: { summary: true, summaryMessageCount: true },
+                });
+                conversationSummary = conv?.summary ?? undefined;
+            }
 
             // RAG: busca com idioma correto da base de conhecimento
             let context = '';
@@ -274,9 +413,14 @@ export class AIService {
             // Overflow guard: trunca RAG se context window exceder limite do modelo
             context = this.guardContextOverflow(agent.prompt || '', context, history, message, finalModelId);
 
+            // Injeta resumo da conversa no system prompt (se houver)
+            const systemPrompt = conversationSummary
+                ? `${agent.prompt || 'Você é um assistente virtual prestativo.'}\n\n[Resumo da conversa até agora]: ${conversationSummary}`
+                : (agent.prompt || 'Você é um assistente virtual prestativo.');
+
             const response = await this.llmService.generateResponse(
                 finalModelId,
-                agent.prompt || 'Você é um assistente virtual prestativo.',
+                systemPrompt,
                 message,
                 history.map(h => ({
                     role: (h.role === 'user' || h.role === 'client' ? 'user' : 'assistant') as 'user' | 'assistant',
@@ -287,6 +431,11 @@ export class AIService {
                 llmConfig?.apiKey || undefined,
                 llmConfig?.baseUrl || undefined,
             );
+
+            // Sumarização progressiva: dispara assincronamente quando a conversa tem 30+ mensagens
+            if (conversationId && history.length >= 30) {
+                this.triggerProgressiveSummarization(conversationId, companyId, agentId, history, conversationSummary);
+            }
 
             // Grava RAG Cache
             if (promptEmbedding.length > 0) {
@@ -445,6 +594,9 @@ export class AIService {
                 cost: estimatedCost,
             }
         });
+
+        // Alerta de custo diário (fire-and-forget)
+        this.checkCostAlert(companyId, estimatedCost).catch(() => { });
     }
 
     async transcribeAudio(mediaUrl: string, companyId?: string) {
@@ -681,7 +833,12 @@ export class AIService {
                 } catch { /* falha silenciosa: avança sem cache */ }
 
                 const budget = this.allocateTokenBudget(message);
-                const finalModelId = agent.modelId || 'gpt-4o-mini';
+                let finalModelId = agent.modelId || 'gpt-4o-mini';
+
+                // Model routing: downgrade para modelo econômico em queries simples
+                if (agent.allowModelDowngrade && budget.chunkLimit === 2 && this.MODEL_DOWNGRADE[finalModelId]) {
+                    finalModelId = this.MODEL_DOWNGRADE[finalModelId];
+                }
 
                 const companyConfigs = await this.providerConfigService.getDecryptedForCompany(companyId);
                 const llmConfig = companyConfigs.get(this.detectProviderFromModelId(finalModelId));

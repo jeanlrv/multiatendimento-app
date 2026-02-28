@@ -8,10 +8,48 @@ import { ChatOpenAI } from '@langchain/openai';
 export class LLMService {
     private readonly logger = new Logger(LLMService.name);
 
+    private readonly TIMEOUT_MS = 30_000;
+    private readonly MAX_RETRIES = 3;
+    /** Status codes / error messages que justificam retry. */
+    private readonly RETRYABLE = ['429', '503', 'rate_limit', 'timeout', 'overloaded', 'ECONNRESET', 'ETIMEDOUT'];
+
     constructor(
         private configService: ConfigService,
         private providerFactory: LLMProviderFactory,
     ) { }
+
+    /**
+     * Executa fn com timeout de 30s + retry exponencial (até 3x) para erros retryable.
+     * Registra erros no circuit breaker do provider ao falhar definitivamente.
+     */
+    private async withRetry<T>(providerId: string, fn: () => Promise<T>): Promise<T> {
+        let lastError: Error = new Error('Unknown error');
+        for (let attempt = 1; attempt <= this.MAX_RETRIES; attempt++) {
+            try {
+                const result = await Promise.race<T>([
+                    fn(),
+                    new Promise<never>((_, reject) =>
+                        setTimeout(() => reject(new Error('LLM request timeout (30s)')), this.TIMEOUT_MS)
+                    ),
+                ]);
+                return result;
+            } catch (err: any) {
+                lastError = err;
+                const msg = (err.message ?? '').toLowerCase();
+                const isRetryable = this.RETRYABLE.some(t => msg.includes(t.toLowerCase()));
+
+                if (!isRetryable || attempt === this.MAX_RETRIES) {
+                    this.providerFactory.recordError(providerId);
+                    throw err;
+                }
+
+                const delayMs = Math.pow(2, attempt - 1) * 1000; // 1s, 2s, 4s
+                this.logger.warn(`[Retry ${attempt}/${this.MAX_RETRIES}] ${providerId}: ${err.message} — aguardando ${delayMs}ms`);
+                await new Promise(resolve => setTimeout(resolve, delayMs));
+            }
+        }
+        throw lastError;
+    }
 
     /**
      * Gera uma resposta da IA baseada no agente e no histórico fornecido.
@@ -33,6 +71,7 @@ export class LLMService {
         apiKeyOverride?: string,
         baseUrlOverride?: string,
     ): Promise<string> {
+        const providerId = this.providerFactory.getProviderId(modelId);
         try {
             const chat = this.providerFactory.createModel(modelId, temperature, apiKeyOverride, baseUrlOverride);
 
@@ -60,7 +99,7 @@ export class LLMService {
             // 4. Mensagem atual do usuário
             messages.push(new HumanMessage(userMessage));
 
-            const response = await chat.invoke(messages);
+            const response = await this.withRetry(providerId, () => chat.invoke(messages));
 
             return response.content.toString();
         } catch (error) {
@@ -97,8 +136,10 @@ export class LLMService {
         }
         messages.push(new HumanMessage(userMessage));
 
+        const providerId = this.providerFactory.getProviderId(modelId);
         try {
-            const stream = await chat.stream(messages);
+            // Streaming não suporta retry mid-stream, mas aplica timeout no connect
+            const stream = await this.withRetry(providerId, () => chat.stream(messages));
             for await (const chunk of stream) {
                 const token = chunk.content?.toString() ?? '';
                 if (token) yield token;
@@ -128,6 +169,7 @@ export class LLMService {
         apiKeyOverride?: string,
         baseUrlOverride?: string,
     ): Promise<string> {
+        const providerId = this.providerFactory.getProviderId(modelId);
         try {
             // Verifica se o modelo suporta multimodal
             if (!isMultimodalModel(modelId)) {
@@ -170,7 +212,7 @@ export class LLMService {
             // Adiciona mensagem multimodal
             messages.push(new HumanMessage(content));
 
-            const response = await chat.invoke(messages);
+            const response = await this.withRetry(providerId, () => chat.invoke(messages));
 
             return response.content.toString();
         } catch (error) {

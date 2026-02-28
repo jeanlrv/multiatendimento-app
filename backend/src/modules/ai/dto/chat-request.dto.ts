@@ -13,4 +13,9 @@ export class ChatRequestDto {
     @IsOptional()
     @ArrayMaxSize(20) // Limite de segurança para o histórico (últimas 20 mensagens)
     history?: any[];
+
+    @ApiProperty({ description: 'ID da conversa no playground (habilita sumarização progressiva)', required: false })
+    @IsString()
+    @IsOptional()
+    conversationId?: string;
 }
