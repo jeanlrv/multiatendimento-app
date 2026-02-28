@@ -1,9 +1,7 @@
-node_modules
-.next
-next-build
-dist
 .git
 .gitignore
 Dockerfile
 docker-compose.yml
 *.log
+.env
+.env.local
