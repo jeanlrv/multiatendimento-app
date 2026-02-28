@@ -459,6 +459,7 @@ model KnowledgeBase {
   name              String
   description       String?
   companyId         String
+  language          String   @default("portuguese")
   embeddingProvider String   @default("openai")
   embeddingModel    String   @default("text-embedding-3-small")
   createdAt         DateTime @default(now())

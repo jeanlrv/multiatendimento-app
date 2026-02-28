@@ -131,7 +131,7 @@ export default function AIAgentsPage() {
     };
 
     const getModelDisplayName = (modelId?: string) => {
-        if (!modelId) return 'GPT-4o Mini';
+        if (!modelId) return availableModels[0]?.models[0]?.name || 'Não configurado';
         for (const provider of availableModels) {
             const model = provider.models.find(m => m.id === modelId);
             if (model) return model.name;
@@ -140,11 +140,11 @@ export default function AIAgentsPage() {
     };
 
     const getProviderName = (modelId?: string) => {
-        if (!modelId) return 'OpenAI';
+        if (!modelId) return availableModels[0]?.providerName || '—';
         for (const provider of availableModels) {
             if (provider.models.some(m => m.id === modelId)) return provider.providerName;
         }
-        return 'Desconhecido';
+        return modelId.split(':')[0] || 'Desconhecido';
     };
 
     const currentEmbeddingProvider = (currentAgent as any)?.embeddingProvider || 'native';
@@ -168,7 +168,7 @@ export default function AIAgentsPage() {
 
                 <div className="flex items-center gap-4">
                     <button
-                        onClick={() => openModal({ name: '', modelId: 'gpt-4o-mini', temperature: 0.7, isActive: true, embeddingProvider: 'native', embeddingModel: 'all-MiniLM-L6-v2' })}
+                        onClick={() => openModal({ name: '', modelId: 'gpt-4o-mini', temperature: 0.7, isActive: true, embeddingProvider: 'native', embeddingModel: 'Xenova/all-MiniLM-L6-v2' })}
                         className="flex items-center gap-3 px-8 py-4 bg-primary text-white rounded-[1.5rem] shadow-2xl shadow-primary/30 transition-all active:scale-95 font-bold text-xs uppercase tracking-widest group"
                     >
                         <Plus className="h-5 w-5 group-hover:rotate-90 transition-transform" />
@@ -193,7 +193,7 @@ export default function AIAgentsPage() {
                         Nenhum agente cognitivo vinculado. Crie um agente e forneça conhecimento para ele operar.
                     </p>
                     <button
-                        onClick={() => openModal({ name: '', modelId: 'gpt-4o-mini', temperature: 0.7, isActive: true, embeddingProvider: 'native', embeddingModel: 'all-MiniLM-L6-v2' })}
+                        onClick={() => openModal({ name: '', modelId: 'gpt-4o-mini', temperature: 0.7, isActive: true, embeddingProvider: 'native', embeddingModel: 'Xenova/all-MiniLM-L6-v2' })}
                         className="px-14 py-5 bg-primary text-white rounded-[2rem] font-bold text-sm uppercase tracking-widest shadow-2xl shadow-primary/40 hover:scale-[1.02] active:scale-95 transition-all"
                     >
                         Criar Conexão Neural
@@ -369,29 +369,38 @@ export default function AIAgentsPage() {
                             <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-8">
                                 <div className="space-y-3">
                                     <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1 block">Modelo de Linguagem (LLM)</label>
-                                    <select
-                                        value={currentAgent?.modelId || 'gpt-4o-mini'}
-                                        onChange={e => setCurrentAgent({ ...currentAgent, modelId: e.target.value })}
-                                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-white/10 rounded-2xl px-6 py-4 text-sm font-semibold outline-none transition-all dark:text-white appearance-none focus:ring-4 focus:ring-primary/10"
-                                    >
-                                        {availableModels.length > 0 ? (
-                                            availableModels.map(provider => (
-                                                <optgroup key={provider.provider} label={`🔌 ${provider.providerName}`} className="dark:bg-slate-800 dark:text-slate-300">
-                                                    {provider.models.map(model => (
-                                                        <option key={model.id} value={model.id} className="dark:bg-slate-800 dark:text-white">{model.name}</option>
-                                                    ))}
-                                                </optgroup>
-                                            ))
-                                        ) : (
-                                            <optgroup label="🔌 OpenAI" className="dark:bg-slate-800 dark:text-slate-300">
-                                                <option value="gpt-4o-mini" className="dark:bg-slate-800 dark:text-white">GPT-4o Mini (Rápido & Econômico)</option>
-                                                <option value="gpt-4o" className="dark:bg-slate-800 dark:text-white">GPT-4o (Poderoso & Preciso)</option>
-                                            </optgroup>
-                                        )}
-                                    </select>
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-2 mt-1">
-                                        Provider: {getProviderName(currentAgent?.modelId)}
-                                    </p>
+                                    {availableModels.length === 0 ? (
+                                        <div className="flex items-start gap-3 p-4 rounded-2xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/50">
+                                            <span className="text-xl flex-shrink-0">⚠️</span>
+                                            <div>
+                                                <p className="text-xs font-black text-amber-800 dark:text-amber-300 uppercase tracking-wider">Nenhum provider de IA configurado</p>
+                                                <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-1">
+                                                    Configure pelo menos um provider em{' '}
+                                                    <a href="/dashboard/settings" className="underline font-bold">Configurações → IA &amp; Modelos</a>
+                                                    {' '}para selecionar um modelo.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <select
+                                                value={currentAgent?.modelId || availableModels[0]?.models[0]?.id || ''}
+                                                onChange={e => setCurrentAgent({ ...currentAgent, modelId: e.target.value })}
+                                                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-white/10 rounded-2xl px-6 py-4 text-sm font-semibold outline-none transition-all dark:text-white appearance-none focus:ring-4 focus:ring-primary/10"
+                                            >
+                                                {availableModels.map(provider => (
+                                                    <optgroup key={provider.provider} label={`🔌 ${provider.providerName}`} className="dark:bg-slate-800 dark:text-slate-300">
+                                                        {provider.models.map(model => (
+                                                            <option key={model.id} value={model.id} className="dark:bg-slate-800 dark:text-white">{model.name}</option>
+                                                        ))}
+                                                    </optgroup>
+                                                ))}
+                                            </select>
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-2 mt-1">
+                                                Provider: {getProviderName(currentAgent?.modelId)}
+                                            </p>
+                                        </>
+                                    )}
                                 </div>
 
                                 <div className="space-y-3">

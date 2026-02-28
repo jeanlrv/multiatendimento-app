@@ -100,6 +100,9 @@ export const EMBEDDING_PROVIDERS: EmbeddingProviderConfig[] = [
     },
 ];
 
+// Cache singleton de pipelines nativos para evitar recarregamento a cada chamada
+const nativePipelineCache = new Map<string, Promise<any>>();
+
 @Injectable()
 export class EmbeddingProviderFactory {
     private readonly logger = new Logger(EmbeddingProviderFactory.name);
@@ -143,8 +146,11 @@ export class EmbeddingProviderFactory {
                 return this.createVoyageEmbeddings(model, apiKeyOverride);
             case 'native':
                 return this.createNativeEmbeddings(model);
+            case 'anythingllm':
+                return this.createAnythingLLMEmbeddings(model, apiKeyOverride, baseUrlOverride);
             default:
-                return this.createOpenAIEmbeddings('text-embedding-3-small', apiKeyOverride);
+                this.logger.warn(`Provider de embedding '${providerId}' sem implementação específica. Tentando como OpenAI-compat.`);
+                return this.createOpenAIEmbeddings(model, apiKeyOverride);
         }
     }
 
@@ -202,29 +208,44 @@ export class EmbeddingProviderFactory {
         });
     }
 
+    private createAnythingLLMEmbeddings(model: string, apiKeyOverride?: string, baseUrlOverride?: string): Embeddings {
+        const apiKey = apiKeyOverride || this.configService.get<string>('ANYTHINGLLM_API_KEY');
+        const baseURL = (baseUrlOverride || this.configService.get<string>('ANYTHINGLLM_BASE_URL') || 'http://localhost:3001/api/v1')
+            .replace(/\/api\/v1\/?$/, '') + '/api/v1';
+        if (!apiKey) throw new Error('ANYTHINGLLM_API_KEY não configurada. Configure em Configurações > IA & Modelos.');
+        // AnythingLLM expõe endpoint OpenAI-compat para embeddings
+        return new OpenAIEmbeddings({
+            openAIApiKey: apiKey,
+            modelName: model,
+            configuration: { baseURL: `${baseURL}/openai` },
+        });
+    }
+
     private createNativeEmbeddings(model: string): Embeddings {
-        // Criamos um wrapper inline emulando a interface Embeddings (LangChain)
+        // Retorna um wrapper LangChain que reutiliza o pipeline em cache
+        const getExtractor = (): Promise<any> => {
+            if (!nativePipelineCache.has(model)) {
+                this.logger.log(`[NativeEmbed] Carregando pipeline '${model}' (primeira vez)`);
+                const p = import('@xenova/transformers').then(({ pipeline }) =>
+                    pipeline('feature-extraction', model, { quantized: true })
+                );
+                nativePipelineCache.set(model, p);
+            }
+            return nativePipelineCache.get(model)!;
+        };
+
         return {
             embedDocuments: async (docs: string[]): Promise<number[][]> => {
-                const { pipeline } = await import('@xenova/transformers');
-                // Alocação usando a var feature-extraction pipeline
-                const extractor = await pipeline('feature-extraction', model, {
-                    quantized: true, // Usa versão mais leve na CPU
-                });
-
-                const embeddings = [];
+                const extractor = await getExtractor();
+                const embeddings: number[][] = [];
                 for (const text of docs) {
                     const output = await extractor(text, { pooling: 'mean', normalize: true });
-                    // Output config .data is Float32Array
                     embeddings.push(Array.from(output.data as Float32Array));
                 }
                 return embeddings;
             },
             embedQuery: async (query: string): Promise<number[]> => {
-                const { pipeline } = await import('@xenova/transformers');
-                const extractor = await pipeline('feature-extraction', model, {
-                    quantized: true,
-                });
+                const extractor = await getExtractor();
                 const output = await extractor(query, { pooling: 'mean', normalize: true });
                 return Array.from(output.data as Float32Array);
             }

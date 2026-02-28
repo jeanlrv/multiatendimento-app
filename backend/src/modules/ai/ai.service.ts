@@ -1,4 +1,5 @@
 import { Injectable, Logger, ForbiddenException } from '@nestjs/common';
+import { OnEvent } from '@nestjs/event-emitter';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateAIAgentDto } from './dto/create-ai-agent.dto';
 import { UpdateAIAgentDto } from './dto/update-ai-agent.dto';
@@ -60,19 +61,58 @@ export class AIService {
     }
 
     private semanticCache = new Map<string, { embedding: number[], response: string, timestamp: number }>();
+    private readonly CACHE_TTL_MS = 60 * 60 * 1000; // 1 hora — evita respostas obsoletas após atualização da base
 
-    /** FASE 3/7 - Compressor de Contexto histórico */
-    private compressContext(history: any[]) {
+    /** Custo estimado por 1.000 tokens de entrada (USD) — para rastreamento de custo */
+    private readonly COST_INPUT: Record<string, number> = {
+        'gpt-4o-mini': 0.00015,    'gpt-4o': 0.005,
+        'claude-3-5-sonnet-20241022': 0.003,  'claude-3-5-haiku-20241022': 0.0008,
+        'claude-3-opus-20240229': 0.015,
+        'gemini-2.0-flash': 0.0001, 'gemini-1.5-pro': 0.00125,
+        'deepseek-chat': 0.00027,   'deepseek-reasoner': 0.00055,
+        'llama-3.1-8b-instant': 0.00005, 'llama-3.1-70b-versatile': 0.00059,
+        'mistral-large-latest': 0.002,
+    };
+    private readonly COST_OUTPUT: Record<string, number> = {
+        'gpt-4o-mini': 0.0006,     'gpt-4o': 0.015,
+        'claude-3-5-sonnet-20241022': 0.015,  'claude-3-5-haiku-20241022': 0.004,
+        'claude-3-opus-20240229': 0.075,
+        'gemini-2.0-flash': 0.0004, 'gemini-1.5-pro': 0.005,
+        'deepseek-chat': 0.00110,   'deepseek-reasoner': 0.00219,
+        'llama-3.1-8b-instant': 0.00008, 'llama-3.1-70b-versatile': 0.00079,
+        'mistral-large-latest': 0.006,
+    };
+
+    /** Tamanho máximo de contexto por modelo (em chars ≈ tokens × 3.5) */
+    private readonly MODEL_CONTEXT_CHARS: Record<string, number> = {
+        'gpt-4o-mini': 128000 * 3, 'gpt-4o': 128000 * 3,
+        'claude-3-5-sonnet-20241022': 200000 * 3, 'claude-3-5-haiku-20241022': 200000 * 3,
+        'gemini-2.0-flash': 1000000 * 3, 'gemini-1.5-pro': 1000000 * 3,
+        'deepseek-chat': 64000 * 3, 'deepseek-reasoner': 64000 * 3,
+    };
+    private readonly DEFAULT_MAX_CONTEXT_CHARS = 30000; // ~8k tokens, seguro para modelos desconhecidos
+
+    /** Invalidação de cache semântico quando a base de conhecimento é atualizada */
+    @OnEvent('knowledge.updated')
+    handleKnowledgeUpdated(payload: { knowledgeBaseId: string; companyId: string }) {
+        const before = this.semanticCache.size;
+        this.semanticCache.clear();
+        this.logger.log(`[Cache] Cache semântico limpo após atualização da KB ${payload.knowledgeBaseId} (${before} entradas removidas)`);
+    }
+
+    /** FASE 3/7 - Compressor de Contexto histórico (com preservação de contexto inicial) */
+    private compressContext(history: any[], maxMessages = 20) {
         if (!history || history.length === 0) return [];
-        let compressed = history.filter((h, index) => {
-            const text = h.content?.trim().toLowerCase();
-            // Remove lixos/mensagens curtas inúteis (salvo se for a última que ele acabou de enviar)
-            if (index < history.length - 1 && ['ok', 'obrigado', 'obrigada', 'valeu', 'sim', 'nao', 'não', 'tchau'].includes(text)) return false;
+        const FILLER_WORDS = new Set(['ok', 'obrigado', 'obrigada', 'valeu', 'sim', 'nao', 'não', 'tchau']);
+        const compressed = history.filter((h, index) => {
+            const text = h.content?.trim()?.toLowerCase() ?? '';
+            // Remove mensagens curtas de preenchimento (exceto a última)
+            if (index < history.length - 1 && FILLER_WORDS.has(text)) return false;
             return true;
         });
 
-        // Agrupa mensagens consecutivas para economizar quebras estruturais do LLM
-        const grouped = [];
+        // Agrupa mensagens consecutivas do mesmo role para economizar tokens
+        const grouped: any[] = [];
         for (const h of compressed) {
             if (grouped.length > 0 && grouped[grouped.length - 1].role === h.role) {
                 grouped[grouped.length - 1].content += '\n' + h.content;
@@ -80,25 +120,46 @@ export class AIService {
                 grouped.push({ ...h });
             }
         }
+
+        // Se ainda acima do limite: mantém as 2 primeiras (contexto inicial) + últimas N-2
+        // Isso preserva o contexto de abertura da conversa enquanto descarta o meio menos relevante
+        if (grouped.length > maxMessages) {
+            return [...grouped.slice(0, 2), ...grouped.slice(-(maxMessages - 2))];
+        }
         return grouped;
     }
 
-    /** FASE 4 - Determina os limites de uso baseados na complexidade */
-    private allocateTokenBudget(message: string): { chunkLimit: number, modelTier: string } {
+    /** FASE 4 - Determina o número máximo de chunks RAG com base na complexidade da mensagem */
+    private allocateTokenBudget(message: string): { chunkLimit: number } {
         const charCount = message.length;
         if (charCount > 200 || message.split(' ').length > 40) {
-            return { chunkLimit: 10, modelTier: 'complex' };
+            return { chunkLimit: 10 };
         }
         if (charCount > 50) {
-            return { chunkLimit: 5, modelTier: 'medium' };
+            return { chunkLimit: 5 };
         }
-        return { chunkLimit: 2, modelTier: 'simple' };
+        return { chunkLimit: 2 };
+    }
+
+    /** Guarda contra overflow de context window: trunca o contexto RAG se necessário */
+    private guardContextOverflow(systemPrompt: string, context: string, history: any[], message: string, modelId: string): string {
+        const maxChars = this.MODEL_CONTEXT_CHARS[modelId] ?? this.DEFAULT_MAX_CONTEXT_CHARS;
+        const fixedChars = systemPrompt.length + message.length +
+            history.reduce((s, h) => s + (h.content?.length || 0), 0);
+        const budgetForContext = maxChars * 0.4 - fixedChars; // máx 40% do contexto para RAG
+        if (budgetForContext <= 0) return '';
+        if (context.length > budgetForContext) {
+            this.logger.warn(`[ContextOverflow] Contexto RAG truncado de ${context.length} para ${budgetForContext} chars (modelo: ${modelId})`);
+            return context.substring(0, budgetForContext);
+        }
+        return context;
     }
 
     private cosineSimilarity(a: number[], b: number[]): number {
         let dot = 0, normA = 0, normB = 0;
         for (let i = 0; i < a.length; i++) { dot += a[i] * b[i]; normA += a[i] * a[i]; normB += b[i] * b[i]; }
-        return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+        const denom = Math.sqrt(normA) * Math.sqrt(normB);
+        return denom === 0 ? 0 : dot / denom;
     }
 
     /**
@@ -156,9 +217,8 @@ export class AIService {
         }
         if (message.length > 4000) message = message.substring(0, 4000);
 
-        // Fase 3 e 7: Compressor de Contexto
+        // Fase 3 e 7: Compressor de Contexto (preserva 2 primeiras + últimas 18)
         history = this.compressContext(history);
-        if (history.length > 20) history = history.slice(-20);
 
         const agent = await this.findOneAgent(companyId, agentId);
         if (!agent || !agent.isActive) {
@@ -172,55 +232,55 @@ export class AIService {
             let promptEmbedding: number[] = [];
             try {
                 promptEmbedding = await this.vectorStoreService.generateEmbedding(message, 'native');
-                const cacheKeyPrefix = `${companyId}:${agentId}`;
+                const cacheKeyPrefix = `${companyId}:${agentId}:`;
                 for (const [key, cached] of this.semanticCache.entries()) {
                     if (key.startsWith(cacheKeyPrefix)) {
+                        if (Date.now() - cached.timestamp > this.CACHE_TTL_MS) { this.semanticCache.delete(key); continue; }
                         if (this.cosineSimilarity(promptEmbedding, cached.embedding) > 0.95) {
-                            this.logger.log(`[Cache HIT] Semantic similarity > 0.95 abortando geração para agente ${agent.name}`);
+                            this.logger.log(`[Cache HIT] Similarity > 0.95 para agente ${agent.name}`);
                             return cached.response;
                         }
                     }
                 }
-            } catch (err) {
-                // Caso falhe nativo, apenas avança.
-            }
+            } catch { /* fallback: avança sem cache */ }
 
-            // Fase 4 e 6: Token Budget Manager & LLM Router (Heurística)
+            // Fase 4: Token Budget Manager
             const budget = this.allocateTokenBudget(message);
-            let finalModelId = agent.modelId || 'gpt-4o-mini';
-            // Se o model original for caro e a querie for simples, podemos sobrescrever a variável.
+            const finalModelId = agent.modelId || 'gpt-4o-mini';
 
-            this.logger.log(`Chat com agente "${agent.name}" usando modelo: ${finalModelId} | Budget Chunks: ${budget.chunkLimit}`);
+            this.logger.log(`Chat "${agent.name}" | modelo: ${finalModelId} | chunks: ${budget.chunkLimit}`);
 
-            // Carrega configs de provider da empresa (API keys do banco)
             const companyConfigs = await this.providerConfigService.getDecryptedForCompany(companyId);
-            const llmProviderId = this.detectProviderFromModelId(finalModelId);
-            const llmConfig = companyConfigs.get(llmProviderId);
+            const llmConfig = companyConfigs.get(this.detectProviderFromModelId(finalModelId));
             const embeddingConfig = companyConfigs.get(agent.embeddingProvider || 'openai');
 
+            // RAG: busca com idioma correto da base de conhecimento
             let context = '';
             if (agent.knowledgeBaseId) {
+                const kb = await (this.prisma as any).knowledgeBase.findUnique({
+                    where: { id: agent.knowledgeBaseId },
+                    select: { language: true },
+                });
                 const chunks = await this.vectorStoreService.searchSimilarity(
-                    this.prisma,
-                    companyId,
-                    message,
-                    agent.knowledgeBaseId,
-                    budget.chunkLimit, // Budget dinâmico aplicado
-                    agent.embeddingProvider || 'openai',
-                    agent.embeddingModel,
-                    embeddingConfig?.apiKey || undefined,
+                    this.prisma, companyId, message, agent.knowledgeBaseId,
+                    budget.chunkLimit, agent.embeddingProvider || 'openai',
+                    agent.embeddingModel, embeddingConfig?.apiKey || undefined,
                     embeddingConfig?.baseUrl || undefined,
+                    kb?.language || 'portuguese',
                 );
                 context = chunks.map(c => c.content).join('\n---\n');
             }
+
+            // Overflow guard: trunca RAG se context window exceder limite do modelo
+            context = this.guardContextOverflow(agent.prompt || '', context, history, message, finalModelId);
 
             const response = await this.llmService.generateResponse(
                 finalModelId,
                 agent.prompt || 'Você é um assistente virtual prestativo.',
                 message,
                 history.map(h => ({
-                    role: h.role === 'user' || h.role === 'client' ? 'user' : 'assistant',
-                    content: h.content
+                    role: (h.role === 'user' || h.role === 'client' ? 'user' : 'assistant') as 'user' | 'assistant',
+                    content: h.content,
                 })),
                 agent.temperature || 0.7,
                 context,
@@ -238,9 +298,8 @@ export class AIService {
                 }
             }
 
-            // Registrar uso de tokens (se disponível)
             try {
-                await this.trackTokenUsage(companyId, response);
+                await this.trackTokenUsage(companyId, finalModelId, agent.prompt || '', context, history, response, 0);
             } catch (e) {
                 this.logger.warn(`Falha ao registrar uso de tokens: ${e.message}`);
             }
@@ -269,7 +328,6 @@ export class AIService {
 
         // Fase 3 e 7: Compressor de Contexto
         history = this.compressContext(history);
-        if (history.length > 20) history = history.slice(-20);
 
         if (imageUrls.length > 5) {
             throw new Error('Máximo de 5 imagens por requisição');
@@ -288,9 +346,14 @@ export class AIService {
             if (imageUrls.length === 0) {
                 try {
                     promptEmbedding = await this.vectorStoreService.generateEmbedding(message, 'native');
-                    const cacheKeyPrefix = `${companyId}:${agentId}-mm`;
+                    const cacheKeyPrefix = `${companyId}:${agentId}-mm:`;
                     for (const [key, cached] of this.semanticCache.entries()) {
                         if (key.startsWith(cacheKeyPrefix)) {
+                            // Evict entradas expiradas
+                            if (Date.now() - cached.timestamp > this.CACHE_TTL_MS) {
+                                this.semanticCache.delete(key);
+                                continue;
+                            }
                             if (this.cosineSimilarity(promptEmbedding, cached.embedding) > 0.95) {
                                 this.logger.log(`[Cache HIT] Semantic similarity > 0.95 (MM) abortando geração para agente ${agent.name}`);
                                 return cached.response;
@@ -336,7 +399,7 @@ export class AIService {
 
             // Registrar uso de tokens (estimativa maior para multimodal)
             try {
-                await this.trackTokenUsage(companyId, response, imageUrls.length);
+                await this.trackTokenUsage(companyId, finalModelId, agent.prompt || '', '', history, response, imageUrls.length);
             } catch (e) {
                 this.logger.warn(`Falha ao registrar uso de tokens: ${e.message}`);
             }
@@ -349,24 +412,57 @@ export class AIService {
     }
 
     /**
-     * Registra uso de tokens na tabela AIUsage
+     * Registra uso de tokens na tabela AIUsage.
+     * Estima tokens de entrada (prompt + contexto RAG + histórico) e saída (~4 chars/token).
+     * Calcula custo estimado em USD com base nas tabelas de preço de cada provider.
      */
-    private async trackTokenUsage(companyId: string, response: string, imageCount: number = 0) {
-        // Estimativa simples de tokens: ~4 chars por token
-        // Multimodal usa mais tokens (imagens)
-        const estimatedTokens = Math.ceil(response.length / 4) + (imageCount * 100);
+    private async trackTokenUsage(
+        companyId: string,
+        modelId: string,
+        systemPrompt: string,
+        context: string,
+        history: any[],
+        response: string,
+        imageCount: number = 0,
+    ) {
+        const historyChars = history.reduce((sum, h) => sum + (h.content?.length || 0), 0);
+        const inputTokens = Math.ceil((systemPrompt.length + context.length + historyChars) / 4);
+        const outputTokens = Math.ceil(response.length / 4);
+        // ~500 tokens por imagem (estimativa conservadora para visão gpt-4o/claude)
+        const imageTokens = imageCount * 500;
+        const estimatedTokens = inputTokens + outputTokens + imageTokens;
+
+        // Custo estimado: usa o modelId sem prefixo de provider (ex: 'groq:llama-3.1-8b' → 'llama-3.1-8b')
+        const baseModelId = modelId.includes(':') ? modelId.split(':').slice(1).join(':') : modelId;
+        const costIn = (this.COST_INPUT[baseModelId] ?? this.COST_INPUT[modelId] ?? 0) * inputTokens / 1000;
+        const costOut = (this.COST_OUTPUT[baseModelId] ?? this.COST_OUTPUT[modelId] ?? 0) * outputTokens / 1000;
+        const estimatedCost = parseFloat((costIn + costOut).toFixed(8));
+
         await (this.prisma as any).aIUsage.create({
             data: {
                 companyId,
                 tokens: estimatedTokens,
-                cost: 0, // Custo real pode ser calculado futuramente baseado no provider
+                cost: estimatedCost,
             }
         });
     }
 
-    async transcribeAudio(mediaUrl: string) {
+    async transcribeAudio(mediaUrl: string, companyId?: string) {
         try {
             this.logger.log(`Iniciando transcrição nativa (Whisper) para: ${mediaUrl}`);
+
+            // Resolve API key: prefere chave da empresa no banco, fallback para env var global
+            let openAiKey = process.env.OPENAI_API_KEY;
+            if (companyId) {
+                const companyConfigs = await this.providerConfigService.getDecryptedForCompany(companyId);
+                const openaiConfig = companyConfigs.get('openai');
+                if (openaiConfig?.apiKey) openAiKey = openaiConfig.apiKey;
+            }
+
+            if (!openAiKey) {
+                this.logger.warn('Aviso: OPENAI_API_KEY não definida. Transcrição indisponível.');
+                return "[Serviço de transcrição indisponível]";
+            }
 
             // 1. Baixar o arquivo de áudio
             const audioResponse = await axios.get(mediaUrl, { responseType: 'arraybuffer' });
@@ -374,15 +470,8 @@ export class AIService {
 
             // 2. Preparar payload FormData para a API da OpenAI
             const formData = new FormData();
-
             formData.append('file', audioBuffer, { filename: 'audio.ogg', contentType: 'audio/ogg' });
             formData.append('model', 'whisper-1');
-
-            const openAiKey = process.env.OPENAI_API_KEY;
-            if (!openAiKey) {
-                this.logger.warn('Aviso: OPENAI_API_KEY não definida no ambiente. Transcrição falhará.');
-                return "[Serviço de transcrição indisponível]";
-            }
 
             // 3. Enviar para transcrição Whisper direto na OpenAI
             const response = await axios.post(
@@ -408,14 +497,20 @@ export class AIService {
         if (!agent || !agent.isActive) return null;
 
         const conversation = messages.map(m => `${m.fromMe ? 'Atendente' : 'Cliente'}: ${m.content}`).join('\n');
+        const modelId = agent.modelId || 'gpt-4o-mini';
 
         try {
+            const companyConfigs = await this.providerConfigService.getDecryptedForCompany(companyId);
+            const llmConfig = companyConfigs.get(this.detectProviderFromModelId(modelId));
             return await this.llmService.generateResponse(
-                'gpt-4o-mini',
+                modelId,
                 'Você é um assistente encarregado de resumir conversas de suporte técnico.',
                 `Resuma a seguinte conversa de forma concisa em no máximo 3 frases:\n\n${conversation}`,
                 [],
-                0.3
+                0.3,
+                undefined,
+                llmConfig?.apiKey || undefined,
+                llmConfig?.baseUrl || undefined,
             );
         } catch (error) {
             this.logger.error(`Erro ao gerar resumo: ${error.message}`);
@@ -428,14 +523,20 @@ export class AIService {
         if (!agent || !agent.isActive) return null;
 
         const prompt = `Analise o sentimento da seguinte conversa e responda APENAS um JSON: {"sentiment": "POSITIVE|NEUTRAL|NEGATIVE", "score": 0.0-10.0, "justification": "breve explicação"}:\n\n"${content}"`;
+        const modelId = agent.modelId || 'gpt-4o-mini';
 
         try {
+            const companyConfigs = await this.providerConfigService.getDecryptedForCompany(companyId);
+            const llmConfig = companyConfigs.get(this.detectProviderFromModelId(modelId));
             const aiResponse = await this.llmService.generateResponse(
-                'gpt-4o-mini',
+                modelId,
                 'Você é um analista de sentimentos especialista em CX.',
                 prompt,
                 [],
-                0
+                0,
+                undefined,
+                llmConfig?.apiKey || undefined,
+                llmConfig?.baseUrl || undefined,
             );
 
             const jsonMatch = aiResponse.match(/\{.*\}/s);
@@ -543,37 +644,111 @@ export class AIService {
     }
 
     /**
-     * Streaming de respostas da IA usando Server-Sent Events (SSE)
+     * Streaming real de respostas via SSE — emite tokens individuais conforme o LLM os gera.
+     * Inclui pipeline completo: cache semântico, RAG, overflow guard e rastreamento de tokens.
      */
     streamChat(companyId: string, agentId: string, message: string, history: any[] = []): Observable<any> {
-        // 1. Validação de entrada
-        if (!message || message.trim().length === 0) {
-            throw new Error('Mensagem não pode ser vazia');
-        }
+        if (!message || message.trim().length === 0) throw new Error('Mensagem não pode ser vazia');
+        if (message.length > 4000) message = message.substring(0, 4000);
+        history = this.compressContext(history);
 
-        if (message.length > 4000) {
-            message = message.substring(0, 4000);
-        }
-
-        if (history.length > 20) {
-            history = history.slice(-20);
-        }
-
-        // Retornar um Observable que chama o LLM de forma assíncrona
         return new Observable(observer => {
             observer.next({ data: { type: 'start', content: '' } });
 
-            this.chat(companyId, agentId, message, history)
-                .then(response => {
-                    observer.next({ data: { type: 'chunk', content: response } });
-                    observer.next({ data: { type: 'end', content: '' } });
-                    observer.complete();
-                })
-                .catch(error => {
-                    this.logger.error(`Erro no streamChat: ${error.message}`);
-                    observer.next({ data: { type: 'error', content: error.message } });
-                    observer.complete();
-                });
+            (async () => {
+                const agent = await this.findOneAgent(companyId, agentId);
+                if (!agent || !agent.isActive) throw new Error('Agente não encontrado ou inativo');
+
+                await this.checkTokenLimits(companyId);
+
+                // Semantic Cache — em cache hit retorna resposta inteira (não há como "stream" do cache)
+                let promptEmbedding: number[] = [];
+                try {
+                    promptEmbedding = await this.vectorStoreService.generateEmbedding(message, 'native');
+                    const cacheKeyPrefix = `${companyId}:${agentId}:`;
+                    for (const [key, cached] of this.semanticCache.entries()) {
+                        if (key.startsWith(cacheKeyPrefix)) {
+                            if (Date.now() - cached.timestamp > this.CACHE_TTL_MS) { this.semanticCache.delete(key); continue; }
+                            if (this.cosineSimilarity(promptEmbedding, cached.embedding) > 0.95) {
+                                this.logger.log(`[Cache HIT/Stream] Similarity > 0.95 para agente ${agent.name}`);
+                                observer.next({ data: { type: 'chunk', content: cached.response } });
+                                observer.next({ data: { type: 'end', content: '' } });
+                                observer.complete();
+                                return;
+                            }
+                        }
+                    }
+                } catch { /* falha silenciosa: avança sem cache */ }
+
+                const budget = this.allocateTokenBudget(message);
+                const finalModelId = agent.modelId || 'gpt-4o-mini';
+
+                const companyConfigs = await this.providerConfigService.getDecryptedForCompany(companyId);
+                const llmConfig = companyConfigs.get(this.detectProviderFromModelId(finalModelId));
+                const embeddingConfig = companyConfigs.get(agent.embeddingProvider || 'openai');
+
+                let context = '';
+                if (agent.knowledgeBaseId) {
+                    const kb = await (this.prisma as any).knowledgeBase.findUnique({
+                        where: { id: agent.knowledgeBaseId },
+                        select: { language: true },
+                    });
+                    const chunks = await this.vectorStoreService.searchSimilarity(
+                        this.prisma, companyId, message, agent.knowledgeBaseId,
+                        budget.chunkLimit, agent.embeddingProvider || 'openai',
+                        agent.embeddingModel, embeddingConfig?.apiKey || undefined,
+                        embeddingConfig?.baseUrl || undefined,
+                        kb?.language || 'portuguese',
+                    );
+                    context = chunks.map(c => c.content).join('\n---\n');
+                }
+
+                context = this.guardContextOverflow(agent.prompt || '', context, history, message, finalModelId);
+
+                const formattedHistory = history.map(h => ({
+                    role: (h.role === 'user' || h.role === 'client' ? 'user' : 'assistant') as 'user' | 'assistant',
+                    content: h.content,
+                }));
+
+                // Streaming real: emite token a token via LangChain .stream()
+                let fullResponse = '';
+                for await (const token of this.llmService.streamResponse(
+                    finalModelId,
+                    agent.prompt || 'Você é um assistente virtual prestativo.',
+                    message,
+                    formattedHistory,
+                    agent.temperature || 0.7,
+                    context,
+                    llmConfig?.apiKey || undefined,
+                    llmConfig?.baseUrl || undefined,
+                )) {
+                    fullResponse += token;
+                    observer.next({ data: { type: 'chunk', content: token } });
+                }
+
+                // Armazena resposta completa no cache semântico
+                if (promptEmbedding.length > 0 && fullResponse) {
+                    const cacheKey = `${companyId}:${agentId}:${Date.now()}`;
+                    this.semanticCache.set(cacheKey, { embedding: promptEmbedding, response: fullResponse, timestamp: Date.now() });
+                    if (this.semanticCache.size > 2000) {
+                        const firstKey = this.semanticCache.keys().next().value;
+                        if (firstKey) this.semanticCache.delete(firstKey);
+                    }
+                }
+
+                try {
+                    await this.trackTokenUsage(companyId, finalModelId, agent.prompt || '', context, history, fullResponse, 0);
+                } catch (e) {
+                    this.logger.warn(`Falha ao registrar uso de tokens: ${e.message}`);
+                }
+
+                observer.next({ data: { type: 'end', content: '' } });
+                observer.complete();
+            })().catch(error => {
+                this.logger.error(`Erro no streamChat: ${error.message}`);
+                observer.next({ data: { type: 'error', content: error.message } });
+                observer.complete();
+            });
         });
     }
 }

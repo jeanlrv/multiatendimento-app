@@ -211,11 +211,16 @@ function ProviderCard({ meta, config, onSave, onDelete }: ProviderCardProps) {
                                 </div>
                             )}
 
-                            {/* Campo de Modelo Customizado p/ AnythingLLM, Ollama, LMStudio, etc */}
-                            {isLLM && ['anythingllm', 'ollama', 'lmstudio'].includes(meta.id) && (
+                            {/* Campo de Modelo Customizado p/ AnythingLLM, Ollama, LMStudio (locais/self-hosted) */}
+                            {['anythingllm', 'ollama', 'lmstudio'].includes(meta.id) && (
                                 <div>
                                     <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-1.5">
-                                        Modelo Específico <span className="text-primary normal-case tracking-normal font-semibold">(ex: llama3, deepseek-r1)</span>
+                                        {meta.id === 'anythingllm'
+                                            ? <>Workspace/Modelo do AnythingLLM <span className="text-primary normal-case tracking-normal font-semibold">(ex: my-workspace, llama-3)</span></>
+                                            : meta.id === 'ollama'
+                                                ? <>Modelo Ollama <span className="text-primary normal-case tracking-normal font-semibold">(ex: llama3, deepseek-r1, mistral)</span></>
+                                                : <>Modelo LM Studio <span className="text-primary normal-case tracking-normal font-semibold">(ex: deepseek-r1-distill-qwen-7b)</span></>
+                                        }
                                     </label>
                                     <div className="relative">
                                         <Sparkles size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-primary shadow-sm" />
@@ -223,10 +228,20 @@ function ProviderCard({ meta, config, onSave, onDelete }: ProviderCardProps) {
                                             type="text"
                                             value={customModel}
                                             onChange={e => setCustomModel(e.target.value)}
-                                            placeholder="Nome do modelo no provider"
+                                            placeholder={
+                                                meta.id === 'anythingllm' ? 'workspace-slug ou nome do modelo'
+                                                    : meta.id === 'ollama' ? 'llama3:latest, mistral, deepseek-r1...'
+                                                        : 'nome-do-modelo-carregado'
+                                            }
                                             className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:outline-none focus:border-primary transition-colors"
                                         />
                                     </div>
+                                    <p className="text-[10px] text-slate-400 mt-1.5">
+                                        {meta.id === 'anythingllm'
+                                            ? 'O modelo configurado aqui será usado como padrão para agentes que usam este provider.'
+                                            : 'Certifique-se que o modelo está baixado/disponível no servidor local.'
+                                        }
+                                    </p>
                                 </div>
                             )}
 
@@ -396,22 +411,48 @@ export function AIProvidersSettings() {
                             onDelete={handleDelete}
                         />
                     ))}
-                    {activeSection === 'embedding' && embeddingOnlyProviders.map(meta => (
-                        <ProviderCard
-                            key={meta.id}
-                            meta={meta as any}
-                            config={getConfig(meta.id)}
-                            onSave={handleSave}
-                            onDelete={handleDelete}
-                        />
-                    ))}
+                    {activeSection === 'embedding' && (
+                        <>
+                            {/* Card Nativo — sempre disponível, sem chave */}
+                            <div className="rounded-2xl border border-green-300 dark:border-green-700 bg-green-50/50 dark:bg-green-900/10 overflow-hidden">
+                                <div className="flex items-center gap-3 p-4">
+                                    <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0 shadow-sm bg-green-100 dark:bg-green-900/30 border border-green-200 dark:border-green-700">
+                                        💡
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <span className="font-black text-sm text-slate-900 dark:text-white">Nativo (built-in CPU)</span>
+                                            <span className="text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-full bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400">Sempre Ativo</span>
+                                            <span className="text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400">Embedding</span>
+                                        </div>
+                                        <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
+                                            all-MiniLM-L6-v2 · bge-micro-v2 — sem custo, roda localmente no servidor, não requer API Key
+                                        </p>
+                                    </div>
+                                    <span className="flex items-center gap-1 text-[10px] font-black text-green-600 dark:text-green-400 flex-shrink-0">
+                                        <CheckCircle2 size={14} /> Ativo
+                                    </span>
+                                </div>
+                            </div>
+
+                            {embeddingOnlyProviders.map(meta => (
+                                <ProviderCard
+                                    key={meta.id}
+                                    meta={meta as any}
+                                    config={getConfig(meta.id)}
+                                    onSave={handleSave}
+                                    onDelete={handleDelete}
+                                />
+                            ))}
+                        </>
+                    )}
                 </motion.div>
             </AnimatePresence>
 
             {/* Nota sobre providers compartilhados */}
             {activeSection === 'embedding' && (
                 <p className="text-[10px] text-slate-400 dark:text-slate-500 italic">
-                    * OpenAI, Google Gemini, Cohere e Azure são configurados na aba LLM Modelos e também ficam disponíveis como providers de embedding automaticamente.
+                    * OpenAI, Google Gemini, Cohere, Azure e Ollama são configurados na aba LLM Modelos e também ficam disponíveis como providers de embedding automaticamente.
                 </p>
             )}
         </div>

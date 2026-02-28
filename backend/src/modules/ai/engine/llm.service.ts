@@ -70,6 +70,46 @@ export class LLMService {
     }
 
     /**
+     * Streaming real de tokens — retorna um AsyncGenerator.
+     * Emite tokens individuais à medida que o LLM os gera.
+     */
+    async *streamResponse(
+        modelId: string,
+        systemPrompt: string,
+        userMessage: string,
+        history: { role: 'user' | 'assistant' | 'system', content: string }[] = [],
+        temperature: number = 0.7,
+        context: string = '',
+        apiKeyOverride?: string,
+        baseUrlOverride?: string,
+    ): AsyncGenerator<string, void, unknown> {
+        const chat = this.providerFactory.createModel(modelId, temperature, apiKeyOverride, baseUrlOverride);
+
+        let fullSystemPrompt = systemPrompt || 'Você é um assistente prestativo.';
+        if (context) {
+            fullSystemPrompt += `\n\nContexto adicional de conhecimento:\n"""\n${context}\n"""\n\nUse o contexto acima para responder, se relevante.`;
+        }
+
+        const messages: BaseMessage[] = [new SystemMessage(fullSystemPrompt)];
+        for (const msg of history) {
+            if (msg.role === 'user') messages.push(new HumanMessage(msg.content));
+            else if (msg.role === 'assistant') messages.push(new AIMessage(msg.content));
+        }
+        messages.push(new HumanMessage(userMessage));
+
+        try {
+            const stream = await chat.stream(messages);
+            for await (const chunk of stream) {
+                const token = chunk.content?.toString() ?? '';
+                if (token) yield token;
+            }
+        } catch (error) {
+            this.logger.error(`Erro no streaming LLM (${modelId}): ${error.message}`);
+            throw error;
+        }
+    }
+
+    /**
      * Gera resposta multimodal (com suporte a imagens).
      * @param modelId ID do modelo (deve ser multimodal: gpt-4o, gemini-2.0-flash, etc)
      * @param systemPrompt O prompt de sistema

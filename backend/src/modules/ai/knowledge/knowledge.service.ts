@@ -1,4 +1,5 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../../../database/prisma.service';
 import { CreateKnowledgeBaseDto } from './dto/create-knowledge.dto';
 import { AddDocumentDto } from './dto/add-document.dto';
@@ -14,7 +15,13 @@ export class KnowledgeService {
         private prisma: PrismaService,
         @InjectQueue('knowledge-processing') private knowledgeQueue: Queue,
         private s3Service: S3Service,
+        private eventEmitter: EventEmitter2,
     ) { }
+
+    /** Emite evento que invalida o cache semântico do AIService para esta base */
+    private emitKnowledgeUpdated(knowledgeBaseId: string, companyId: string) {
+        this.eventEmitter.emit('knowledge.updated', { knowledgeBaseId, companyId });
+    }
 
     async createBase(companyId: string, data: CreateKnowledgeBaseDto) {
         return (this.prisma as any).knowledgeBase.create({
@@ -70,6 +77,7 @@ export class KnowledgeService {
 
         // Envia para a fila de processamento
         await this.enqueueProcessing(document.id, companyId);
+        this.emitKnowledgeUpdated(baseId, companyId);
 
         return document;
     }
@@ -108,6 +116,7 @@ export class KnowledgeService {
         });
 
         await this.enqueueProcessing(document.id, companyId);
+        this.emitKnowledgeUpdated(baseId, companyId);
 
         return document;
     }
@@ -158,12 +167,14 @@ export class KnowledgeService {
             }
         }
 
-        return (this.prisma as any).document.deleteMany({
+        const deleted = await (this.prisma as any).document.deleteMany({
             where: {
                 id: documentId,
                 knowledgeBase: { companyId }
             }
         });
+        if (doc?.knowledgeBaseId) this.emitKnowledgeUpdated(doc.knowledgeBaseId, companyId);
+        return deleted;
     }
 
     async reprocessDocument(companyId: string, documentId: string) {
@@ -189,6 +200,7 @@ export class KnowledgeService {
 
         // Enviar para fila de processamento
         await this.enqueueProcessing(documentId, companyId);
+        this.emitKnowledgeUpdated(doc.knowledgeBaseId, companyId);
 
         return { message: 'Documento enviado para reprocessamento' };
     }
