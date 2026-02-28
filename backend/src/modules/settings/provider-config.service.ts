@@ -135,8 +135,7 @@ export class ProviderConfigService {
         return result;
     }
 
-    /** Retorna providers LLM disponíveis para uma empresa (DB + env vars) */
-    async getAvailableLLMProviders(companyId: string, configService: any): Promise<{
+    async getAvailableLLMProviders(companyId: string): Promise<{
         provider: string;
         providerName: string;
         models: { id: string; name: string; contextWindow?: number; multimodal?: boolean }[];
@@ -161,100 +160,106 @@ export class ProviderConfigService {
                     // Mas se o modelo configurado já existia na base do factory, nós o mantemos; se não, nós injetamos.
                     const existingModel = models.find(m => m.id === customModelId || m.name === config.extraConfig.model);
 
-                }];
+                    const filteredModels = existingModel
+                        ? [existingModel]
+                        : [{
+                            id: customModelId,
+                            name: `${config.extraConfig.model}`,
+                            contextWindow: 128000 // default genérico para customizados
+                        }];
 
-                this.logger.log(`Empresa ${companyId}: Filtrando modelos para ${p.id} -> [${filteredModels.map(m => m.name).join(', ')}]`);
+                    this.logger.log(`Empresa ${companyId}: Filtrando modelos para ${p.id} -> [${filteredModels.map(m => m.name).join(', ')}]`);
+
+                    return {
+                        provider: p.id,
+                        providerName: p.name,
+                        models: filteredModels.map(m => ({
+                            ...m,
+                            multimodal: MULTIMODAL_MODELS.includes(m.id.split(':').pop() || m.id),
+                        })),
+                    };
+                }
+
+                this.logger.debug(`Empresa ${companyId}: Sem modelo específico para ${p.id}, retornando todos do factory.`);
 
                 return {
                     provider: p.id,
                     providerName: p.name,
-                    models: filteredModels.map(m => ({
+                    models: models.map(m => ({
                         ...m,
                         multimodal: MULTIMODAL_MODELS.includes(m.id.split(':').pop() || m.id),
                     })),
                 };
-            }
-
-                this.logger.debug(`Empresa ${companyId}: Sem modelo específico para ${p.id}, retornando todos do factory.`);
-
-        return {
-            provider: p.id,
-            providerName: p.name,
-            models: models.map(m => ({
-                ...m,
-                multimodal: MULTIMODAL_MODELS.includes(m.id.split(':').pop() || m.id),
-            })),
-        };
-    });
-}
+            });
+    }
 
     /** Retorna providers de embedding disponíveis para uma empresa (DB + env vars) */
-    async getAvailableEmbeddingProviders(companyId: string, configService: any): Promise < {
-    id: string;
-    name: string;
-    models: { id: string; name: string; dimensions: number }[];
-}[] > {
-    const companyConfigs = await this.getDecryptedForCompany(companyId);
+    async getAvailableEmbeddingProviders(companyId: string, configService: any): Promise<{
+        id: string;
+        name: string;
+        models: { id: string; name: string; dimensions: number }[];
+    }[]> {
+        const companyConfigs = await this.getDecryptedForCompany(companyId);
 
-    return EMBEDDING_PROVIDERS
-        .filter(p => {
-            if (p.id === 'native') return true; // Sempre disponível
-            try {
-                const config = companyConfigs.get(p.id);
-                return config && config.isEnabled;
-            } catch {
-                return false;
-            }
-        })
-        .map(p => {
-            try {
-                const config = companyConfigs.get(p.id);
-                const models = [...p.models];
-
-                // Para AnythingLLM e Ollama, se houver modelo customizado, adicionar/ajustar
-                if (config?.extraConfig?.model && (p.id === 'anythingllm' || p.id === 'ollama')) {
-                    const customId = `${p.id}:${config.extraConfig.model}`;
-                    if (!models.some(m => m.id === customId)) {
-                        models.unshift({
-                            id: customId,
-                            name: `${config.extraConfig.model} (Custom)`,
-                            dimensions: p.id === 'anythingllm' ? 768 : 1024
-                        });
-                    }
+        return EMBEDDING_PROVIDERS
+            .filter(p => {
+                if (p.id === 'native') return true; // Sempre disponível
+                try {
+                    const config = companyConfigs.get(p.id);
+                    return config && config.isEnabled;
+                } catch {
+                    return false;
                 }
+            })
+            .map(p => {
+                try {
+                    const config = companyConfigs.get(p.id);
+                    const models = [...p.models];
 
-                return { id: p.id, name: p.name, models };
-            } catch (error) {
-                this.logger.error(`Erro ao processar provider de embedding ${p.id}: ${error.message}`);
-                if (p.id === 'native') return { id: p.id, name: p.name, models: p.models };
-                return null;
-            }
-        })
-        .filter(p => p !== null) as any;
-}
+                    // Para AnythingLLM e Ollama, se houver modelo customizado, adicionar/ajustar
+                    if (config?.extraConfig?.model && (p.id === 'anythingllm' || p.id === 'ollama')) {
+                        const customId = `${p.id}:${config.extraConfig.model}`;
+                        if (!models.some(m => m.id === customId)) {
+                            models.unshift({
+                                id: customId,
+                                name: `${config.extraConfig.model} (Custom)`,
+                                dimensions: p.id === 'anythingllm' ? 768 : 1024
+                            });
+                        }
+                    }
+
+                    return { id: p.id, name: p.name, models };
+                } catch (error) {
+                    this.logger.error(`Erro ao processar provider de embedding ${p.id}: ${error.message}`);
+                    if (p.id === 'native') return { id: p.id, name: p.name, models: p.models };
+                    return null;
+                }
+            })
+            .filter(p => p !== null) as any;
+    }
 
     /** Mascara a API key para exibição segura */
     private maskConfig(config: any): ProviderConfigPublic {
-    return {
-        id: config.id,
-        provider: config.provider,
-        category: config.category,
-        apiKey: config.apiKey ? this.crypto.mask(config.apiKey) : null,
-        baseUrl: config.baseUrl,
-        extraConfig: config.extraConfig,
-        isEnabled: config.isEnabled,
-        createdAt: config.createdAt,
-        updatedAt: config.updatedAt,
-    };
-}
+        return {
+            id: config.id,
+            provider: config.provider,
+            category: config.category,
+            apiKey: config.apiKey ? this.crypto.mask(config.apiKey) : null,
+            baseUrl: config.baseUrl,
+            extraConfig: config.extraConfig,
+            isEnabled: config.isEnabled,
+            createdAt: config.createdAt,
+            updatedAt: config.updatedAt,
+        };
+    }
 
     /** Detecta a categoria do provider baseado no registry */
     private detectCategory(provider: string): string {
-    const isLLM = LLM_PROVIDERS.some(p => p.id === provider);
-    const isEmbedding = EMBEDDING_PROVIDERS.some(p => p.id === provider);
+        const isLLM = LLM_PROVIDERS.some(p => p.id === provider);
+        const isEmbedding = EMBEDDING_PROVIDERS.some(p => p.id === provider);
 
-    if (isLLM && isEmbedding) return 'both';
-    if (isEmbedding) return 'embedding';
-    return 'llm';
-}
+        if (isLLM && isEmbedding) return 'both';
+        if (isEmbedding) return 'embedding';
+        return 'llm';
+    }
 }

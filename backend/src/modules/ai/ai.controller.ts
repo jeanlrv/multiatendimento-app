@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, Sse, UnauthorizedException } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, Sse, UnauthorizedException, Logger } from '@nestjs/common';
 import { AIService } from './ai.service';
 import { CreateAIAgentDto } from './dto/create-ai-agent.dto';
 import { UpdateAIAgentDto } from './dto/update-ai-agent.dto';
@@ -95,7 +95,7 @@ export class AIController {
     @ApiOperation({ summary: 'Listar modelos de IA disponíveis por provider (filtra por configurações da empresa)' })
     async getModels(@Req() req: any) {
         try {
-            const models = await this.providerConfigService.getAvailableLLMProviders(req.user.companyId, this.configService);
+            const models = await this.providerConfigService.getAvailableLLMProviders(req.user.companyId);
             if (!models || models.length === 0) {
                 Logger.warn(`Nenhum provider LLM encontrado/disponível para a empresa ${req.user.companyId}`, 'AIController');
             }
