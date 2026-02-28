@@ -100,4 +100,14 @@ export class CreateAIAgentDto {
     @ApiProperty({ description: 'Limite de mensagens por sessão (10min)', required: false })
     @IsOptional()
     embedRateLimit?: number;
+
+    @ApiProperty({ description: 'Permite downgrade automático para queries simples', required: false })
+    @IsBoolean()
+    @IsOptional()
+    allowModelDowngrade?: boolean;
+
+    @ApiProperty({ description: 'Limite de tokens por dia para este agente (0 = ilimitado)', required: false })
+    @IsNumber()
+    @IsOptional()
+    limitTokensPerDay?: number;
 }

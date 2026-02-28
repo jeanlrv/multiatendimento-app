@@ -15,9 +15,11 @@ import { ConfigService } from '@nestjs/config';
 import { RequirePermission } from '../../common/decorators/permissions.decorator';
 import { Permission } from '../auth/constants/permissions';
 
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+
 @ApiTags('AI')
 @Controller('ai')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 @ApiBearerAuth()
 export class AIController {
     constructor(

@@ -11,13 +11,15 @@ import { S3Service } from './storage/s3.service';
 import { EmbedModule } from './embed/embed.module';
 import { ApiKeysModule } from './api-keys/api-keys.module';
 import { SettingsModule } from '../settings/settings.module';
+import { ConversationHistoryService } from './conversation-history.service';
+import { NotificationService } from './notifications/notification.service';
 
 @Module({
     imports: [DatabaseModule, AIEngineModule, KnowledgeModule, ConfigModule, forwardRef(() => EmbedModule), ApiKeysModule, SettingsModule],
 
     controllers: [AIController],
 
-    providers: [AIService, LLMProviderFactory, S3Service],
-    exports: [AIService, S3Service, EmbedModule],
+    providers: [AIService, LLMProviderFactory, S3Service, ConversationHistoryService, NotificationService],
+    exports: [AIService, S3Service, EmbedModule, ConversationHistoryService, NotificationService],
 })
 export class AIModule { }
