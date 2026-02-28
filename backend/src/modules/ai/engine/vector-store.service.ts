@@ -52,66 +52,88 @@ export class VectorStoreService {
             // 1. Gera embedding da query
             const queryEmbedding = await this.generateEmbedding(queryText, embeddingProvider, embeddingModel, apiKeyOverride, baseUrlOverride);
 
-            // 2. Busca todos os chunks com embedding disponível
-            const whereClause: any = {
-                document: {
-                    status: 'READY',
-                    knowledgeBase: { companyId },
-                },
-                embedding: { not: null },
-            };
+            // Transforma o array em string no formato que o pgvector aceita '[0.1, 0.2, ...]'
+            const embeddingStr = `[${queryEmbedding.join(',')}]`;
+
+            // 2. Monta a busca híbrida.
+            // A buscar vetorial usa o operador de cosseno <=>. 
+            // A busca full-text ts_rank_cd usa plainto_tsquery combinando ambos os scores.
+            let results: any[];
 
             if (knowledgeBaseId) {
-                whereClause.document = {
-                    ...whereClause.document,
-                    knowledgeBaseId,
-                };
+                // Filtro para Base de Conhecimento Específica
+                results = await prisma.$queryRaw`
+                    WITH vector_search AS (
+                        SELECT 
+                            chunk.id,
+                            chunk.content,
+                            chunk."documentId",
+                            doc.title,
+                            (1 - (chunk.embedding <=> ${embeddingStr}::vector)) AS vector_score,
+                            ts_rank_cd(to_tsvector('portuguese', chunk.content), plainto_tsquery('portuguese', ${queryText})) AS text_score
+                        FROM document_chunks chunk
+                        JOIN documents doc ON doc.id = chunk."documentId"
+                        WHERE doc.status = 'READY'
+                          AND doc."knowledgeBaseId" = ${knowledgeBaseId}
+                          AND chunk.embedding IS NOT NULL
+                    )
+                    SELECT 
+                        id, content, "documentId", title as "documentTitle",
+                        (0.7 * vector_score) + (0.3 * text_score) AS score
+                    FROM vector_search
+                    ORDER BY score DESC
+                    LIMIT 20;
+                `;
+            } else {
+                // Filtro apenas por CompanyId (qualquer base da empresa)
+                results = await prisma.$queryRaw`
+                    WITH vector_search AS (
+                        SELECT 
+                            chunk.id,
+                            chunk.content,
+                            chunk."documentId",
+                            doc.title,
+                            (1 - (chunk.embedding <=> ${embeddingStr}::vector)) AS vector_score,
+                            ts_rank_cd(to_tsvector('portuguese', chunk.content), plainto_tsquery('portuguese', ${queryText})) AS text_score
+                        FROM document_chunks chunk
+                        JOIN documents doc ON doc.id = chunk."documentId"
+                        JOIN knowledge_bases kb ON kb.id = doc."knowledgeBaseId"
+                        WHERE doc.status = 'READY'
+                          AND kb."companyId" = ${companyId}
+                          AND chunk.embedding IS NOT NULL
+                    )
+                    SELECT 
+                        id, content, "documentId", title as "documentTitle",
+                        (0.7 * vector_score) + (0.3 * text_score) AS score
+                    FROM vector_search
+                    ORDER BY score DESC
+                    LIMIT 20;
+                `;
             }
 
-            const chunks = await prisma.documentChunk.findMany({
-                where: whereClause,
-                select: {
-                    id: true,
-                    content: true,
-                    embedding: true,
-                    documentId: true,
-                    document: { select: { title: true } },
-                },
-            });
-
-            if (chunks.length === 0) {
-                this.logger.debug('Nenhum chunk encontrado para busca de similaridade.');
+            if (!results || results.length === 0) {
+                this.logger.debug('Nenhum chunk encontrado na busca híbrida.');
                 return [];
             }
 
-            // 3. Calcula cosine similarity para cada chunk
-            const scored = chunks
-                .map((chunk: any) => {
-                    const chunkEmbedding = chunk.embedding as number[];
-                    if (!chunkEmbedding || !Array.isArray(chunkEmbedding) || chunkEmbedding.length === 0) {
-                        return null;
-                    }
-                    const score = cosineSimilarity(queryEmbedding, chunkEmbedding);
-                    return {
-                        content: chunk.content,
-                        score,
-                        documentId: chunk.documentId,
-                        documentTitle: chunk.document?.title,
-                    };
-                })
-                .filter((c): c is { content: string; score: number; documentId: string; documentTitle: string | undefined } => c !== null && !isNaN(c.score));
-
-            // 4. Ordena por score decrescente e retorna top N
-            scored.sort((a, b) => b.score - a.score);
-            const results = scored.slice(0, limit);
+            // 3. Fase 2: Re-ranking Inteligente
+            // Opcionalmente podemos aplicar um modelo Bi-Encoder aqui, mas como temos 
+            // a métrica bruta combinada forte, refinamos o Top-K exato
+            results.sort((a, b) => b.score - a.score);
+            const topResults = results.slice(0, limit).map(row => ({
+                content: row.content,
+                score: row.score,
+                documentId: row.documentId,
+                documentTitle: row.documentTitle,
+            }));
 
             this.logger.debug(
-                `Busca vetorial: ${chunks.length} chunks avaliados, top ${results.length} retornados (score máx: ${results[0]?.score?.toFixed(4) ?? 'N/A'})`,
+                `Hybrid Search pgvector: query resultou em ${results.length} chunks extraídos, re-rank mantendo Top ${topResults.length} (score máx: ${topResults[0]?.score?.toFixed(4) ?? 'N/A'})`
             );
 
-            return results;
+            return topResults;
         } catch (error) {
-            this.logger.error(`Erro na busca por similaridade: ${error.message}`);
+            this.logger.error(`Erro na busca híbrida por similaridade: ${error.message}`);
             return [];
         }
     }

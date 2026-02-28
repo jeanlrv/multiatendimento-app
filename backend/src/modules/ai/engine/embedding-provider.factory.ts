@@ -19,6 +19,15 @@ export interface EmbeddingProviderConfig {
 
 export const EMBEDDING_PROVIDERS: EmbeddingProviderConfig[] = [
     {
+        id: 'native',
+        name: 'Nativo (built-in CPU)',
+        envKey: '',
+        models: [
+            { id: 'Xenova/all-MiniLM-L6-v2', name: 'all-MiniLM-L6-v2 (Padrão e Rápido)', dimensions: 384 },
+            { id: 'Xenova/bge-micro-v2', name: 'bge-micro-v2 (Muito Leve e Rápido)', dimensions: 384 },
+        ],
+    },
+    {
         id: 'openai',
         name: 'OpenAI',
         envKey: 'OPENAI_API_KEY',
@@ -123,6 +132,8 @@ export class EmbeddingProviderFactory {
                 return this.createAzureEmbeddings(model, apiKeyOverride, baseUrlOverride);
             case 'voyage':
                 return this.createVoyageEmbeddings(model, apiKeyOverride);
+            case 'native':
+                return this.createNativeEmbeddings(model);
             default:
                 return this.createOpenAIEmbeddings('text-embedding-3-small', apiKeyOverride);
         }
@@ -182,12 +193,41 @@ export class EmbeddingProviderFactory {
         });
     }
 
+    private createNativeEmbeddings(model: string): Embeddings {
+        // Criamos um wrapper inline emulando a interface Embeddings (LangChain)
+        return {
+            embedDocuments: async (docs: string[]): Promise<number[][]> => {
+                const { pipeline } = await import('@xenova/transformers');
+                // Alocação usando a var feature-extraction pipeline
+                const extractor = await pipeline('feature-extraction', model, {
+                    quantized: true, // Usa versão mais leve na CPU
+                });
+
+                const embeddings = [];
+                for (const text of docs) {
+                    const output = await extractor(text, { pooling: 'mean', normalize: true });
+                    // Output config .data is Float32Array
+                    embeddings.push(Array.from(output.data as Float32Array));
+                }
+                return embeddings;
+            },
+            embedQuery: async (query: string): Promise<number[]> => {
+                const { pipeline } = await import('@xenova/transformers');
+                const extractor = await pipeline('feature-extraction', model, {
+                    quantized: true,
+                });
+                const output = await extractor(query, { pooling: 'mean', normalize: true });
+                return Array.from(output.data as Float32Array);
+            }
+        } as Embeddings;
+    }
+
     /**
      * Retorna todos os providers disponíveis (com base nas env vars configuradas).
      */
     getAvailableProviders(): { id: string; name: string; models: EmbeddingModelConfig[] }[] {
         return EMBEDDING_PROVIDERS.filter(p => {
-            if (p.id === 'ollama') return true; // Sempre disponível (local)
+            if (p.id === 'ollama' || p.id === 'native') return true; // Sempre disponível (local)
             return !!this.configService.get<string>(p.envKey);
         }).map(p => ({ id: p.id, name: p.name, models: p.models }));
     }

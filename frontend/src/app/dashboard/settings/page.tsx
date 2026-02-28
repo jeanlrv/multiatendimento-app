@@ -29,7 +29,7 @@ export default function SettingsPage() {
     ];
 
     return (
-        <div className="max-w-5xl mx-auto space-y-12 relative liquid-glass aurora min-h-[calc(100dvh-6rem)] md:min-h-[calc(100vh-8rem)] pb-20">
+        <div className="max-w-7xl mx-auto space-y-12 relative liquid-glass aurora min-h-[calc(100dvh-6rem)] md:min-h-[calc(100vh-8rem)] pb-20">
             <div className="relative z-10 px-4">
                 <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tighter italic flex items-center gap-4">
                     <Settings className="text-primary h-10 w-10 shadow-[0_0_20px_rgba(56,189,248,0.3)]" />
@@ -38,15 +38,14 @@ export default function SettingsPage() {
                 <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mt-1 ml-14 italic">Configurações de Missão e Identidade Corporativa</p>
             </div>
 
-            {/* Tabs Aero */}
-            <div className="flex gap-2 p-2 liquid-glass dark:bg-white/5 rounded-[2rem] border border-slate-200 dark:border-white/10 relative z-10 mx-4 shadow-xl overflow-x-auto no-scrollbar">
+            <div className="flex gap-2 p-2 liquid-glass dark:bg-white/5 rounded-[2rem] border border-slate-200 dark:border-white/10 relative z-10 mx-4 shadow-xl overflow-x-auto no-scrollbar scroll-smooth">
                 {tabs.map((tab) => (
                     <button
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id as any)}
-                        className={`flex items-center gap-3 px-6 py-3.5 rounded-[1.5rem] text-[10px] font-black uppercase tracking-[0.2em] transition-all relative overflow-hidden group whitespace-nowrap ${activeTab === tab.id
+                        className={`flex items-center gap-2 px-5 py-3 rounded-[1.5rem] text-[9px] font-black uppercase tracking-[0.1em] transition-all relative overflow-hidden group whitespace-nowrap ${activeTab === tab.id
                             ? 'bg-primary text-white shadow-2xl shadow-primary/30'
-                            : 'text-slate-500 hover:text-slate-800 dark:hover:text-white'
+                            : 'text-slate-500 hover:text-slate-800 dark:hover:text-white bg-slate-100/50 dark:bg-white/5'
                             }`}
                     >
                         {tab.icon} {tab.label}

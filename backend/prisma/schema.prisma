@@ -10,7 +10,7 @@ generator client {
 datasource db {
   provider   = "postgresql"
   url        = env("DATABASE_URL")
-  // extensions = [vector]
+  extensions = [vector]
 }
 
 // ============================================
@@ -499,8 +499,8 @@ model DocumentChunk {
   pageNumber Int?
   metadata   Json?
 
-  // Embeddings temporariamente armazenados como Json devido a limitações do pgvector no Railway
-  embedding Json?
+  // Embedding real usando o tipo vector() no Postgres
+  embedding Unsupported("vector")?
 
   document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
 

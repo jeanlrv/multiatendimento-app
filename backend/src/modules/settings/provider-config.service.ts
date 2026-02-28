@@ -126,29 +126,14 @@ export class ProviderConfigService {
 
         const { MULTIMODAL_MODELS } = require('../ai/engine/llm-provider.factory');
 
-        return LLM_PROVIDERS
-            .filter(p => {
-                // Verifica se empresa tem config no DB
-                const dbConfig = companyConfigs.get(p.id);
-                if (dbConfig && dbConfig.isEnabled) {
-                    // Providers locais só precisam da baseUrl
-                    if (p.id === 'ollama' || p.id === 'lmstudio') return true;
-                    // Outros precisam de apiKey
-                    return !!dbConfig.apiKey;
-                }
-                // Fallback: verifica env vars globais
-                if (p.id === 'ollama') return !!configService.get('OLLAMA_BASE_URL');
-                if (p.id === 'lmstudio') return !!configService.get('LMSTUDIO_BASE_URL');
-                return !!configService.get(p.envKey);
-            })
-            .map(p => ({
-                provider: p.id,
-                providerName: p.name,
-                models: p.models.map(m => ({
-                    ...m,
-                    multimodal: MULTIMODAL_MODELS.includes(m.id.split(':').pop() || m.id),
-                })),
-            }));
+        return LLM_PROVIDERS.map(p => ({
+            provider: p.id,
+            providerName: p.name,
+            models: p.models.map(m => ({
+                ...m,
+                multimodal: MULTIMODAL_MODELS.includes(m.id.split(':').pop() || m.id),
+            })),
+        }));
     }
 
     /** Retorna providers de embedding disponíveis para uma empresa (DB + env vars) */
@@ -157,18 +142,7 @@ export class ProviderConfigService {
         name: string;
         models: { id: string; name: string; dimensions: number }[];
     }[]> {
-        const companyConfigs = await this.getDecryptedForCompany(companyId);
-
-        return EMBEDDING_PROVIDERS.filter(p => {
-            const dbConfig = companyConfigs.get(p.id);
-            if (dbConfig && dbConfig.isEnabled) {
-                if (p.id === 'ollama') return true;
-                return !!dbConfig.apiKey;
-            }
-            // Fallback env vars
-            if (p.id === 'ollama') return true;
-            return !!configService.get(p.envKey);
-        }).map(p => ({ id: p.id, name: p.name, models: p.models }));
+        return EMBEDDING_PROVIDERS.map(p => ({ id: p.id, name: p.name, models: p.models }));
     }
 
     /** Mascara a API key para exibição segura */

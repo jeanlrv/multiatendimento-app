@@ -64,13 +64,23 @@ export class KnowledgeProcessor extends WorkerHost {
                     this.logger.warn(`Falha ao gerar embedding para chunk (continuando sem embedding): ${embErr.message}`);
                 }
 
-                await (this.prisma as any).documentChunk.create({
+                const createdChunk = await (this.prisma as any).documentChunk.create({
                     data: {
                         documentId,
                         content,
-                        embedding,
                     },
                 });
+
+                // Se gerou embedding com sucesso, injeta no banco via pgvector Raw SQL
+                if (embedding && embedding.length > 0) {
+                    const embeddingStr = `[${embedding.join(',')}]`;
+                    await this.prisma.$executeRaw`
+                        UPDATE document_chunks 
+                        SET embedding = ${embeddingStr}::vector 
+                        WHERE id = ${createdChunk.id}
+                    `;
+                }
+
                 chunkCount++;
             }
 

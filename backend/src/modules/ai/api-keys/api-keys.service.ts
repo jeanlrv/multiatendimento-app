@@ -13,7 +13,7 @@ export class ApiKeysService {
         const keyHash = createHash('sha256').update(token).digest('hex');
         const keyPrefix = token.substring(0, 12);
 
-        const apiKey = await (this.prisma as any).aPIKey.create({
+        const apiKey = await (this.prisma as any).apiKey.create({
             data: {
                 name,
                 keyHash,
@@ -31,7 +31,7 @@ export class ApiKeysService {
     }
 
     async listKeys(companyId: string) {
-        return (this.prisma as any).aPIKey.findMany({
+        return (this.prisma as any).apiKey.findMany({
             where: { companyId },
             include: {
                 agent: {
@@ -43,7 +43,7 @@ export class ApiKeysService {
     }
 
     async revokeKey(companyId: string, id: string) {
-        return (this.prisma as any).aPIKey.deleteMany({
+        return (this.prisma as any).apiKey.deleteMany({
             where: { id, companyId }
         });
     }
@@ -51,7 +51,7 @@ export class ApiKeysService {
     async validateKey(token: string) {
         const keyHash = createHash('sha256').update(token).digest('hex');
 
-        const apiKey = await (this.prisma as any).aPIKey.findUnique({
+        const apiKey = await (this.prisma as any).apiKey.findUnique({
             where: { keyHash },
             include: { agent: true }
         });
@@ -61,7 +61,7 @@ export class ApiKeysService {
         }
 
         // Atualizar lastUsedAt de forma assíncrona (não bloqueante)
-        (this.prisma as any).aPIKey.update({
+        (this.prisma as any).apiKey.update({
             where: { id: apiKey.id },
             data: { lastUsedAt: new Date() }
         }).catch(err => this.logger.error(`Erro ao atualizar lastUsedAt da API Key: ${err.message}`));

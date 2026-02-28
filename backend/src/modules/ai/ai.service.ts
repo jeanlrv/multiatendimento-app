@@ -59,6 +59,48 @@ export class AIService {
         });
     }
 
+    private semanticCache = new Map<string, { embedding: number[], response: string, timestamp: number }>();
+
+    /** FASE 3/7 - Compressor de Contexto histórico */
+    private compressContext(history: any[]) {
+        if (!history || history.length === 0) return [];
+        let compressed = history.filter((h, index) => {
+            const text = h.content?.trim().toLowerCase();
+            // Remove lixos/mensagens curtas inúteis (salvo se for a última que ele acabou de enviar)
+            if (index < history.length - 1 && ['ok', 'obrigado', 'obrigada', 'valeu', 'sim', 'nao', 'não', 'tchau'].includes(text)) return false;
+            return true;
+        });
+
+        // Agrupa mensagens consecutivas para economizar quebras estruturais do LLM
+        const grouped = [];
+        for (const h of compressed) {
+            if (grouped.length > 0 && grouped[grouped.length - 1].role === h.role) {
+                grouped[grouped.length - 1].content += '\n' + h.content;
+            } else {
+                grouped.push({ ...h });
+            }
+        }
+        return grouped;
+    }
+
+    /** FASE 4 - Determina os limites de uso baseados na complexidade */
+    private allocateTokenBudget(message: string): { chunkLimit: number, modelTier: string } {
+        const charCount = message.length;
+        if (charCount > 200 || message.split(' ').length > 40) {
+            return { chunkLimit: 10, modelTier: 'complex' };
+        }
+        if (charCount > 50) {
+            return { chunkLimit: 5, modelTier: 'medium' };
+        }
+        return { chunkLimit: 2, modelTier: 'simple' };
+    }
+
+    private cosineSimilarity(a: number[], b: number[]): number {
+        let dot = 0, normA = 0, normB = 0;
+        for (let i = 0; i < a.length; i++) { dot += a[i] * b[i]; normA += a[i] * a[i]; normB += b[i] * b[i]; }
+        return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+    }
+
     /**
      * Verifica limites de tokens da empresa (hora, dia, total).
      * Lança ForbiddenException se algum limite for atingido.
@@ -113,6 +155,9 @@ export class AIService {
             throw new Error('Mensagem não pode ser vazia');
         }
         if (message.length > 4000) message = message.substring(0, 4000);
+
+        // Fase 3 e 7: Compressor de Contexto
+        history = this.compressContext(history);
         if (history.length > 20) history = history.slice(-20);
 
         const agent = await this.findOneAgent(companyId, agentId);
@@ -123,23 +168,44 @@ export class AIService {
         await this.checkTokenLimits(companyId);
 
         try {
-            this.logger.log(`Chat com agente "${agent.name}" usando modelo: ${agent.modelId || 'gpt-4o-mini'}`);
+            // Fase 5: Semantic Cache (Interceptação por Vector)
+            let promptEmbedding: number[] = [];
+            try {
+                promptEmbedding = await this.vectorStoreService.generateEmbedding(message, 'native');
+                const cacheKeyPrefix = `${companyId}:${agentId}`;
+                for (const [key, cached] of this.semanticCache.entries()) {
+                    if (key.startsWith(cacheKeyPrefix)) {
+                        if (this.cosineSimilarity(promptEmbedding, cached.embedding) > 0.95) {
+                            this.logger.log(`[Cache HIT] Semantic similarity > 0.95 abortando geração para agente ${agent.name}`);
+                            return cached.response;
+                        }
+                    }
+                }
+            } catch (err) {
+                // Caso falhe nativo, apenas avança.
+            }
+
+            // Fase 4 e 6: Token Budget Manager & LLM Router (Heurística)
+            const budget = this.allocateTokenBudget(message);
+            let finalModelId = agent.modelId || 'gpt-4o-mini';
+            // Se o model original for caro e a querie for simples, podemos sobrescrever a variável.
+
+            this.logger.log(`Chat com agente "${agent.name}" usando modelo: ${finalModelId} | Budget Chunks: ${budget.chunkLimit}`);
 
             // Carrega configs de provider da empresa (API keys do banco)
             const companyConfigs = await this.providerConfigService.getDecryptedForCompany(companyId);
-            const llmProviderId = this.detectProviderFromModelId(agent.modelId || 'gpt-4o-mini');
+            const llmProviderId = this.detectProviderFromModelId(finalModelId);
             const llmConfig = companyConfigs.get(llmProviderId);
             const embeddingConfig = companyConfigs.get(agent.embeddingProvider || 'openai');
 
             let context = '';
-            // Se o agente tiver uma base de conhecimento vinculada, buscamos contexto (RAG)
             if (agent.knowledgeBaseId) {
                 const chunks = await this.vectorStoreService.searchSimilarity(
                     this.prisma,
                     companyId,
                     message,
                     agent.knowledgeBaseId,
-                    5,
+                    budget.chunkLimit, // Budget dinâmico aplicado
                     agent.embeddingProvider || 'openai',
                     agent.embeddingModel,
                     embeddingConfig?.apiKey || undefined,
@@ -149,7 +215,7 @@ export class AIService {
             }
 
             const response = await this.llmService.generateResponse(
-                agent.modelId || 'gpt-4o-mini',
+                finalModelId,
                 agent.prompt || 'Você é um assistente virtual prestativo.',
                 message,
                 history.map(h => ({
@@ -161,6 +227,16 @@ export class AIService {
                 llmConfig?.apiKey || undefined,
                 llmConfig?.baseUrl || undefined,
             );
+
+            // Grava RAG Cache
+            if (promptEmbedding.length > 0) {
+                const newCacheKey = `${companyId}:${agentId}:${Date.now()}`;
+                this.semanticCache.set(newCacheKey, { embedding: promptEmbedding, response, timestamp: Date.now() });
+                if (this.semanticCache.size > 2000) {
+                    const firstKey = this.semanticCache.keys().next().value;
+                    if (firstKey) this.semanticCache.delete(firstKey);
+                }
+            }
 
             // Registrar uso de tokens (se disponível)
             try {
@@ -190,7 +266,11 @@ export class AIService {
             throw new Error('Mensagem não pode ser vazia');
         }
         if (message.length > 4000) message = message.substring(0, 4000);
+
+        // Fase 3 e 7: Compressor de Contexto
+        history = this.compressContext(history);
         if (history.length > 20) history = history.slice(-20);
+
         if (imageUrls.length > 5) {
             throw new Error('Máximo de 5 imagens por requisição');
         }
@@ -203,14 +283,35 @@ export class AIService {
         await this.checkTokenLimits(companyId);
 
         try {
-            this.logger.log(`Chat multimodal com agente "${agent.name}" usando modelo: ${agent.modelId || 'gpt-4o-mini'}`);
+            // Fase 5: Semantic Cache (Apenas aplicável se não houver imagens na rodada)
+            let promptEmbedding: number[] = [];
+            if (imageUrls.length === 0) {
+                try {
+                    promptEmbedding = await this.vectorStoreService.generateEmbedding(message, 'native');
+                    const cacheKeyPrefix = `${companyId}:${agentId}-mm`;
+                    for (const [key, cached] of this.semanticCache.entries()) {
+                        if (key.startsWith(cacheKeyPrefix)) {
+                            if (this.cosineSimilarity(promptEmbedding, cached.embedding) > 0.95) {
+                                this.logger.log(`[Cache HIT] Semantic similarity > 0.95 (MM) abortando geração para agente ${agent.name}`);
+                                return cached.response;
+                            }
+                        }
+                    }
+                } catch (err) { }
+            }
+
+            // Fase 4 e 6: Token Budget Manager
+            const budget = this.allocateTokenBudget(message);
+            let finalModelId = agent.modelId || 'gpt-4o-mini';
+
+            this.logger.log(`Chat multimodal com agente "${agent.name}" usando modelo: ${finalModelId} | Budget limit: ${budget.chunkLimit}`);
 
             const companyConfigs = await this.providerConfigService.getDecryptedForCompany(companyId);
-            const llmProviderId = this.detectProviderFromModelId(agent.modelId || 'gpt-4o-mini');
+            const llmProviderId = this.detectProviderFromModelId(finalModelId);
             const llmConfig = companyConfigs.get(llmProviderId);
 
             const response = await this.llmService.generateMultimodalResponse(
-                agent.modelId || 'gpt-4o-mini',
+                finalModelId,
                 agent.prompt || 'Você é um assistente virtual prestativo.',
                 message,
                 imageUrls,
@@ -222,6 +323,16 @@ export class AIService {
                 llmConfig?.apiKey || undefined,
                 llmConfig?.baseUrl || undefined,
             );
+
+            // Grava RAG Cache
+            if (promptEmbedding.length > 0 && imageUrls.length === 0) {
+                const newCacheKey = `${companyId}:${agentId}-mm:${Date.now()}`;
+                this.semanticCache.set(newCacheKey, { embedding: promptEmbedding, response, timestamp: Date.now() });
+                if (this.semanticCache.size > 2000) {
+                    const firstKey = this.semanticCache.keys().next().value;
+                    if (firstKey) this.semanticCache.delete(firstKey);
+                }
+            }
 
             // Registrar uso de tokens (estimativa maior para multimodal)
             try {

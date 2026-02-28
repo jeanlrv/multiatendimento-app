@@ -222,6 +222,15 @@ export class KnowledgeService {
         });
     }
 
+    async updateBaseLanguage(companyId: string, id: string, language: string) {
+        const base = await this.findOneBase(companyId, id);
+
+        return (this.prisma as any).knowledgeBase.update({
+            where: { id },
+            data: { language }
+        });
+    }
+
     async getBaseStats(companyId: string, id: string) {
         const base = await this.findOneBase(companyId, id);
 
