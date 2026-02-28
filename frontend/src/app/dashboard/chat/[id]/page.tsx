@@ -140,7 +140,7 @@ export default function ChatPage() {
         }, 3000);
     };
 
-    const handleSendMessage = async (e: React.FormEvent) => {
+    const handleSendMessage = async (e: React.FormEvent, isInternal: boolean = false) => {
         e.preventDefault();
         if (!newMessage.trim()) return;
 
@@ -150,7 +150,8 @@ export default function ChatPage() {
         if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
 
         try {
-            await api.post(`/chat/${ticketId}/send`, { content: newMessage.trim(), type: 'TEXT' });
+            const type = isInternal ? 'INTERNAL' : 'TEXT';
+            await api.post(`/chat/${ticketId}/send`, { content: newMessage.trim(), type });
             setNewMessage('');
         } catch {
             toast.error('Erro ao enviar mensagem. Tente novamente.');
@@ -183,6 +184,26 @@ export default function ChatPage() {
             setUploading(false);
             if (e.target) e.target.value = '';
         }
+    };
+
+    const handleAudioUpload = async (blob: Blob) => {
+        setUploading(true);
+        const formData = new FormData();
+        formData.append('file', blob, 'recording.webm');
+
+        try {
+            const uploadRes = await api.post('/uploads', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+            });
+
+            const { url } = uploadRes.data;
+            await api.post(`/chat/${ticketId}/send`, { content: '', type: 'AUDIO', mediaUrl: url });
+        } catch {
+            toast.error('Falha ao enviar áudio gravado.');
+        } finally {
+            setUploading(true);
+        }
+        setUploading(false);
     };
 
     const handleTransferSuccess = () => {
@@ -238,6 +259,7 @@ export default function ChatPage() {
                     setNewMessage={handleMessageChange}
                     onSendMessage={handleSendMessage}
                     onFileUpload={handleFileUpload}
+                    onAudioUpload={handleAudioUpload}
                     uploading={uploading}
                 />
 

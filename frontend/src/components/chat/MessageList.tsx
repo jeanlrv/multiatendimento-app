@@ -1,120 +1,59 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
-import { ChevronDown } from 'lucide-react';
+import React from 'react';
 import { MessageBubble } from './MessageBubble';
+import { isSameDay, format, isYesterday } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
-interface MessageListProps {
-    messages: any[];
-    messagesEndRef: React.RefObject<HTMLDivElement>;
+interface Message {
+    id: string;
+    content: string;
+    fromMe: boolean;
+    sentAt: string;
+    messageType: string;
+    mediaUrl?: string;
+    status?: string;
+    origin?: 'AGENT' | 'CLIENT' | 'AI';
 }
 
-export const MessageList: React.FC<MessageListProps> = ({ messages, messagesEndRef }) => {
-    const [showScrollBtn, setShowScrollBtn] = useState(false);
-    const containerRef = useRef<HTMLDivElement>(null);
+interface MessageListProps {
+    messages: Message[];
+    messagesEndRef: React.RefObject<HTMLDivElement>;
+    onReply?: (msg: any) => void;
+}
 
-    const handleScroll = useCallback(() => {
-        const el = containerRef.current;
-        if (!el) return;
-        const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-        setShowScrollBtn(distanceFromBottom > 250);
-    }, []);
+export const MessageList: React.FC<MessageListProps> = ({ messages, messagesEndRef, onReply }) => {
 
-    useEffect(() => {
-        const el = containerRef.current;
-        if (!el) return;
-        el.addEventListener('scroll', handleScroll, { passive: true });
-        return () => el.removeEventListener('scroll', handleScroll);
-    }, [handleScroll]);
+    const renderDateSeparator = (date: Date) => {
+        let label = format(date, "d 'de' MMMM", { locale: ptBR });
+        if (isSameDay(date, new Date())) label = 'Hoje';
+        else if (isYesterday(date)) label = 'Ontem';
 
-    const scrollToBottom = () => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        return (
+            <div className="flex justify-center my-8 relative" key={`sep-${date.getTime()}`}>
+                <div className="absolute inset-x-0 top-1/2 h-px bg-gradient-to-r from-transparent via-gray-200 dark:via-white/5 to-transparent" />
+                <span className="relative px-4 py-1.5 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md rounded-full text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 border border-gray-100 dark:border-white/5 shadow-sm">
+                    {label}
+                </span>
+            </div>
+        );
     };
 
-    // Agrupar mensagens por data para exibir separadores
-    const grouped = groupMessagesByDate(messages);
-
     return (
-        <div className="relative flex-1 overflow-hidden">
-            <div
-                ref={containerRef}
-                className="h-full overflow-y-auto px-8 py-6 space-y-2 sober-gradient custom-scrollbar"
-            >
-                <AnimatePresence initial={false}>
-                    {grouped.map((item, index) => {
-                        if (item.type === 'separator') {
-                            return (
-                                <div key={`sep-${item.date}`} className="flex items-center gap-3 py-2">
-                                    <div className="flex-1 h-px bg-white/10 dark:bg-white/5" />
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 bg-white/30 dark:bg-black/20 px-3 py-1 rounded-full backdrop-blur-sm">
-                                        {item.date}
-                                    </span>
-                                    <div className="flex-1 h-px bg-white/10 dark:bg-white/5" />
-                                </div>
-                            );
-                        }
-                        return (
-                            <MessageBubble
-                                key={item.msg.id || index}
-                                msg={item.msg}
-                                index={index}
-                            />
-                        );
-                    })}
-                </AnimatePresence>
-                <div ref={messagesEndRef} />
-            </div>
+        <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 custom-scrollbar scroll-smooth">
+            <div className="flex flex-col space-y-6">
+                {messages.map((msg, index) => {
+                    const currentDate = new Date(msg.sentAt);
+                    const prevDate = index > 0 ? new Date(messages[index - 1].sentAt) : null;
+                    const showSeparator = !prevDate || !isSameDay(currentDate, prevDate);
 
-            {/* Botão flutuante scroll-to-bottom */}
-            <AnimatePresence>
-                {showScrollBtn && (
-                    <motion.button
-                        initial={{ opacity: 0, scale: 0.8, y: 10 }}
-                        animate={{ opacity: 1, scale: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.8, y: 10 }}
-                        onClick={scrollToBottom}
-                        className="absolute bottom-4 right-6 p-3 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl shadow-xl shadow-blue-500/30 transition-colors z-10"
-                        title="Ir para o final"
-                    >
-                        <ChevronDown className="w-5 h-5" />
-                    </motion.button>
-                )}
-            </AnimatePresence>
+                    return (
+                        <React.Fragment key={msg.id || index}>
+                            {showSeparator && renderDateSeparator(currentDate)}
+                            <MessageBubble msg={msg as any} index={index} onReply={onReply} />
+                        </React.Fragment>
+                    );
+                })}
+            </div>
+            <div ref={messagesEndRef} className="h-4" />
         </div>
     );
 };
-
-// Agrupa mensagens por data e insere separadores
-function groupMessagesByDate(messages: any[]) {
-    const result: { type: 'message' | 'separator'; msg?: any; date?: string }[] = [];
-    let lastDate = '';
-
-    for (const msg of messages) {
-        const dateLabel = formatDateLabel(msg.sentAt);
-        if (dateLabel !== lastDate) {
-            result.push({ type: 'separator', date: dateLabel });
-            lastDate = dateLabel;
-        }
-        result.push({ type: 'message', msg });
-    }
-
-    return result;
-}
-
-function formatDateLabel(isoDate: string): string {
-    const date = new Date(isoDate);
-    const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(today.getDate() - 1);
-
-    if (isSameDay(date, today)) return 'Hoje';
-    if (isSameDay(date, yesterday)) return 'Ontem';
-    return date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
-}
-
-function isSameDay(a: Date, b: Date): boolean {
-    return (
-        a.getFullYear() === b.getFullYear() &&
-        a.getMonth() === b.getMonth() &&
-        a.getDate() === b.getDate()
-    );
-}

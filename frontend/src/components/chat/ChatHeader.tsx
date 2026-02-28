@@ -50,29 +50,35 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({ ticket, onTransfer, onBa
                     </div>
 
                     <div className="min-w-0">
-                        <h3 className="text-lg font-black text-gray-900 dark:text-white leading-tight tracking-tight truncate">
-                            {contact?.name || 'Contato'}
-                        </h3>
-                        <div className="flex items-center gap-2 flex-wrap mt-0.5">
-                            <span className="h-2 w-2 bg-green-500 rounded-full animate-pulse shrink-0" />
-                            <span className="text-[10px] text-gray-400 font-black uppercase tracking-widest">
-                                {STATUS_LABELS[ticket?.status] ?? ticket?.status}
-                            </span>
+                        <div className="flex items-center gap-2">
+                            <h3 className="text-lg font-black text-gray-900 dark:text-white leading-tight tracking-tight truncate">
+                                {contact?.name || 'Contato'}
+                            </h3>
+                            {ticket?.department && (
+                                <span className="px-2 py-0.5 bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-lg text-[9px] font-black uppercase tracking-widest border border-blue-500/20">
+                                    {ticket.department.name}
+                                </span>
+                            )}
+                        </div>
+                        <div className="flex items-center gap-2 flex-wrap mt-1">
+                            <div className="flex items-center gap-1.5 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                                <span className="h-1.5 w-1.5 bg-emerald-500 rounded-full animate-pulse shrink-0" />
+                                <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-black uppercase tracking-widest">
+                                    {STATUS_LABELS[ticket?.status] ?? ticket?.status}
+                                </span>
+                            </div>
 
                             {contact?.phoneNumber && (
-                                <>
-                                    <span className="text-gray-300 dark:text-gray-600 text-[10px]">•</span>
-                                    <span className="text-[10px] text-gray-400 font-mono flex items-center gap-1">
-                                        <Phone size={9} />
-                                        {contact.phoneNumber}
-                                    </span>
-                                </>
+                                <span className="text-[10px] text-gray-400 font-mono bg-gray-100 dark:bg-white/5 px-2 py-0.5 rounded-full border border-gray-200 dark:border-white/5 flex items-center gap-1">
+                                    <Phone size={9} className="opacity-70" />
+                                    {contact.phoneNumber}
+                                </span>
                             )}
 
                             {ticket?.tags?.map(({ tag }: any) => (
                                 <span
                                     key={tag.id}
-                                    className="px-2 py-0.5 rounded-lg text-[9px] font-black text-white shadow-sm uppercase tracking-tighter"
+                                    className="px-2 py-0.5 rounded-full text-[9px] font-black text-white shadow-sm uppercase tracking-tighter border border-black/5"
                                     style={{ backgroundColor: tag.color }}
                                 >
                                     {tag.name}
@@ -88,8 +94,8 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({ ticket, onTransfer, onBa
                         onClick={() => setShowInfo(!showInfo)}
                         title={hasInfo ? 'Informações do contato' : 'Sem informações cadastradas'}
                         className={`p-3 rounded-2xl transition-all shadow-sm border flex items-center gap-2 font-bold text-xs ${showInfo
-                                ? 'bg-blue-600 text-white border-blue-500 shadow-blue-500/30'
-                                : 'bg-white/50 dark:bg-white/5 hover:bg-blue-600 hover:text-white dark:hover:bg-blue-600 text-gray-400 border-white/20 dark:border-white/10'
+                            ? 'bg-blue-600 text-white border-blue-500 shadow-blue-500/30'
+                            : 'bg-white/50 dark:bg-white/5 hover:bg-blue-600 hover:text-white dark:hover:bg-blue-600 text-gray-400 border-white/20 dark:border-white/10'
                             }`}
                     >
                         <Info size={18} />

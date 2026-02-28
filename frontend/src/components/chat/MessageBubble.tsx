@@ -157,11 +157,19 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ msg, index, onRepl
                     </div>
                 )}
 
-                {/* Conteúdo de texto */}
+                {/* Conteúdo de texto com Markdown básico */}
                 {msg.content && (
-                    <p className="text-sm font-medium leading-relaxed select-text whitespace-pre-wrap break-words">
-                        {msg.content}
-                    </p>
+                    <div className="text-sm font-medium leading-relaxed select-text whitespace-pre-wrap break-words">
+                        {(() => {
+                            // Regex simples para *bold*, _italic_, ~strike~
+                            let content = msg.content
+                                .replace(/\*(.*?)\*/g, '<strong class="font-black">$1</strong>')
+                                .replace(/_(.*?)_/g, '<em class="italic opacity-90">$1</em>')
+                                .replace(/~(.*?)~/g, '<del class="line-through opacity-70">$1</del>');
+
+                            return <div dangerouslySetInnerHTML={{ __html: content }} />;
+                        })()}
+                    </div>
                 )}
 
                 {/* Rodapé: hora + status */}

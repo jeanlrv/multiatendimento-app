@@ -680,7 +680,7 @@ export default function TicketsPage() {
     return (
         <div className="flex flex-col md:flex-row h-full gap-3 md:gap-4 max-w-full relative overflow-hidden">
             {/* Lista de Tickets - Esquerda */}
-            <div className={`w-full md:w-[340px] lg:w-[380px] h-full flex-shrink-0 flex flex-col liquid-glass md:rounded-2xl overflow-hidden border border-slate-200 dark:border-white/10 shadow-xl relative aurora transition-all duration-300 ${selectedTicket ? 'hidden md:flex' : 'flex'}`}>
+            <div className={`w-full md:w-[300px] lg:w-[340px] xl:w-[380px] h-full flex-shrink-0 flex flex-col liquid-glass md:rounded-2xl overflow-hidden border border-slate-200 dark:border-white/10 shadow-xl relative aurora transition-all duration-300 ${selectedTicket ? 'hidden md:flex' : 'flex'}`}>
                 {/* Header da Lista */}
                 <div className="p-3 md:p-4 border-b border-slate-200 dark:border-white/5 relative z-10">
                     <div className="flex items-center justify-between mb-4">
@@ -986,16 +986,21 @@ export default function TicketsPage() {
                                                 </p>
                                             )}
 
-                                            <div className="flex flex-wrap gap-1">
-                                                {ticket.tags?.map((t: any) => (
+                                            <div className="flex flex-wrap gap-1 overflow-hidden max-h-5">
+                                                {ticket.tags?.slice(0, 2).map((t: any) => (
                                                     <span
                                                         key={t.tag.id}
-                                                        className="px-2 py-0.5 rounded-lg text-[7px] font-black uppercase tracking-widest border border-white/20"
+                                                        className="px-1.5 py-0.5 rounded-lg text-[7px] font-black uppercase tracking-widest border border-white/20 truncate max-w-[80px]"
                                                         style={{ backgroundColor: `${t.tag.color}20`, color: t.tag.color }}
                                                     >
                                                         {t.tag.name}
                                                     </span>
                                                 ))}
+                                                {(ticket.tags?.length || 0) > 2 && (
+                                                    <span className="text-[7px] font-black text-slate-400 self-center">
+                                                        +{(ticket.tags?.length || 0) - 2}
+                                                    </span>
+                                                )}
                                             </div>
 
                                             <div className="flex items-center justify-between mt-auto">
@@ -1075,24 +1080,12 @@ export default function TicketsPage() {
                                 <div className="min-w-0 flex-1">
                                     <div className="flex items-center gap-1.5 flex-wrap">
                                         <h3 className="font-black text-sm md:text-base text-slate-900 dark:text-white tracking-tight leading-none truncate max-w-[120px] md:max-w-[200px]">{selectedTicket.contact.name}</h3>
-                                        <div className="flex items-center gap-1.5 flex-wrap">
-                                            <span className="text-[11px] font-mono text-slate-400 bg-slate-100 dark:bg-white/5 px-2 py-0.5 rounded-lg border border-slate-200 dark:border-white/10 flex items-center gap-1.5 group/id">
-                                                #{selectedTicket.id.substring(selectedTicket.id.length - 6).toUpperCase()}
-                                                <button
-                                                    onClick={() => {
-                                                        navigator.clipboard.writeText(selectedTicket.id);
-                                                        toast.success("ID do Ticket copiado!");
-                                                    }}
-                                                    className="opacity-0 group-hover/id:opacity-100 transition-opacity"
-                                                >
-                                                    <Copy size={10} className="text-slate-400 hover:text-primary" />
-                                                </button>
-                                            </span>
+                                        <div className="flex items-center gap-1 flex-wrap">
                                             {selectedTicket.assignedUser ? (
                                                 <div className="flex items-center gap-1.5 bg-blue-50 dark:bg-blue-500/10 px-2.5 py-1 rounded-xl border border-blue-100 dark:border-blue-500/20">
                                                     <User size={10} className="text-blue-600 dark:text-blue-400" />
                                                     <span className="text-[9px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest leading-none">
-                                                        Responsável: {selectedTicket.assignedUser.name}
+                                                        {selectedTicket.assignedUser.name.split(' ')[0]}
                                                     </span>
                                                 </div>
                                             ) : (
@@ -1104,21 +1097,23 @@ export default function TicketsPage() {
                                                             await ticketsService.assign(selectedTicket.id, user!.id);
                                                             setSelectedTicket(prev => prev ? { ...prev, assignedUser: user as any } : null);
                                                             fetchTickets();
-                                                            toast.success("Você assumiu este chamado!");
+                                                            toast.success("Você assumiu!");
                                                         } catch (error) {
-                                                            toast.error("Erro ao assumir chamado");
+                                                            toast.error("Erro ao assumir");
                                                         } finally {
                                                             setIsAssigning(false);
                                                         }
                                                     }}
-                                                    className="flex items-center gap-1.5 bg-amber-50 dark:bg-amber-500/10 px-2.5 py-1 rounded-xl border border-amber-100 dark:border-amber-500/20 hover:bg-amber-100 dark:hover:bg-amber-500/20 transition-all active:scale-95 disabled:opacity-50"
+                                                    className="flex items-center gap-1 bg-amber-50 dark:bg-amber-500/10 px-2 py-1 rounded-xl border border-amber-100 dark:border-amber-500/20 hover:bg-amber-100 dark:hover:bg-amber-500/20 transition-all active:scale-95 disabled:opacity-50"
                                                 >
-                                                    <User size={10} className={`text-amber-600 dark:text-amber-400 ${isAssigning ? 'animate-spin' : ''}`} />
-                                                    <span className="text-[9px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-widest leading-none">
-                                                        {isAssigning ? 'Atendendo...' : 'Não atribuído — Atender'}
+                                                    <span className="text-[8px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-widest leading-none">
+                                                        Atender
                                                     </span>
                                                 </button>
                                             )}
+                                            <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${selectedTicket.mode === 'AI' ? 'bg-blue-500/20 text-blue-500' : selectedTicket.mode === 'HUMANO' ? 'bg-amber-500/20 text-amber-500' : 'bg-emerald-500/20 text-emerald-500'}`}>
+                                                {selectedTicket.mode}
+                                            </span>
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-2 mt-1 flex-wrap min-h-[1.25rem]">
@@ -1156,20 +1151,15 @@ export default function TicketsPage() {
                                                     setIsEditingSubject(true);
                                                 }}
                                             >
-                                                <p className="text-xs font-bold text-slate-500 dark:text-slate-400 tracking-tight">
+                                                <p className="text-xs font-bold text-slate-500 dark:text-slate-400 tracking-tight truncate max-w-[250px]">
                                                     {selectedTicket.subject || 'Sem assunto (clique para editar)'}
                                                 </p>
                                                 <Edit3 size={10} className="text-slate-400 opacity-0 group-hover/subject:opacity-100 transition-opacity" />
                                             </div>
                                         )}
-                                        <div className="h-4 w-[1px] bg-slate-200 dark:border-white/10 mx-1" />
-                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none border-r border-slate-200 dark:border-white/10 pr-3">{selectedTicket.contact.phoneNumber}</p>
+                                        <div className="h-3 w-[1px] bg-slate-200 dark:bg-white/10 mx-1" />
                                         <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">
-                                            <p className="text-primary italic">{selectedTicket.department.name}</p>
-                                            <div className="h-1 w-1 rounded-full bg-slate-300" />
-                                            <span className={`px-2 py-0.5 rounded-md ${selectedTicket.mode === 'AI' ? 'bg-blue-500/20 text-blue-500' : selectedTicket.mode === 'HUMANO' ? 'bg-amber-500/20 text-amber-500' : 'bg-emerald-500/20 text-emerald-500'}`}>
-                                                {selectedTicket.mode}
-                                            </span>
+                                            <p className="text-primary italic truncate max-w-[100px]">{selectedTicket.department.name}</p>
                                         </div>
                                     </div>
                                 </div>
@@ -1270,117 +1260,117 @@ export default function TicketsPage() {
 
                                     {/* Dropdown Flutuante */}
                                     <AnimatePresence>
-                                    {showOptionsMenu && (
-                                    <motion.div
-                                        initial={{ opacity: 0, scale: 0.95, y: -4 }}
-                                        animate={{ opacity: 1, scale: 1, y: 0 }}
-                                        exit={{ opacity: 0, scale: 0.95, y: -4 }}
-                                        transition={{ duration: 0.15 }}
-                                        className="absolute top-full right-0 mt-1 w-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 shadow-2xl rounded-2xl p-2 z-[60] flex flex-col gap-1">
+                                        {showOptionsMenu && (
+                                            <motion.div
+                                                initial={{ opacity: 0, scale: 0.95, y: -4 }}
+                                                animate={{ opacity: 1, scale: 1, y: 0 }}
+                                                exit={{ opacity: 0, scale: 0.95, y: -4 }}
+                                                transition={{ duration: 0.15 }}
+                                                className="absolute top-full right-0 mt-1 w-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 shadow-2xl rounded-2xl p-2 z-[60] flex flex-col gap-1">
 
-                                        {/* Pausar */}
-                                        <button
-                                            disabled={isPausing}
-                                            onClick={async () => {
-                                                try {
-                                                    setIsPausing(true);
-                                                    await api.post(`/tickets/${selectedTicket.id}/status`, { status: 'PAUSED' });
-                                                    toast.success("Atendimento pausado");
-                                                    setSelectedTicket(null);
-                                                    fetchTickets();
-                                                } catch (error) {
-                                                    toast.error("Erro ao pausar atendimento");
-                                                } finally {
-                                                    setIsPausing(false);
-                                                }
-                                            }}
-                                            className="w-full flex items-center gap-3 p-3 hover:bg-amber-50 dark:hover:bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-xl transition-all disabled:opacity-50 text-left"
-                                        >
-                                            <Clock className="h-4 w-4" />
-                                            <span className="text-[10px] font-black uppercase tracking-widest">{isPausing ? 'Pausando...' : 'Pausar Atendimento'}</span>
-                                        </button>
+                                                {/* Pausar */}
+                                                <button
+                                                    disabled={isPausing}
+                                                    onClick={async () => {
+                                                        try {
+                                                            setIsPausing(true);
+                                                            await api.post(`/tickets/${selectedTicket.id}/status`, { status: 'PAUSED' });
+                                                            toast.success("Atendimento pausado");
+                                                            setSelectedTicket(null);
+                                                            fetchTickets();
+                                                        } catch (error) {
+                                                            toast.error("Erro ao pausar atendimento");
+                                                        } finally {
+                                                            setIsPausing(false);
+                                                        }
+                                                    }}
+                                                    className="w-full flex items-center gap-3 p-3 hover:bg-amber-50 dark:hover:bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-xl transition-all disabled:opacity-50 text-left"
+                                                >
+                                                    <Clock className="h-4 w-4" />
+                                                    <span className="text-[10px] font-black uppercase tracking-widest">{isPausing ? 'Pausando...' : 'Pausar Atendimento'}</span>
+                                                </button>
 
-                                        {/* Transferir */}
-                                        <button
-                                            onClick={() => setShowTransferModal(true)}
-                                            className="w-full flex items-center gap-3 p-3 hover:bg-blue-50 dark:hover:bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-xl transition-all text-left"
-                                        >
-                                            <ArrowRightLeft className="h-4 w-4" />
-                                            <span className="text-[10px] font-black uppercase tracking-widest">Transferir Ticket</span>
-                                        </button>
+                                                {/* Transferir */}
+                                                <button
+                                                    onClick={() => setShowTransferModal(true)}
+                                                    className="w-full flex items-center gap-3 p-3 hover:bg-blue-50 dark:hover:bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-xl transition-all text-left"
+                                                >
+                                                    <ArrowRightLeft className="h-4 w-4" />
+                                                    <span className="text-[10px] font-black uppercase tracking-widest">Transferir Ticket</span>
+                                                </button>
 
-                                        <div className="h-[1px] w-full bg-slate-100 dark:bg-white/5 my-1" />
+                                                <div className="h-[1px] w-full bg-slate-100 dark:bg-white/5 my-1" />
 
-                                        {/* Prioridade */}
-                                        <div className="px-3 py-2">
-                                            <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">Prioridade</div>
-                                            <div className="grid grid-cols-2 gap-1">
-                                                {(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const).map((p) => (
-                                                    <button
-                                                        key={p}
-                                                        onClick={async () => {
-                                                            try {
-                                                                await ticketsService.update(selectedTicket.id, { priority: p });
-                                                                setSelectedTicket(prev => prev ? { ...prev, priority: p } : null);
-                                                                fetchTickets();
-                                                                toast.success(`Prioridade alterada!`);
-                                                            } catch (error) {
-                                                                toast.error("Erro ao alterar prioridade");
-                                                            }
-                                                        }}
-                                                        className={`px-2 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-tighter transition-all text-center ${selectedTicket.priority === p
-                                                            ? p === 'CRITICAL' ? 'bg-rose-500 text-white shadow-md' :
-                                                                p === 'HIGH' ? 'bg-amber-500 text-white shadow-md' :
-                                                                    p === 'MEDIUM' ? 'bg-blue-500 text-white shadow-md' :
-                                                                        'bg-slate-500 text-white shadow-md'
-                                                            : 'bg-slate-100 dark:bg-white/5 text-slate-500 hover:bg-slate-200 dark:hover:bg-white/10'
-                                                            }`}
-                                                    >
-                                                        {p === 'CRITICAL' ? 'Crítico' : p === 'HIGH' ? 'Alta' : p === 'MEDIUM' ? 'Média' : 'Baixa'}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        </div>
+                                                {/* Prioridade */}
+                                                <div className="px-3 py-2">
+                                                    <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">Prioridade</div>
+                                                    <div className="grid grid-cols-2 gap-1">
+                                                        {(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const).map((p) => (
+                                                            <button
+                                                                key={p}
+                                                                onClick={async () => {
+                                                                    try {
+                                                                        await ticketsService.update(selectedTicket.id, { priority: p });
+                                                                        setSelectedTicket(prev => prev ? { ...prev, priority: p } : null);
+                                                                        fetchTickets();
+                                                                        toast.success(`Prioridade alterada!`);
+                                                                    } catch (error) {
+                                                                        toast.error("Erro ao alterar prioridade");
+                                                                    }
+                                                                }}
+                                                                className={`px-2 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-tighter transition-all text-center ${selectedTicket.priority === p
+                                                                    ? p === 'CRITICAL' ? 'bg-rose-500 text-white shadow-md' :
+                                                                        p === 'HIGH' ? 'bg-amber-500 text-white shadow-md' :
+                                                                            p === 'MEDIUM' ? 'bg-blue-500 text-white shadow-md' :
+                                                                                'bg-slate-500 text-white shadow-md'
+                                                                    : 'bg-slate-100 dark:bg-white/5 text-slate-500 hover:bg-slate-200 dark:hover:bg-white/10'
+                                                                    }`}
+                                                            >
+                                                                {p === 'CRITICAL' ? 'Crítico' : p === 'HIGH' ? 'Alta' : p === 'MEDIUM' ? 'Média' : 'Baixa'}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
 
-                                        <div className="h-[1px] w-full bg-slate-100 dark:bg-white/5 my-1" />
+                                                <div className="h-[1px] w-full bg-slate-100 dark:bg-white/5 my-1" />
 
-                                        {/* Tags / Categorias */}
-                                        <div className="px-3 py-2">
-                                            <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">Categorizar (Tags)</div>
-                                            <div className="max-h-32 overflow-y-auto custom-scrollbar flex flex-col gap-1">
-                                                {availableTags.map(tag => {
-                                                    const currentTagIds = selectedTicket.tags?.map((t: any) => t.tag?.id || t.id) || [];
-                                                    const isApplied = currentTagIds.includes(tag.id);
-                                                    return (
-                                                        <button
-                                                            key={tag.id}
-                                                            onClick={async () => {
-                                                                const newTagIds = isApplied
-                                                                    ? currentTagIds.filter((id: string) => id !== tag.id)
-                                                                    : [...currentTagIds, tag.id];
-                                                                try {
-                                                                    const updated = await ticketsService.update(selectedTicket.id, { tagIds: newTagIds });
-                                                                    setSelectedTicket((prev: any) => prev ? { ...prev, tags: updated.tags ?? prev.tags } : prev);
-                                                                    setTickets((prev: any[]) => prev.map((t: any) => t.id === selectedTicket.id ? { ...t, tags: updated.tags ?? t.tags } : t));
-                                                                } catch {
-                                                                    toast.error('Erro ao atualizar tags');
-                                                                }
-                                                            }}
-                                                            className={`w-full flex items-center gap-2 p-2 rounded-lg transition-all text-left border ${isApplied ? 'bg-primary/10 border-primary/30' : 'hover:bg-slate-100 dark:hover:bg-white/5 border-transparent'}`}
-                                                        >
-                                                            <div className="h-2 w-2 rounded-full shadow-sm flex-shrink-0" style={{ backgroundColor: tag.color }} />
-                                                            <span className="text-[10px] font-bold text-slate-700 dark:text-gray-300 truncate flex-1">{tag.name}</span>
-                                                            {isApplied && <span className="text-[9px] text-primary font-black">✓</span>}
-                                                        </button>
-                                                    );
-                                                })}
-                                                {availableTags.length === 0 && (
-                                                    <div className="p-2 text-[9px] text-gray-400 italic text-center">Nenhuma tag</div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </motion.div>
-                                    )}
+                                                {/* Tags / Categorias */}
+                                                <div className="px-3 py-2">
+                                                    <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">Categorizar (Tags)</div>
+                                                    <div className="max-h-32 overflow-y-auto custom-scrollbar flex flex-col gap-1">
+                                                        {availableTags.map(tag => {
+                                                            const currentTagIds = selectedTicket.tags?.map((t: any) => t.tag?.id || t.id) || [];
+                                                            const isApplied = currentTagIds.includes(tag.id);
+                                                            return (
+                                                                <button
+                                                                    key={tag.id}
+                                                                    onClick={async () => {
+                                                                        const newTagIds = isApplied
+                                                                            ? currentTagIds.filter((id: string) => id !== tag.id)
+                                                                            : [...currentTagIds, tag.id];
+                                                                        try {
+                                                                            const updated = await ticketsService.update(selectedTicket.id, { tagIds: newTagIds });
+                                                                            setSelectedTicket((prev: any) => prev ? { ...prev, tags: updated.tags ?? prev.tags } : prev);
+                                                                            setTickets((prev: any[]) => prev.map((t: any) => t.id === selectedTicket.id ? { ...t, tags: updated.tags ?? t.tags } : t));
+                                                                        } catch {
+                                                                            toast.error('Erro ao atualizar tags');
+                                                                        }
+                                                                    }}
+                                                                    className={`w-full flex items-center gap-2 p-2 rounded-lg transition-all text-left border ${isApplied ? 'bg-primary/10 border-primary/30' : 'hover:bg-slate-100 dark:hover:bg-white/5 border-transparent'}`}
+                                                                >
+                                                                    <div className="h-2 w-2 rounded-full shadow-sm flex-shrink-0" style={{ backgroundColor: tag.color }} />
+                                                                    <span className="text-[10px] font-bold text-slate-700 dark:text-gray-300 truncate flex-1">{tag.name}</span>
+                                                                    {isApplied && <span className="text-[9px] text-primary font-black">✓</span>}
+                                                                </button>
+                                                            );
+                                                        })}
+                                                        {availableTags.length === 0 && (
+                                                            <div className="p-2 text-[9px] text-gray-400 italic text-center">Nenhuma tag</div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </motion.div>
+                                        )}
                                     </AnimatePresence>
                                 </div>
 
@@ -1426,32 +1416,32 @@ export default function TicketsPage() {
                                         disabled={isResolving}
                                         onClick={() => {
                                             const ticketId = selectedTicket.id;
-                                            toast('Finalizar este atendimento?', {
+                                            toast('Finalizar atendimento?', {
                                                 action: {
-                                                    label: 'Confirmar',
+                                                    label: 'Finalizar',
                                                     onClick: async () => {
                                                         try {
                                                             setIsResolving(true);
                                                             await api.post(`/tickets/${ticketId}/resolve`, {});
-                                                            toast.success("Atendimento finalizado!");
+                                                            toast.success("Finalizado!");
                                                             setSelectedTicket(null);
                                                             fetchTickets();
                                                         } catch (error) {
-                                                            toast.error("Erro ao finalizar atendimento");
+                                                            toast.error("Erro ao finalizar");
                                                         } finally {
                                                             setIsResolving(false);
                                                         }
                                                     }
                                                 },
-                                                cancel: { label: 'Cancelar', onClick: () => { } },
-                                                duration: 5000,
+                                                cancel: { label: 'Voltar', onClick: () => { } },
+                                                duration: 4000,
                                             });
                                         }}
-                                        className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl shadow-lg shadow-emerald-500/20 transition-all disabled:opacity-50 active:scale-95 group"
+                                        className="flex items-center gap-2 px-3 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl shadow-lg transition-all disabled:opacity-50 active:scale-95 group"
                                     >
                                         <CheckCheck className="h-4 w-4 group-hover:scale-110 transition-transform" />
-                                        <span className="text-[10px] font-black uppercase tracking-widest hidden sm:block">
-                                            {isResolving ? 'Finalizando...' : 'Finalizar Atendimento'}
+                                        <span className="text-[9px] font-black uppercase tracking-widest hidden xl:block">
+                                            {isResolving ? '...' : 'Finalizar'}
                                         </span>
                                     </button>
                                 </div>
