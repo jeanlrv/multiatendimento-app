@@ -34,6 +34,7 @@ export interface ProviderConfigDecrypted {
 
 @Injectable()
 export class ProviderConfigService {
+    private readonly logger = new Logger(ProviderConfigService.name);
     constructor(
         private prisma: PrismaService,
         private crypto: CryptoService,
