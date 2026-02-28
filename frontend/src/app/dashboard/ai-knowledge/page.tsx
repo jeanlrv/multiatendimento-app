@@ -396,16 +396,13 @@ export default function AIKnowledgePage() {
                         {docMode === 'files' ? (
                             <>
                                 {/* Zona de upload — aceita todos os tipos, múltiplos arquivos */}
-                                <div
-                                    onClick={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        fileInputRef.current?.click();
-                                    }}
+                                <label
+                                    htmlFor="kb-file-upload"
                                     className="border-2 border-dashed border-slate-200 dark:border-white/10 rounded-3xl p-10 flex flex-col items-center justify-center cursor-pointer hover:bg-primary/5 transition-all group"
                                 >
                                     <input
                                         type="file"
+                                        id="kb-file-upload"
                                         ref={fileInputRef}
                                         onChange={handleFileChange}
                                         accept={ALL_FILE_ACCEPT}
@@ -421,7 +418,7 @@ export default function AIKnowledgePage() {
                                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2 italic text-center">
                                         PDF, Word, Excel, PowerPoint, TXT, CSV, JSON, Áudio e mais · Múltiplos arquivos · Max 50MB cada
                                     </p>
-                                </div>
+                                </label>
 
                                 {/* Lista de arquivos selecionados */}
                                 {uploadFiles.length > 0 && (
