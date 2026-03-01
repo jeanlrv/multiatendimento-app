@@ -217,14 +217,29 @@ export default function AIKnowledgePage() {
             setSubmitting(true);
 
             if (docMode === 'files') {
-                // Upload sequencial para evitar sobrecarregar o servidor (502)
+                // Upload sequencial — resiliente a falhas individuais
                 let uploaded = 0;
+                let failed = 0;
                 for (const file of uploadFiles) {
                     uploaded++;
                     toast.loading(`Enviando ${uploaded}/${uploadFiles.length}: ${file.name}`, { id: 'upload-progress' });
-                    await AIKnowledgeService.uploadDocument(selectedBase.id, file);
+                    try {
+                        await AIKnowledgeService.uploadDocument(selectedBase.id, file);
+                    } catch (fileErr) {
+                        failed++;
+                        console.error(`Falha no upload de ${file.name}:`, fileErr);
+                    }
                 }
                 toast.dismiss('upload-progress');
+
+                const success = uploadFiles.length - failed;
+                if (failed > 0 && success > 0) {
+                    toast.warning(`${success} enviado(s), ${failed} falhou(aram)`);
+                } else if (failed > 0 && success === 0) {
+                    toast.error(`Todos os ${failed} upload(s) falharam`);
+                } else {
+                    toast.success(`${success} arquivo(s) enviado(s) para processamento`);
+                }
             } else {
                 await AIKnowledgeService.addDocument(selectedBase.id, {
                     title: newDoc.title,
@@ -232,17 +247,18 @@ export default function AIKnowledgePage() {
                     rawContent: newDoc.rawContent,
                     contentUrl: newDoc.contentUrl,
                 });
+                toast.success('Conhecimento adicionado para processamento');
             }
 
             setIsDocModalOpen(false);
             fetchDocuments(selectedBase.id);
             setUploadFiles([]);
             setNewDoc({ title: '', sourceType: 'TEXT', rawContent: '' });
-            toast.success(docMode === 'files' ? `${uploadFiles.length} arquivo(s) enviado(s) para processamento` : 'Conhecimento adicionado para processamento');
         } catch (error) {
             console.error('Erro ao adicionar documento:', error);
             toast.error('Erro ao adicionar conhecimento');
         } finally {
+            toast.dismiss('upload-progress');
             setSubmitting(false);
         }
     };

@@ -71,26 +71,8 @@ export class KnowledgeProcessor extends WorkerHost {
 
             this.logger.log(`[Processor] Documento ${documentId} — provider: ${embeddingProvider}, model: ${embeddingModel ?? 'default'}, apiKey: ${embeddingApiKey ? 'configurada' : 'não encontrada (usará env var)'}`);
 
-            // Validação antecipada: se o provider precisa de API key e não encontramos, abortar cedo.
-            // Exceção: se AnythingLLM estiver configurado ou for 'native/ollama', prosseguir.
-            const requiresKey = !['native', 'ollama'].includes(embeddingProvider);
-            const anythingllmFallbackAvailable = (() => {
-                const u = process.env.ANYTHINGLLM_BASE_URL || process.env.ANYTHINGLLM_API_URL;
-                const k = process.env.ANYTHINGLLM_API_KEY;
-                return !!(u && k && k !== 'your-anythingllm-api-key' && embeddingProvider !== 'anythingllm');
-            })();
-
-            if (requiresKey && !embeddingApiKey && !process.env.OPENAI_API_KEY && !process.env[`${embeddingProvider.toUpperCase()}_API_KEY`]) {
-                if (anythingllmFallbackAvailable) {
-                    this.logger.warn(`Provider '${embeddingProvider}' sem chave, mas fallback AnythingLLM disponível.`);
-                } else {
-                    throw new Error(
-                        `Provider '${embeddingProvider}' requer API key, mas nenhuma foi encontrada ` +
-                        `(nem nas configurações da empresa nem nas variáveis de ambiente). ` +
-                        `Configure em Configurações > IA & Modelos.`
-                    );
-                }
-            }
+            // Validação antecipada removida. Deletada pois a responsabilidade de falhar
+            // caso a chave seja inválida ou ausente é do factory/provider no momento da criação/chamada.
 
             // Gera embeddings e acumula dados para inserção em lote
             const chunkData: { documentId: string; content: string; embedding?: any }[] = [];
@@ -102,35 +84,10 @@ export class KnowledgeProcessor extends WorkerHost {
                         content, embeddingProvider, embeddingModel, embeddingApiKey, embeddingBaseUrl
                     );
                 } catch (embErr) {
-                    // Fallback para AnythingLLM quando configurado: usa HTTP puro (OpenAI-compat),
-                    // sem libs nativas/WASM — seguro em Railway e qualquer container de produção.
-                    const anythingllmUrl = process.env.ANYTHINGLLM_BASE_URL || process.env.ANYTHINGLLM_API_URL;
-                    const anythingllmKey = process.env.ANYTHINGLLM_API_KEY;
-                    const canFallback = anythingllmUrl
-                        && anythingllmKey
-                        && anythingllmKey !== 'your-anythingllm-api-key'
-                        && embeddingProvider !== 'anythingllm';
-
-                    if (canFallback) {
-                        this.logger.warn(
-                            `[Processor] Provider '${embeddingProvider}' falhou: ${embErr.message}. ` +
-                            `Fallback AnythingLLM para os demais chunks deste documento.`
-                        );
-                        // Permanente: próximos chunks já usam AnythingLLM diretamente
-                        embeddingProvider = 'anythingllm';
-                        embeddingModel = 'anythingllm:embedding';
-                        embeddingApiKey = anythingllmKey!;
-                        embeddingBaseUrl = anythingllmUrl!;
-                        embedding = await this.vectorStore.generateEmbedding(
-                            content, embeddingProvider, embeddingModel, embeddingApiKey, embeddingBaseUrl
-                        );
-                    } else {
-                        // Sem fallback disponível: marcar documento como ERROR com mensagem clara
-                        throw new Error(
-                            `Falha ao gerar embedding com provider '${embeddingProvider}': ${embErr.message}. ` +
-                            `Configure um provider válido em Configurações > IA & Modelos e reprocesse o documento.`
-                        );
-                    }
+                    throw new Error(
+                        `Falha ao gerar embedding com provider '${embeddingProvider}': ${embErr.message}. ` +
+                        `Verifique as configurações em Integrações ou IA & Modelos e tente reprocessar.`
+                    );
                 }
 
                 chunkData.push({

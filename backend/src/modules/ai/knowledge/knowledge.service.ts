@@ -102,8 +102,12 @@ export class KnowledgeService {
     }
 
     async addDocument(companyId: string, baseId: string, data: AddDocumentDto) {
-        // Verifica se a base pertence à empresa
-        await this.findOneBase(companyId, baseId);
+        // Validação leve (evita query pesada com _count/embedding filter)
+        const base = await (this.prisma as any).knowledgeBase.findFirst({
+            where: { id: baseId, companyId },
+            select: { id: true }
+        });
+        if (!base) throw new NotFoundException('Base de conhecimento não encontrada');
 
         const document = await (this.prisma as any).document.create({
             data: {
@@ -121,7 +125,12 @@ export class KnowledgeService {
     }
 
     async addDocumentFromFile(companyId: string, baseId: string, file: Express.Multer.File) {
-        await this.findOneBase(companyId, baseId);
+        // Validação leve (evita query pesada com _count/embedding filter)
+        const base = await (this.prisma as any).knowledgeBase.findFirst({
+            where: { id: baseId, companyId },
+            select: { id: true }
+        });
+        if (!base) throw new NotFoundException('Base de conhecimento não encontrada');
 
         const fs = require('fs');
         const ext = file.originalname.split('.').pop()?.toLowerCase() || '';
@@ -142,7 +151,9 @@ export class KnowledgeService {
             // Isso evita depender do /tmp/ efêmero em containers (Railway, Docker, etc.)
             try {
                 const buffer = fs.readFileSync(file.path);
-                rawContent = buffer.toString('utf-8').substring(0, 500000); // limite de 500k chars
+                // O PostgreSQL (e o Prisma) falham violentamente ao tentar salvar strings com caractere NUL (0x00).
+                // Precisamos remover os nulos antes de persistir no banco de dados.
+                rawContent = buffer.toString('utf-8').replace(/\0/g, '').substring(0, 500000); // limite de 500k chars
             } catch (readErr) {
                 this.logger.error(`Falha ao ler arquivo local: ${readErr.message}`);
             }
