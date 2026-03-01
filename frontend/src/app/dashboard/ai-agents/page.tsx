@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { AIAgentsService, AIAgent, AIProviderModels } from '@/services/ai-agents';
 import { AIKnowledgeService, KnowledgeBase } from '@/services/ai-knowledge';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -23,8 +23,14 @@ export default function AIAgentsPage() {
     const [chatMessage, setChatMessage] = useState('');
     const [chatHistory, setChatHistory] = useState<{ role: string; content: string }[]>([]);
     const [chatLoading, setChatLoading] = useState(false);
+    const chatEndRef = useRef<HTMLDivElement>(null);
 
     const isDirty = JSON.stringify(currentAgent) !== JSON.stringify(originalAgent);
+
+    // Auto-scroll para o fim do chat sempre que uma mensagem é adicionada
+    useEffect(() => {
+        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [chatHistory, chatLoading]);
 
     const fetchData = async () => {
         try {
@@ -109,11 +115,14 @@ export default function AIAgentsPage() {
             const response = await AIAgentsService.chat(currentAgent.id, userMsg.content, updatedHistory.slice(0, -1));
             setChatHistory(prev => [...prev, { role: 'assistant', content: typeof response === 'string' ? response : (response as any)?.textResponse || 'Sem resposta' }]);
         } catch (error: any) {
-            const errorMsg = error.response?.data?.message
-                || error.response?.data?.error
+            const errorData = error.response?.data;
+            const errorMsg = errorData?.message
+                || errorData?.error
+                || (typeof errorData === 'string' ? errorData : null)
+                || error.message
                 || 'Erro ao processar mensagem. Verifique se o provider de IA está configurado.';
             setChatHistory(prev => [...prev, { role: 'assistant', content: `⚠️ ${errorMsg}` }]);
-            toast.error(errorMsg);
+            toast.error(errorMsg, { duration: 6000 });
         } finally {
             setChatLoading(false);
         }
@@ -385,11 +394,11 @@ export default function AIAgentsPage() {
                 <div className="flex px-8 mt-4 border-b border-slate-100 dark:border-white/5 overflow-x-auto no-scrollbar custom-scrollbar">
                     {[
                         { id: 'basic', label: 'Básico', icon: Bot },
+                        { id: 'playground', label: 'Playground', icon: MessageSquare },
                         { id: 'cognitive', label: 'Cérebro', icon: Brain },
                         { id: 'knowledge', label: 'Conhecimento', icon: Database },
                         { id: 'widget', label: 'Widget', icon: Globe },
                         { id: 'api', label: 'API', icon: Key },
-                        { id: 'playground', label: 'Playground', icon: MessageSquare }
                     ].map(tab => (
                         <button
                             key={tab.id}
@@ -648,6 +657,7 @@ export default function AIAgentsPage() {
                                             </div>
                                         </div>
                                     )}
+                                    <div ref={chatEndRef} />
                                 </div>
                                 <div className="flex gap-2">
                                     <input

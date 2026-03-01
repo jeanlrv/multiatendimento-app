@@ -347,9 +347,8 @@ export class AIService {
             throw new NotFoundException('Agente não encontrado ou inativo');
         }
 
-        await this.checkTokenLimits(companyId);
-
         try {
+            await this.checkTokenLimits(companyId);
             // Fase 5: Semantic Cache (Interceptação por Vector)
             let promptEmbedding: number[] = [];
             try {
@@ -486,8 +485,14 @@ export class AIService {
 
             return response;
         } catch (error) {
-            this.logger.error(`Erro no chat: ${error.message}`);
-            throw error;
+            this.logger.error(`Erro no chat: ${error.message}`, error.stack);
+            // Re-lança exceções HTTP do NestJS (BadRequest, Forbidden, NotFound…) sem modificá-las
+            if (error?.status && error?.response) throw error;
+            // Converte erros genéricos (LLM API, Prisma, network) em 503 legível pelo frontend
+            const msg = error?.message || 'Erro interno ao processar mensagem';
+            throw new ServiceUnavailableException(
+                `Falha ao processar resposta da IA: ${msg}. Verifique se a API Key e o modelo estão corretos em Configurações → IA & Modelos.`
+            );
         }
     }
 
@@ -586,8 +591,12 @@ export class AIService {
 
             return response;
         } catch (error) {
-            this.logger.error(`Erro no chat multimodal: ${error.message}`);
-            throw error;
+            this.logger.error(`Erro no chat multimodal: ${error.message}`, error.stack);
+            if (error?.status && error?.response) throw error;
+            const msg = error?.message || 'Erro interno ao processar mensagem';
+            throw new ServiceUnavailableException(
+                `Falha ao processar resposta multimodal: ${msg}. Verifique se o modelo suporta imagens e a API Key está correta.`
+            );
         }
     }
 
@@ -851,7 +860,7 @@ export class AIService {
         if (message.length > 4000) message = message.substring(0, 4000);
         history = this.compressContext(history);
 
-        return new Observable(observer => {
+        return new Observable<{ data: { type: string; content: string } }>(observer => {
             observer.next({ data: { type: 'start', content: '' } });
 
             (async () => {
