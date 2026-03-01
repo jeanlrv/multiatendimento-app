@@ -112,33 +112,42 @@ export class EmbeddingProviderFactory implements OnModuleInit {
     /** Aquece o modelo nativo na inicialização para eliminar cold-start de 5-15s na primeira request */
     async onModuleInit() {
         const defaultModel = 'Xenova/all-MiniLM-L6-v2';
-        this.logger.log(`[AI] Iniciando warm-up do modelo nativo: ${defaultModel}`);
 
-        try {
-            const { pipeline, env } = await import('@xenova/transformers');
+        // Pequeno delay para permitir que o servidor termine o boot antes de carregar o modelo pesado
+        setTimeout(async () => {
+            this.logger.log(`[AI] Iniciando warm-up do modelo nativo (Safe Mode): ${defaultModel}`);
 
-            // Configurações de estabilidade para ambiente de servidor/container
-            env.allowLocalModels = false;
-            env.useBrowserCache = false;
+            try {
+                const { pipeline, env } = await import('@xenova/transformers');
 
-            // Evitar crash de threads no Node.js/Railway
-            (env as any).remoteHost = 'https://huggingface.co';
-            (env as any).remoteHostEnabled = true;
+                // CONFIGURAÇÕES DE ESTABILIDADE MÁXIMA PARA CONTAINERS (Railway/Docker)
+                env.allowLocalModels = false;
+                env.useBrowserCache = false;
+                env.allowRemoteModels = true;
+                (env as any).remoteHost = 'https://huggingface.co';
 
-            // O warm-up deve ser assíncrono para não travar o boot, mas protegido
-            const warmUpPromise = pipeline('feature-extraction', defaultModel, {
-                quantized: true,
-            }).then(() => {
-                this.logger.log(`[AI] Warm-up concluído: ${defaultModel} pronto.`);
-            }).catch(e => {
-                this.logger.error(`[AI] Falha no warm-up do modelo '${defaultModel}': ${e.message}`);
-                // Não deletamos do cache aqui para permitir nova tentativa sob demanda
-            });
+                // Forçar CPU-only e thread única para evitar Ort::Exception de concorrência nativa
+                if (env.backends && env.backends.onnx) {
+                    env.backends.onnx.wasm.numThreads = 1;
+                    env.backends.onnx.wasm.proxy = false;
+                    env.backends.onnx.gpu = false;
+                }
 
-            nativePipelineCache.set(defaultModel, warmUpPromise);
-        } catch (error) {
-            this.logger.error(`[AI] Erro crítico ao inicializar motor de AI Nativa: ${error.message}`);
-        }
+                // O warm-up deve ser assíncrono e isolado
+                const warmUpPromise = pipeline('feature-extraction', defaultModel, {
+                    quantized: true,
+                }).then(() => {
+                    this.logger.log(`[AI] Warm-up concluído com sucesso: ${defaultModel}`);
+                }).catch(e => {
+                    this.logger.error(`[AI] Falha ao carregar modelo nativo: ${e.message}`);
+                    // Mantemos a falha no cache para não tentar novamente se já sabemos que falha
+                });
+
+                nativePipelineCache.set(defaultModel, warmUpPromise);
+            } catch (error) {
+                this.logger.error(`[AI] Erro fatal no motor de AI Nativa: ${error.message}`);
+            }
+        }, 5000); // 5 segundos após o boot
     }
 
     /**
@@ -261,9 +270,16 @@ export class EmbeddingProviderFactory implements OnModuleInit {
                 try {
                     const { pipeline, env } = await import('@xenova/transformers');
 
-                    // Desativar cache local excessivo e webworkers no backend para estabilidade
                     env.allowLocalModels = false;
                     env.useBrowserCache = false;
+                    env.allowRemoteModels = true;
+
+                    // Replicar configurações de segurança no carregamento sob demanda
+                    if (env.backends && env.backends.onnx) {
+                        env.backends.onnx.wasm.numThreads = 1;
+                        env.backends.onnx.wasm.proxy = false;
+                        env.backends.onnx.gpu = false;
+                    }
 
                     const p = pipeline('feature-extraction', model, {
                         quantized: true,
