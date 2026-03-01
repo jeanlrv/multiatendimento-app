@@ -28,6 +28,6 @@ import * as path from 'path';
     ],
     controllers: [KnowledgeController],
     providers: [KnowledgeService, KnowledgeProcessor],
-    exports: [KnowledgeService],
+    exports: [KnowledgeService, BullModule],
 })
 export class KnowledgeModule { }
