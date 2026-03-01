@@ -143,18 +143,15 @@ export default function AIAgentsPage() {
     };
 
     const getModelDisplayName = (modelId?: string) => {
-        if (!modelId) return availableModels[0]?.models[0]?.name || 'Não configurado';
-
-        // Verifica se é um modelo formatado como "provider:model"
-        const parts = modelId.split(':');
-        const searchId = parts.length > 1 ? modelId : modelId;
+        if (!modelId) return 'Não configurado';
 
         for (const provider of availableModels) {
-            const model = provider.models.find(m => m.id === searchId);
+            const model = provider.models.find(m => m.id === modelId);
             if (model) return model.name;
         }
 
-        // Fallback: remove prefixo se houver
+        // Se não encontrar no mapping, tenta limpar o ID (remover prefixo provider:)
+        const parts = modelId.split(':');
         return parts.length > 1 ? parts[1] : modelId;
     };
 
