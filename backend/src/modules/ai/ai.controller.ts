@@ -134,6 +134,21 @@ export class AIController {
         }
     }
 
+    // ========== Copilot ==========
+
+    @Post('copilot-suggest')
+    @RequirePermission(Permission.AI_CHAT)
+    @ApiOperation({ summary: 'Gerar sugestões de resposta via Copilot IA' })
+    async copilotSuggest(@Req() req: any, @Body() body: { context: string; agentName?: string; contactName?: string }) {
+        const suggestions = await this.aiService.copilotSuggest(
+            req.user.companyId,
+            body.context || '',
+            body.agentName || 'Agente',
+            body.contactName || 'Cliente',
+        );
+        return { suggestions };
+    }
+
     @Get('usage')
     @RequirePermission(Permission.AI_READ)
     @ApiOperation({ summary: 'Obter uso de tokens/IA da empresa' })

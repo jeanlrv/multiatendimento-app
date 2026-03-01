@@ -423,21 +423,30 @@ export class AIService {
                 conversationSummary = conv?.summary ?? undefined;
             }
 
-            // RAG: busca com idioma correto da base de conhecimento
+            // RAG: usa o embeddingProvider da knowledge base (não do agente),
+            // pois os chunks foram indexados com o provider da KB.
             let context = '';
             if (agent.knowledgeBaseId) {
                 const kb = await (this.prisma as any).knowledgeBase.findUnique({
                     where: { id: agent.knowledgeBaseId },
-                    select: { language: true },
+                    select: { language: true, embeddingProvider: true, embeddingModel: true },
                 });
+                // Provider e modelo usados para indexar — devem ser iguais ao usado na busca
+                const kbEmbeddingProvider = kb?.embeddingProvider || agent.embeddingProvider || 'native';
+                const kbEmbeddingModel = kb?.embeddingModel || agent.embeddingModel;
+                const kbEmbeddingConfig = companyConfigs.get(kbEmbeddingProvider);
+
+                this.logger.debug(`[RAG] Buscando base ${agent.knowledgeBaseId} com provider="${kbEmbeddingProvider}" model="${kbEmbeddingModel}"`);
+
                 const chunks = await this.vectorStoreService.searchSimilarity(
                     this.prisma, companyId, message, agent.knowledgeBaseId,
-                    budget.chunkLimit, agent.embeddingProvider || 'openai',
-                    agent.embeddingModel, embeddingConfig?.apiKey || undefined,
-                    embeddingConfig?.baseUrl || undefined,
+                    budget.chunkLimit, kbEmbeddingProvider,
+                    kbEmbeddingModel, kbEmbeddingConfig?.apiKey || undefined,
+                    kbEmbeddingConfig?.baseUrl || undefined,
                     kb?.language || 'portuguese',
                 );
                 context = chunks.map(c => c.content).join('\n---\n');
+                this.logger.debug(`[RAG] ${chunks.length} chunks retornados para contexto.`);
             }
 
             // Overflow guard: trunca RAG se context window exceder limite do modelo
@@ -744,6 +753,41 @@ export class AIService {
         } catch (error) {
             this.logger.error(`Erro na análise sentimental: ${error.message}`);
             return null;
+        }
+    }
+
+    /**
+     * Copilot: gera sugestões de resposta para o atendente baseado no contexto da conversa.
+     */
+    async copilotSuggest(companyId: string, context: string, agentName: string, contactName: string): Promise<string[]> {
+        // Tenta usar o primeiro agente ativo da empresa para herdar as configs de LLM
+        const agent = await (this.prisma as any).aIAgent.findFirst({
+            where: { companyId, isActive: true },
+        });
+
+        const modelId = agent?.modelId || 'gpt-4o-mini';
+        const companyConfigs = await this.providerConfigService.getDecryptedForCompany(companyId);
+        const providerId = modelId.includes(':') ? modelId.split(':')[0] : modelId.split('-')[0];
+        const providerConfig = companyConfigs.get(providerId) || companyConfigs.get('openai');
+        const apiKey = providerConfig?.apiKey;
+
+        const systemPrompt = `Você é um assistente de atendimento ao cliente. Sua tarefa é sugerir respostas profissionais e empáticas para o atendente "${agentName}" responder ao cliente "${contactName}". Baseie-se no histórico da conversa fornecido. Responda APENAS com um JSON array de 2-3 strings curtas (máx 200 chars cada), sem explicações extras. Exemplo: ["Sugestão 1", "Sugestão 2"]`;
+
+        const userMessage = `Histórico da conversa:\n${context}\n\nGere 2-3 sugestões de resposta para o atendente enviar agora.`;
+
+        try {
+            const raw = await this.llmService.generateResponse(modelId, systemPrompt, userMessage, [], 0.7, '', apiKey);
+            // Extrai JSON do response
+            const match = raw.match(/\[[\s\S]*?\]/);
+            if (match) {
+                const parsed = JSON.parse(match[0]);
+                if (Array.isArray(parsed)) return parsed.slice(0, 3).map(String);
+            }
+            // Fallback: retorna linhas não vazias
+            return raw.split('\n').filter(l => l.trim().length > 5).slice(0, 3);
+        } catch (err) {
+            this.logger.error(`[Copilot] Erro ao gerar sugestões: ${err.message}`);
+            return [];
         }
     }
 

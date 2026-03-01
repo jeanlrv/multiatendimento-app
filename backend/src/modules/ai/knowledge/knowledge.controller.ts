@@ -141,6 +141,12 @@ export class KnowledgeController {
         return this.knowledgeService.reprocessDocument(req.user.companyId, id);
     }
 
+    @Post('bases/:id/reprocess-all')
+    @ApiOperation({ summary: 'Reprocessar todos os documentos da base (corrige embeddings nulos ou troca de provider)' })
+    reprocessBase(@Req() req: any, @Param('id') id: string) {
+        return this.knowledgeService.reprocessBase(req.user.companyId, id);
+    }
+
     // ========== Edição de Bases de Conhecimento ==========
 
     @Patch('bases/:id')

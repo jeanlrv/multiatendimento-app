@@ -24,7 +24,7 @@ export function SlaIndicator({ ticket }: { ticket: TicketWithSla }) {
 
         const interval = setInterval(() => {
             setNow(new Date());
-        }, 60000);
+        }, 10000);
         return () => clearInterval(interval);
     }, [ticket.status]);
 

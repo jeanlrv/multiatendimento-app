@@ -7,7 +7,7 @@ import { getSocket } from '@/lib/socket';
 import { api } from '@/services/api';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trash2, Send, Phone, User, Clock, CheckCheck, Paperclip, MoreVertical, ArrowRightLeft, Smile, Search, SlidersHorizontal, MessageSquare, Bot, Sparkles, AlertTriangle, Plus, X, Mic, Tag as TagIcon, Info, Calendar, ArrowLeft, Copy, Edit3, CornerUpLeft, UploadCloud, ChevronDown } from 'lucide-react';
+import { Trash2, Send, Phone, User, Clock, CheckCheck, Paperclip, MoreVertical, ArrowRightLeft, Smile, Search, SlidersHorizontal, MessageSquare, Bot, Sparkles, AlertTriangle, Plus, X, Mic, Tag as TagIcon, Info, Calendar, ArrowLeft, Copy, Edit3, CornerUpLeft, UploadCloud, ChevronDown, Keyboard, Wand2, PhoneCall, Volume2 } from 'lucide-react';
 import { AudioRecorder } from '@/components/chat/AudioRecorder';
 import { toast } from 'sonner';
 import { io, Socket } from 'socket.io-client';
@@ -120,10 +120,16 @@ export default function TicketsPage() {
     const [showScheduleModal, setShowScheduleModal] = useState(false);
     const [selectedTicketIds, setSelectedTicketIds] = useState<string[]>([]);
     const [showCopilot, setShowCopilot] = useState(false);
+    const [copilotSuggestions, setCopilotSuggestions] = useState<string[]>([]);
+    const [loadingCopilot, setLoadingCopilot] = useState(false);
+    const [sendingAudio, setSendingAudio] = useState(false);
     const [sending, setSending] = useState(false);
     const [showOptionsMenu, setShowOptionsMenu] = useState(false);
     const optionsMenuRef = useRef<HTMLDivElement>(null);
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+    const emojiPickerRef = useRef<HTMLDivElement>(null);
+    const [showShortcutsModal, setShowShortcutsModal] = useState(false);
+    const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
 
     // Anexos
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -342,6 +348,7 @@ export default function TicketsPage() {
 
     const handleSendAudio = async (blob: Blob) => {
         if (!selectedTicket) return;
+        setSendingAudio(true);
         try {
             const formData = new FormData();
             formData.append('file', blob, 'audio.webm');
@@ -356,9 +363,12 @@ export default function TicketsPage() {
                 mediaUrl: uploadRes.data.url,
             });
             setIsRecording(false);
+            toast.success('Áudio enviado!');
         } catch (error) {
             console.error('Erro ao enviar áudio:', error);
             toast.error('Erro ao enviar áudio');
+        } finally {
+            setSendingAudio(false);
         }
     };
 
@@ -464,6 +474,56 @@ export default function TicketsPage() {
         }, 3000);
     };
 
+    const handleCopyMessage = (msgId: string, content: string) => {
+        navigator.clipboard.writeText(content);
+        setCopiedMsgId(msgId);
+        setTimeout(() => setCopiedMsgId(null), 2000);
+    };
+
+    const handleCopilotSuggest = async () => {
+        if (!selectedTicket || loadingCopilot) return;
+        setLoadingCopilot(true);
+        setCopilotSuggestions([]);
+        try {
+            const context = messages.slice(-10).map(m => `${m.fromMe ? 'Agente' : 'Cliente'}: ${m.content}`).join('\n');
+            const res = await api.post('/ai/copilot-suggest', {
+                ticketId: selectedTicket.id,
+                context,
+                agentName: selectedTicket.assignedUser?.name || 'Agente',
+                contactName: selectedTicket.contact.name,
+            });
+            setCopilotSuggestions(res.data.suggestions || []);
+        } catch {
+            toast.error('Copilot indisponível no momento.');
+            setShowCopilot(false);
+        } finally {
+            setLoadingCopilot(false);
+        }
+    };
+
+    // Fecha emoji picker ao clicar fora
+    useEffect(() => {
+        if (!showEmojiPicker) return;
+        const handler = (e: MouseEvent) => {
+            if (emojiPickerRef.current && !emojiPickerRef.current.contains(e.target as Node)) {
+                setShowEmojiPicker(false);
+            }
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [showEmojiPicker]);
+
+    // Fecha options menu ao clicar fora
+    useEffect(() => {
+        if (!showOptionsMenu) return;
+        const handler = (e: MouseEvent) => {
+            if (optionsMenuRef.current && !optionsMenuRef.current.contains(e.target as Node)) {
+                setShowOptionsMenu(false);
+            }
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [showOptionsMenu]);
 
     useEffect(() => {
         const delayDebounceFn = setTimeout(() => {
@@ -1054,14 +1114,67 @@ export default function TicketsPage() {
                 </AnimatePresence>
 
                 {!selectedTicket ? (
-                    <div className="flex-1 hidden md:flex flex-col items-center justify-center text-center p-12 aurora">
-                        <div className="h-40 w-40 bg-primary/10 rounded-full flex items-center justify-center mb-10 shadow-inner">
-                            <MessageSquare className="h-16 w-16 text-primary animate-pulse" />
+                    <div className="flex-1 hidden md:flex flex-col items-center justify-center text-center p-12 aurora relative overflow-hidden">
+                        {/* Background decorative circles */}
+                        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full bg-primary/5 dark:bg-primary/10 blur-3xl" />
+                            <div className="absolute top-1/3 left-1/3 w-64 h-64 rounded-full bg-violet-500/5 blur-2xl" />
                         </div>
-                        <h3 className="text-3xl font-black text-slate-900 dark:text-white mb-3 tracking-tighter">Central de Mensagens</h3>
-                        <p className="text-sm text-slate-500 font-bold uppercase tracking-[0.2em] max-w-sm">
-                            Selecione um fluxo para iniciar o atendimento <span className="text-primary italic">Aero</span>.
-                        </p>
+                        <motion.div
+                            initial={{ scale: 0.8, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            transition={{ type: 'spring', stiffness: 200, damping: 20 }}
+                            className="relative mb-10"
+                        >
+                            <div className="h-28 w-28 bg-gradient-to-br from-primary/20 to-violet-500/20 rounded-[2rem] flex items-center justify-center shadow-2xl shadow-primary/20 border border-primary/10 dark:border-primary/20">
+                                <MessageSquare className="h-14 w-14 text-primary" />
+                            </div>
+                            <div className="absolute -bottom-2 -right-2 h-8 w-8 bg-emerald-500 rounded-full flex items-center justify-center shadow-lg shadow-emerald-500/30 border-2 border-white dark:border-slate-900">
+                                <Sparkles className="h-4 w-4 text-white" />
+                            </div>
+                        </motion.div>
+                        <motion.div
+                            initial={{ y: 10, opacity: 0 }}
+                            animate={{ y: 0, opacity: 1 }}
+                            transition={{ delay: 0.1 }}
+                            className="space-y-3 max-w-sm"
+                        >
+                            <h3 className="text-2xl font-black text-slate-900 dark:text-white tracking-tighter">Central de Atendimento</h3>
+                            <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+                                Selecione um atendimento na lista ao lado para visualizar o histórico de mensagens e interagir com o cliente.
+                            </p>
+                        </motion.div>
+                        <motion.div
+                            initial={{ y: 10, opacity: 0 }}
+                            animate={{ y: 0, opacity: 1 }}
+                            transition={{ delay: 0.2 }}
+                            className="mt-8 flex items-center gap-6"
+                        >
+                            <div className="flex flex-col items-center gap-1.5">
+                                <div className="h-9 w-9 rounded-xl bg-blue-50 dark:bg-blue-500/10 border border-blue-100 dark:border-blue-500/20 flex items-center justify-center">
+                                    <MessageSquare className="h-4 w-4 text-blue-500" />
+                                </div>
+                                <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Chat</span>
+                            </div>
+                            <div className="flex flex-col items-center gap-1.5">
+                                <div className="h-9 w-9 rounded-xl bg-violet-50 dark:bg-violet-500/10 border border-violet-100 dark:border-violet-500/20 flex items-center justify-center">
+                                    <Wand2 className="h-4 w-4 text-violet-500" />
+                                </div>
+                                <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Copilot</span>
+                            </div>
+                            <div className="flex flex-col items-center gap-1.5">
+                                <div className="h-9 w-9 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-100 dark:border-emerald-500/20 flex items-center justify-center">
+                                    <Bot className="h-4 w-4 text-emerald-500" />
+                                </div>
+                                <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">IA</span>
+                            </div>
+                            <div className="flex flex-col items-center gap-1.5">
+                                <div className="h-9 w-9 rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-100 dark:border-amber-500/20 flex items-center justify-center">
+                                    <Sparkles className="h-4 w-4 text-amber-500" />
+                                </div>
+                                <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">SLA</span>
+                            </div>
+                        </motion.div>
                     </div>
                 ) : (
                     <>
@@ -1222,24 +1335,26 @@ export default function TicketsPage() {
 
                                     {/* Modo IA / Humano */}
                                     <div className="flex items-center bg-slate-100/50 dark:bg-white/5 p-0.5 rounded-xl border border-white/50 dark:border-white/5 backdrop-blur-md shrink-0">
-                                        {['AI', 'HUMANO'].map((m) => (
+                                        {[{ key: 'AI', icon: <Bot size={11} />, label: 'IA', color: 'bg-blue-500 shadow-blue-500/30' }, { key: 'HUMANO', icon: <User size={11} />, label: 'Humano', color: 'bg-amber-500 shadow-amber-500/30' }].map(({ key: m, icon, label, color }) => (
                                             <button
                                                 key={m}
                                                 onClick={async () => {
                                                     try {
                                                         await ticketsService.update(selectedTicket.id, { mode: m });
                                                         setSelectedTicket(prev => prev ? { ...prev, mode: m as any } : null);
-                                                        toast.success(`Modo alterado para ${m}`);
+                                                        toast.success(`Modo ${label}`);
                                                     } catch (error) {
                                                         toast.error('Erro ao alternar modo');
                                                     }
                                                 }}
-                                                className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${selectedTicket.mode === m
-                                                    ? 'bg-white dark:bg-primary text-black dark:text-white shadow-md'
+                                                className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${selectedTicket.mode === m
+                                                    ? `${color} text-white shadow-md`
                                                     : 'text-slate-400 hover:text-slate-600 dark:hover:text-white'
                                                     }`}
+                                                title={`Ativar modo ${label}`}
                                             >
-                                                {m}
+                                                {icon}
+                                                <span className="hidden md:inline">{label}</span>
                                             </button>
                                         ))}
                                     </div>
@@ -1383,16 +1498,27 @@ export default function TicketsPage() {
 
                                     {/* Ações Rápidas em Destaque */}
                                     <div className="flex items-center gap-1 bg-slate-100/50 dark:bg-white/5 p-1 rounded-2xl border border-white/50 dark:border-white/5 backdrop-blur-md shrink-0">
-                                        {/* Copilot: botão oculto até feature estar pronta */}
-                                        {false && (
-                                            <button
-                                                onClick={() => setShowCopilot(!showCopilot)}
-                                                className={`p-2 rounded-xl transition-all ${showCopilot ? 'bg-blue-600 text-white shadow-lg' : 'hover:bg-white/50 dark:hover:bg-white/5 text-gray-500 dark:text-gray-400'}`}
-                                                title="Alternar IA Copilot"
-                                            >
-                                                <Bot className="h-4 w-4" />
-                                            </button>
-                                        )}
+                                        {/* Atalhos */}
+                                        <button
+                                            onClick={() => setShowShortcutsModal(true)}
+                                            className="p-2 rounded-xl hover:bg-slate-200 dark:hover:bg-white/10 text-slate-400 hover:text-slate-600 dark:hover:text-white transition-all"
+                                            title="Atalhos de teclado"
+                                        >
+                                            <Keyboard className="h-4 w-4" />
+                                        </button>
+
+                                        {/* Copilot IA */}
+                                        <button
+                                            onClick={() => {
+                                                const next = !showCopilot;
+                                                setShowCopilot(next);
+                                                if (next && copilotSuggestions.length === 0) handleCopilotSuggest();
+                                            }}
+                                            className={`p-2 rounded-xl transition-all ${showCopilot ? 'bg-violet-600 text-white shadow-lg shadow-violet-500/30' : 'hover:bg-violet-50 dark:hover:bg-violet-500/10 text-slate-400 hover:text-violet-500'}`}
+                                            title="Copilot IA — Sugerir resposta"
+                                        >
+                                            <Wand2 className="h-4 w-4" />
+                                        </button>
 
                                         {selectedTicket.contact?.information && (
                                             <div className="relative group/info">
@@ -1446,9 +1572,9 @@ export default function TicketsPage() {
                                             }}
                                             className="flex items-center gap-2 px-3 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl shadow-lg transition-all disabled:opacity-50 active:scale-95 group"
                                         >
-                                            <CheckCheck className="h-4 w-4 group-hover:scale-110 transition-transform" />
-                                            <span className="text-[9px] font-black uppercase tracking-widest hidden xl:block">
-                                                {isResolving ? '...' : 'Finalizar'}
+                                            <CheckCheck className="h-4 w-4 group-hover:scale-110 transition-transform shrink-0" />
+                                            <span className="text-[9px] font-black uppercase tracking-widest hidden sm:block">
+                                                {isResolving ? 'Finalizando...' : 'Finalizar'}
                                             </span>
                                         </button>
                                     </div>
@@ -1460,13 +1586,24 @@ export default function TicketsPage() {
                                 <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 mr-2">Tags:</span>
                                 {selectedTicket.tags && selectedTicket.tags.length > 0 ? (
                                     selectedTicket.tags.map((t: any) => (
-                                        <span
+                                        <button
                                             key={t.tag.id}
-                                            className="px-2 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-widest border border-white/20"
+                                            onClick={async () => {
+                                                const currentTagIds = selectedTicket.tags.map((tg: any) => tg.tag?.id || tg.id);
+                                                const newTagIds = currentTagIds.filter((id: string) => id !== (t.tag?.id || t.id));
+                                                try {
+                                                    const updated = await ticketsService.update(selectedTicket.id, { tagIds: newTagIds });
+                                                    setSelectedTicket((prev: any) => prev ? { ...prev, tags: updated.tags ?? prev.tags } : prev);
+                                                    setTickets((prev: any[]) => prev.map((tk: any) => tk.id === selectedTicket.id ? { ...tk, tags: updated.tags ?? tk.tags } : tk));
+                                                } catch { toast.error('Erro ao remover tag'); }
+                                            }}
+                                            className="group/tag flex items-center gap-1 px-2 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-widest border border-white/20 transition-all hover:opacity-80"
                                             style={{ backgroundColor: `${t.tag.color}20`, color: t.tag.color }}
+                                            title={`Remover tag "${t.tag.name}"`}
                                         >
                                             {t.tag.name}
-                                        </span>
+                                            <X size={8} className="opacity-0 group-hover/tag:opacity-100 transition-opacity" />
+                                        </button>
                                     ))
                                 ) : (
                                     <span className="text-[9px] text-slate-400 italic">Nenhuma tag atribuída</span>
@@ -1486,8 +1623,15 @@ export default function TicketsPage() {
                                         className="flex-1 overflow-y-auto custom-scrollbar p-4 md:p-6 space-y-4"
                                     >
                                         {loadingMessages ? (
-                                            <div className="flex items-center justify-center h-full">
-                                                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600"></div>
+                                            <div className="space-y-5 py-2">
+                                                {[...Array(5)].map((_, i) => (
+                                                    <div key={i} className={`flex ${i % 2 === 0 ? 'justify-start' : 'justify-end'} animate-pulse`}>
+                                                        <div className={`space-y-1.5 max-w-[60%] ${i % 2 === 0 ? 'items-start' : 'items-end'} flex flex-col`}>
+                                                            <div className={`h-10 rounded-[1.5rem] bg-slate-200 dark:bg-white/8 ${i % 3 === 0 ? 'w-48' : i % 3 === 1 ? 'w-64' : 'w-36'}`} />
+                                                            <div className="h-2 w-12 bg-slate-100 dark:bg-white/5 rounded-full" />
+                                                        </div>
+                                                    </div>
+                                                ))}
                                             </div>
                                         ) : (
                                             <>
@@ -1575,19 +1719,28 @@ export default function TicketsPage() {
                                                                     </div>
                                                                 </div>
                                                             )}
-                                                            <div className={`flex items-center gap-2 mt-3 ${msg.fromMe ? 'justify-end' : 'justify-start'}`}>
+                                                            <div className={`flex items-center gap-1.5 mt-3 ${msg.fromMe ? 'justify-end' : 'justify-start'}`}>
                                                                 <span className={`text-[9px] font-black uppercase tracking-widest ${msg.fromMe ? 'text-white/60' : 'text-slate-400'}`}>
                                                                     {new Date(msg.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                                                 </span>
                                                                 {msg.fromMe && (
-                                                                    <CheckCheck className={`h-3 w-3 ${msg.status === 'READ' ? 'text-sky-400' : (msg.status === 'DELIVERED' ? 'text-white/80' : 'text-white/40')}`} />
+                                                                    <CheckCheck className={`h-3 w-3 flex-shrink-0 ${msg.status === 'READ' ? 'text-sky-400' : (msg.status === 'DELIVERED' ? 'text-white/80' : 'text-white/40')}`} />
+                                                                )}
+                                                                {(msg.messageType === 'TEXT' || msg.messageType === 'INTERNAL') && (
+                                                                    <button
+                                                                        onClick={() => handleCopyMessage(msg.id, msg.content)}
+                                                                        className={`p-1 rounded-full transition-all opacity-0 group-hover:opacity-100 ${msg.fromMe ? 'text-white/60 hover:bg-white/20' : 'text-slate-400 hover:bg-slate-200 dark:hover:bg-white/10'}`}
+                                                                        title="Copiar mensagem"
+                                                                    >
+                                                                        {copiedMsgId === msg.id ? <CheckCheck size={11} className="text-emerald-400" /> : <Copy size={11} />}
+                                                                    </button>
                                                                 )}
                                                                 <button
                                                                     onClick={() => setReplyingTo(msg)}
                                                                     className={`p-1 rounded-full transition-all opacity-0 group-hover:opacity-100 ${msg.fromMe ? 'text-white/60 hover:bg-white/20' : 'text-slate-400 hover:bg-slate-200 dark:hover:bg-white/10'}`}
                                                                     title="Responder"
                                                                 >
-                                                                    <CornerUpLeft size={12} />
+                                                                    <CornerUpLeft size={11} />
                                                                 </button>
                                                             </div>
                                                         </div>
@@ -1637,6 +1790,12 @@ export default function TicketsPage() {
 
                                     {isRecording ? (
                                         <div className="p-3 bg-white/60 dark:bg-black/40 border-t border-white/40 dark:border-white/5 backdrop-blur-2xl">
+                                            {sendingAudio && (
+                                                <div className="flex items-center gap-2 justify-center mb-2 text-xs font-black uppercase tracking-widest text-primary animate-pulse">
+                                                    <div className="h-3 w-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                                                    Enviando áudio...
+                                                </div>
+                                            )}
                                             <div className="flex justify-end max-w-6xl mx-auto relative z-10">
                                                 <AudioRecorder
                                                     onSend={handleSendAudio}
@@ -1646,6 +1805,56 @@ export default function TicketsPage() {
                                         </div>
                                     ) : (
                                         <div className="p-3 bg-white/60 dark:bg-black/40 border-t border-white/40 dark:border-white/5 backdrop-blur-2xl">
+                                            {/* Copilot Suggestions Panel */}
+                                            <AnimatePresence>
+                                                {showCopilot && (
+                                                    <motion.div
+                                                        initial={{ opacity: 0, y: 8, height: 0 }}
+                                                        animate={{ opacity: 1, y: 0, height: 'auto' }}
+                                                        exit={{ opacity: 0, y: 8, height: 0 }}
+                                                        transition={{ duration: 0.2 }}
+                                                        className="max-w-6xl mx-auto mb-3 overflow-hidden"
+                                                    >
+                                                        <div className="bg-violet-50 dark:bg-violet-500/10 border border-violet-200 dark:border-violet-500/20 rounded-2xl p-3">
+                                                            <div className="flex items-center justify-between mb-2">
+                                                                <div className="flex items-center gap-1.5">
+                                                                    <Wand2 size={11} className="text-violet-500" />
+                                                                    <span className="text-[9px] font-black uppercase tracking-widest text-violet-600 dark:text-violet-400">Sugestões Copilot IA</span>
+                                                                </div>
+                                                                <button
+                                                                    onClick={handleCopilotSuggest}
+                                                                    disabled={loadingCopilot}
+                                                                    className="p-1 rounded-lg hover:bg-violet-100 dark:hover:bg-violet-500/20 text-violet-400 hover:text-violet-600 transition-colors disabled:opacity-40"
+                                                                    title="Gerar novas sugestões"
+                                                                >
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={loadingCopilot ? 'animate-spin' : ''}><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+                                                                </button>
+                                                            </div>
+                                                            {loadingCopilot ? (
+                                                                <div className="flex flex-col gap-2">
+                                                                    {[...Array(2)].map((_, i) => (
+                                                                        <div key={i} className="h-7 bg-violet-100 dark:bg-violet-500/15 rounded-xl animate-pulse" style={{ width: i === 0 ? '85%' : '70%' }} />
+                                                                    ))}
+                                                                </div>
+                                                            ) : copilotSuggestions.length === 0 ? (
+                                                                <p className="text-[10px] text-violet-400 italic text-center py-1">Nenhuma sugestão disponível</p>
+                                                            ) : (
+                                                                <div className="flex flex-col gap-1.5">
+                                                                    {copilotSuggestions.map((s, i) => (
+                                                                        <button
+                                                                            key={i}
+                                                                            onClick={() => { setNewMessage(s); setShowCopilot(false); }}
+                                                                            className="text-left text-xs text-violet-700 dark:text-violet-300 bg-white dark:bg-violet-500/10 hover:bg-violet-100 dark:hover:bg-violet-500/20 border border-violet-100 dark:border-violet-500/10 rounded-xl px-3 py-2 transition-colors line-clamp-2 leading-relaxed"
+                                                                        >
+                                                                            {s}
+                                                                        </button>
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </motion.div>
+                                                )}
+                                            </AnimatePresence>
                                             <div className="flex items-end gap-3 max-w-6xl mx-auto relative z-10">
                                                 <div className="flex-1 min-w-0 bg-white/50 dark:bg-white/5 rounded-3xl p-1.5 border border-slate-200 dark:border-white/10 relative">
                                                     {/* Preview de Citação (Reply) */}
@@ -1955,11 +2164,31 @@ export default function TicketsPage() {
                                     <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
                                         {/* Perfil */}
                                         <div className="text-center">
-                                            <div className="h-20 w-20 bg-primary/10 rounded-3xl flex items-center justify-center text-3xl font-black text-primary mx-auto mb-4 shadow-inner">
+                                            <div className="h-20 w-20 bg-gradient-to-br from-primary/20 to-primary/5 rounded-3xl flex items-center justify-center text-3xl font-black text-primary mx-auto mb-4 shadow-inner ring-4 ring-primary/10">
                                                 {selectedTicket.contact.name.charAt(0)}
                                             </div>
                                             <h3 className="font-black text-lg text-slate-900 dark:text-white leading-tight">{selectedTicket.contact.name}</h3>
-                                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1">{selectedTicket.contact.phoneNumber}</p>
+                                            <button
+                                                onClick={() => {
+                                                    navigator.clipboard.writeText(selectedTicket.contact.phoneNumber);
+                                                    toast.success('Número copiado!');
+                                                }}
+                                                className="flex items-center gap-1.5 mx-auto mt-2 px-3 py-1 rounded-xl bg-slate-100 dark:bg-white/5 hover:bg-primary/10 hover:text-primary text-slate-500 transition-all group"
+                                                title="Clique para copiar"
+                                            >
+                                                <PhoneCall size={11} className="group-hover:animate-pulse" />
+                                                <span className="text-[10px] font-black font-mono tracking-wider">{selectedTicket.contact.phoneNumber}</span>
+                                                <Copy size={9} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                                            </button>
+                                            <a
+                                                href={`https://wa.me/${selectedTicket.contact.phoneNumber.replace(/\D/g, '')}`}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="mt-2 flex items-center gap-1.5 mx-auto w-fit px-3 py-1 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 transition-all text-[9px] font-black uppercase tracking-widest border border-emerald-200 dark:border-emerald-500/20"
+                                            >
+                                                <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                                                Abrir no WhatsApp
+                                            </a>
                                         </div>
 
                                         {/* Notas */}
@@ -1985,10 +2214,14 @@ export default function TicketsPage() {
                                                         <textarea
                                                             autoFocus
                                                             value={editedNotes}
-                                                            onChange={(e) => setEditedNotes(e.target.value)}
-                                                            className="w-full bg-white dark:bg-black/20 border border-amber-200 dark:border-amber-500/30 rounded-xl p-3 text-xs font-bold outline-none focus:ring-1 ring-amber-500/50 min-h-[100px] text-slate-700 dark:text-slate-200"
+                                                            onChange={(e) => setEditedNotes(e.target.value.slice(0, 600))}
+                                                            className="w-full bg-white dark:bg-black/20 border border-amber-200 dark:border-amber-500/30 rounded-xl p-3 text-xs font-bold outline-none focus:ring-1 ring-amber-500/50 min-h-[100px] text-slate-700 dark:text-slate-200 resize-none"
                                                             placeholder="Adicione observações importantes sobre este cliente..."
+                                                            maxLength={600}
                                                         />
+                                                        <div className={`text-right text-[9px] font-bold -mt-1 ${editedNotes.length > 540 ? 'text-rose-500' : 'text-slate-400'}`}>
+                                                            {editedNotes.length}/600
+                                                        </div>
                                                         <div className="flex items-center gap-2 justify-end">
                                                             <button
                                                                 onClick={() => setIsEditingNotes(false)}
@@ -2102,6 +2335,76 @@ export default function TicketsPage() {
                         fetchTickets();
                     }}
                 />
+
+                {/* Shortcuts Modal */}
+                <AnimatePresence>
+                    {showShortcutsModal && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+                            onClick={() => setShowShortcutsModal(false)}
+                        >
+                            <motion.div
+                                initial={{ scale: 0.95, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                exit={{ scale: 0.95, opacity: 0 }}
+                                onClick={(e) => e.stopPropagation()}
+                                className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-white/10 w-full max-w-md overflow-hidden"
+                            >
+                                <div className="p-5 border-b border-slate-100 dark:border-white/10 flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <Keyboard size={16} className="text-primary" />
+                                        <h2 className="text-sm font-black uppercase tracking-widest text-slate-800 dark:text-white">Atalhos de Teclado</h2>
+                                    </div>
+                                    <button
+                                        onClick={() => setShowShortcutsModal(false)}
+                                        className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/10 text-slate-400 transition-colors"
+                                    >
+                                        <X size={14} />
+                                    </button>
+                                </div>
+                                <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
+                                    {[
+                                        { group: 'Navegação', items: [
+                                            { keys: ['Ctrl', 'K'], desc: 'Busca global de atendimentos' },
+                                            { keys: ['Esc'], desc: 'Fechar painel / cancelar ação' },
+                                            { keys: ['↑', '↓'], desc: 'Navegar entre atendimentos' },
+                                        ]},
+                                        { group: 'Mensagens', items: [
+                                            { keys: ['Enter'], desc: 'Enviar mensagem' },
+                                            { keys: ['Shift', 'Enter'], desc: 'Nova linha na mensagem' },
+                                            { keys: ['Ctrl', 'C'], desc: 'Copiar mensagem selecionada' },
+                                        ]},
+                                        { group: 'Chat', items: [
+                                            { keys: ['Ctrl', 'W'], desc: 'Ativar Copilot IA' },
+                                            { keys: ['Ctrl', 'E'], desc: 'Abrir seletor de emoji' },
+                                            { keys: ['Ctrl', 'R'], desc: 'Iniciar gravação de áudio' },
+                                            { keys: ['Ctrl', 'F'], desc: 'Finalizar atendimento' },
+                                        ]},
+                                    ].map(({ group, items }) => (
+                                        <div key={group}>
+                                            <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">{group}</p>
+                                            <div className="space-y-1.5">
+                                                {items.map(({ keys, desc }) => (
+                                                    <div key={desc} className="flex items-center justify-between">
+                                                        <span className="text-xs text-slate-600 dark:text-slate-300">{desc}</span>
+                                                        <div className="flex items-center gap-1">
+                                                            {keys.map((k) => (
+                                                                <kbd key={k} className="px-1.5 py-0.5 bg-slate-100 dark:bg-white/10 border border-slate-200 dark:border-white/20 rounded text-[9px] font-black text-slate-600 dark:text-slate-300">{k}</kbd>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </motion.div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
             </div >
             );
 }

@@ -73,6 +73,11 @@ export const AIKnowledgeService = {
         return response.data;
     },
 
+    reprocessBase: async (baseId: string): Promise<{ message: string; count: number }> => {
+        const response = await api.post<{ message: string; count: number }>(`/ai/knowledge/bases/${baseId}/reprocess-all`);
+        return response.data;
+    },
+
     downloadDocument: async (documentId: string, title: string) => {
         const response = await api.get(`/ai/knowledge/documents/${documentId}/download`, {
             responseType: 'blob'

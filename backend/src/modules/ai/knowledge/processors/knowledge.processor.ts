@@ -69,13 +69,43 @@ export class KnowledgeProcessor extends WorkerHost {
                 this.logger.warn(`Não foi possível carregar configs do provider ${embeddingProvider}: ${cfgErr.message}`);
             }
 
+            // Se o provider falhar, faz fallback para nativo e atualiza a KB uma única vez
+            let resolvedProvider = embeddingProvider;
+            let resolvedModel: string | undefined = embeddingModel;
+            let resolvedApiKey: string | undefined = embeddingApiKey;
+            let resolvedBaseUrl: string | undefined = embeddingBaseUrl;
+            let kbFallbackApplied = false;
+
             let chunkCount = 0;
             for (const content of chunks) {
                 let embedding: number[] | null = null;
                 try {
-                    embedding = await this.vectorStore.generateEmbedding(content, embeddingProvider, embeddingModel, embeddingApiKey, embeddingBaseUrl);
+                    embedding = await this.vectorStore.generateEmbedding(content, resolvedProvider, resolvedModel, resolvedApiKey, resolvedBaseUrl);
                 } catch (embErr) {
-                    this.logger.warn(`Falha ao gerar embedding para chunk (continuando sem embedding): ${embErr.message}`);
+                    this.logger.warn(`Falha ao gerar embedding com provider '${resolvedProvider}': ${embErr.message}`);
+                    // Fallback para provider nativo (Xenova/local) — não requer API key
+                    if (resolvedProvider !== 'native') {
+                        try {
+                            this.logger.log(`[Fallback] Tentando embedding nativo (Xenova) para chunk.`);
+                            embedding = await this.vectorStore.generateEmbedding(content, 'native', undefined, undefined, undefined);
+                            // Muda o provider para native para os próximos chunks e para a KB
+                            resolvedProvider = 'native';
+                            resolvedModel = 'Xenova/all-MiniLM-L6-v2';
+                            resolvedApiKey = undefined;
+                            resolvedBaseUrl = undefined;
+                            if (!kbFallbackApplied) {
+                                kbFallbackApplied = true;
+                                // Atualiza a KB para que a busca RAG use o mesmo provider
+                                await (this.prisma as any).knowledgeBase.update({
+                                    where: { id: document.knowledgeBaseId },
+                                    data: { embeddingProvider: 'native', embeddingModel: 'Xenova/all-MiniLM-L6-v2' },
+                                });
+                                this.logger.warn(`[Fallback] Knowledge base ${document.knowledgeBaseId} atualizada para embeddingProvider='native'.`);
+                            }
+                        } catch (nativeErr) {
+                            this.logger.error(`[Fallback] Embedding nativo também falhou: ${nativeErr.message}. Chunk sem embedding.`);
+                        }
+                    }
                 }
 
                 await (this.prisma as any).documentChunk.create({

@@ -293,6 +293,39 @@ export class KnowledgeService {
         return zip.generateAsync({ type: 'nodebuffer' });
     }
 
+    /**
+     * Reprocessa TODOS os documentos de uma base de conhecimento.
+     * Útil para corrigir embeddings nulos ou trocar o embedding provider.
+     */
+    async reprocessBase(companyId: string, knowledgeBaseId: string) {
+        const base = await this.findOneBase(companyId, knowledgeBaseId);
+
+        const docs = await (this.prisma as any).document.findMany({
+            where: { knowledgeBaseId: base.id },
+            select: { id: true },
+        });
+
+        if (docs.length === 0) {
+            return { message: 'Nenhum documento na base', count: 0 };
+        }
+
+        let queued = 0;
+        for (const doc of docs) {
+            await (this.prisma as any).document.update({
+                where: { id: doc.id },
+                data: { status: 'PENDING' },
+            });
+            await (this.prisma as any).documentChunk.deleteMany({
+                where: { documentId: doc.id },
+            });
+            await this.enqueueProcessing(doc.id, companyId);
+            queued++;
+        }
+
+        this.emitKnowledgeUpdated(knowledgeBaseId, companyId);
+        return { message: `${queued} documento(s) enviado(s) para reprocessamento`, count: queued };
+    }
+
     async reprocessDocument(companyId: string, documentId: string) {
         // Verificar se o documento existe e pertence à empresa
         const doc = await (this.prisma as any).document.findFirst({

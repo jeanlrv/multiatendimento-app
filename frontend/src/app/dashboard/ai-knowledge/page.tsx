@@ -689,17 +689,35 @@ export default function AIKnowledgePage() {
                                     </h3>
                                     <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">{selectedBase.description || 'Base cognitiva operacional'}</p>
                                 </div>
-                                <button
-                                    onClick={() => {
-                                        setDocMode('files');
-                                        setUploadFiles([]);
-                                        setNewDoc({ title: '', sourceType: 'TEXT', rawContent: '' });
-                                        setIsDocModalOpen(true);
-                                    }}
-                                    className="px-6 py-3 bg-white dark:bg-white/10 text-primary font-bold text-xs uppercase tracking-widest rounded-xl hover:bg-primary hover:text-white transition-all shadow-md flex items-center gap-2"
-                                >
-                                    <Plus size={16} /> Inserir Conhecimento
-                                </button>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={async () => {
+                                            if (!confirm(`Reprocessar todos os documentos da base "${selectedBase.name}"?\n\nIsso vai regerar todos os embeddings. Documentos com provider inválido serão migrados para o embedding nativo (local).`)) return;
+                                            try {
+                                                const result = await AIKnowledgeService.reprocessBase(selectedBase.id);
+                                                toast.success(result.message);
+                                                setDocuments(prev => prev.map(d => ({ ...d, status: 'PENDING' as const })));
+                                            } catch {
+                                                toast.error('Erro ao reprocessar a base');
+                                            }
+                                        }}
+                                        className="px-4 py-3 bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 font-bold text-xs uppercase tracking-widest rounded-xl hover:bg-amber-500 hover:text-white transition-all border border-amber-200 dark:border-amber-500/30 flex items-center gap-2"
+                                        title="Reprocessar todos os documentos (corrige embeddings nulos)"
+                                    >
+                                        <RefreshCw size={14} /> Reindexar Tudo
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setDocMode('files');
+                                            setUploadFiles([]);
+                                            setNewDoc({ title: '', sourceType: 'TEXT', rawContent: '' });
+                                            setIsDocModalOpen(true);
+                                        }}
+                                        className="px-6 py-3 bg-white dark:bg-white/10 text-primary font-bold text-xs uppercase tracking-widest rounded-xl hover:bg-primary hover:text-white transition-all shadow-md flex items-center gap-2"
+                                    >
+                                        <Plus size={16} /> Inserir Conhecimento
+                                    </button>
+                                </div>
                             </div>
 
                             <div className="flex-1 p-8">
@@ -793,7 +811,7 @@ export default function AIKnowledgePage() {
                                                             >
                                                                 <Download size={16} />
                                                             </button>
-                                                            {doc.status === 'ERROR' && (
+                                                            {(doc.status === 'ERROR' || (doc.status === 'READY' && doc.chunkCount === 0)) && (
                                                                 <button
                                                                     onClick={async () => {
                                                                         try {
@@ -805,8 +823,8 @@ export default function AIKnowledgePage() {
                                                                             toast.error('Erro ao reprocessar documento');
                                                                         }
                                                                     }}
-                                                                    className="p-2 hover:text-primary transition-all text-slate-400"
-                                                                    title="Reprocessar Documento"
+                                                                    className="p-2 hover:text-amber-500 transition-all text-slate-400"
+                                                                    title={doc.status === 'ERROR' ? 'Reprocessar documento com erro' : 'Reprocessar (0 vetores — embedding pode ter falhado)'}
                                                                 >
                                                                     <RefreshCw size={16} />
                                                                 </button>
