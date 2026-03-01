@@ -111,16 +111,9 @@ export class EmbeddingProviderFactory implements OnModuleInit {
 
     /** Aquece o modelo nativo na inicialização para eliminar cold-start de 5-15s na primeira request */
     onModuleInit() {
-        const defaultModel = 'Xenova/all-MiniLM-L6-v2';
-        this.logger.log(`[Warm-up] Pré-carregando pipeline nativo: ${defaultModel}`);
-        // Fire-and-forget — falha silenciosa (ambiente sem suporte a transformers não bloqueia o boot)
-        nativePipelineCache.get(defaultModel)?.catch(() => { }) ??
-            nativePipelineCache.set(defaultModel,
-                import('@xenova/transformers')
-                    .then(({ pipeline }) => pipeline('feature-extraction', defaultModel))
-                    .then(() => this.logger.log(`[Warm-up] Pipeline nativo pronto: ${defaultModel}`))
-                    .catch(e => this.logger.warn(`[Warm-up] Pipeline nativo indisponível: ${e.message}`))
-            );
+        // Desativado warm-up automático para evitar crash 'Ort::Exception' no boot do Railway
+        // O carregamento agora é dinâmico apenas sob demanda em createNativeEmbeddings
+        this.logger.log(`[AI] EmbeddingProviderFactory inicializado (Warm-up nativo desativado para estabilidade)`);
     }
 
     /**
@@ -237,13 +230,26 @@ export class EmbeddingProviderFactory implements OnModuleInit {
 
     private createNativeEmbeddings(model: string): Embeddings {
         // Retorna um wrapper LangChain que reutiliza o pipeline em cache
-        const getExtractor = (): Promise<any> => {
+        const getExtractor = async (): Promise<any> => {
             if (!nativePipelineCache.has(model)) {
                 this.logger.log(`[NativeEmbed] Carregando pipeline '${model}' (primeira vez)`);
-                const p = import('@xenova/transformers').then(({ pipeline }) =>
-                    pipeline('feature-extraction', model, { quantized: true })
-                );
-                nativePipelineCache.set(model, p);
+                try {
+                    const { pipeline, env } = await import('@xenova/transformers');
+
+                    // Desativar cache local excessivo e webworkers no backend para estabilidade
+                    env.allowLocalModels = false;
+                    env.useBrowserCache = false;
+
+                    const p = pipeline('feature-extraction', model, {
+                        quantized: true,
+                    });
+
+                    nativePipelineCache.set(model, p);
+                } catch (error) {
+                    this.logger.error(`[NativeEmbed] Falha fatal ao carregar pipeline nativo: ${error.message}`);
+                    nativePipelineCache.delete(model);
+                    throw new Error(`Modelo de embedding nativo indisponível neste ambiente: ${error.message}`);
+                }
             }
             return nativePipelineCache.get(model)!;
         };
