@@ -180,7 +180,7 @@ export class VectorStoreService {
                             status: 'READY',
                             knowledgeBase: knowledgeBaseId ? { id: knowledgeBaseId } : { companyId },
                         },
-                        embedding: { not: Prisma.DbNull },
+                        embedding: { not: null },
                     },
                     include: { document: { select: { title: true } } },
                     // Sem orderBy arbitrário — a ordenação será pelo vectorScore abaixo

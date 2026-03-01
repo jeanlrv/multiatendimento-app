@@ -53,11 +53,7 @@ export class KnowledgeService {
                     include: {
                         _count: {
                             select: {
-                                chunks: {
-                                    where: {
-                                        embedding: { not: Prisma.DbNull }
-                                    }
-                                }
+                                chunks: true
                             }
                         }
                     }
@@ -203,11 +199,7 @@ export class KnowledgeService {
             include: {
                 _count: {
                     select: {
-                        chunks: {
-                            where: {
-                                embedding: { not: Prisma.DbNull }
-                            }
-                        }
+                        chunks: true
                     }
                 }
             }
