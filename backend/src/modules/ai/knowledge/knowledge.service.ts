@@ -1,6 +1,7 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../../../database/prisma.service';
+import { Prisma } from '@prisma/client';
 import { CreateKnowledgeBaseDto } from './dto/create-knowledge.dto';
 import { AddDocumentDto } from './dto/add-document.dto';
 import { InjectQueue } from '@nestjs/bullmq';
@@ -54,7 +55,7 @@ export class KnowledgeService {
                             select: {
                                 chunks: {
                                     where: {
-                                        embedding: { not: null }
+                                        embedding: { not: Prisma.DbNull }
                                     }
                                 }
                             }
@@ -164,7 +165,7 @@ export class KnowledgeService {
                     select: {
                         chunks: {
                             where: {
-                                embedding: { not: null }
+                                embedding: { not: Prisma.DbNull }
                             }
                         }
                     }

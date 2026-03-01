@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { createHash } from 'crypto';
+import { Prisma } from '@prisma/client';
 import { EmbeddingProviderFactory } from './embedding-provider.factory';
 
 @Injectable()
@@ -179,7 +180,7 @@ export class VectorStoreService {
                             status: 'READY',
                             knowledgeBase: knowledgeBaseId ? { id: knowledgeBaseId } : { companyId },
                         },
-                        NOT: { embedding: null },
+                        embedding: { not: Prisma.DbNull },
                     },
                     include: { document: { select: { title: true } } },
                     // Sem orderBy arbitrário — a ordenação será pelo vectorScore abaixo

@@ -836,7 +836,7 @@ export default function AIKnowledgePage() {
                                                             >
                                                                 <Download size={16} />
                                                             </button>
-                                                            {(doc.status === 'ERROR' || (doc.status === 'READY' && doc.chunkCount === 0)) && (
+                                                            {(doc.status === 'ERROR' || (doc.status === 'READY' && (doc.chunkCount === 0 || doc.isVectorized === false))) && (
                                                                 <button
                                                                     onClick={async () => {
                                                                         try {

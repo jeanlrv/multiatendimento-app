@@ -74,12 +74,6 @@ export class KnowledgeController {
         return this.knowledgeService.getDocumentStatus(req.user.companyId, id);
     }
 
-    @Delete('documents/:id')
-    @ApiOperation({ summary: 'Remover documento da base' })
-    removeDocument(@Req() req: any, @Param('id') id: string) {
-        return this.knowledgeService.removeDocument(req.user.companyId, id);
-    }
-
     @Delete('documents/bulk')
     @ApiOperation({ summary: 'Remover múltiplos documentos' })
     @ApiBody({
@@ -92,6 +86,12 @@ export class KnowledgeController {
     })
     batchRemoveDocuments(@Req() req: any, @Body('ids') ids: string[]) {
         return this.knowledgeService.batchRemoveDocuments(req.user.companyId, ids);
+    }
+
+    @Delete('documents/:id')
+    @ApiOperation({ summary: 'Remover documento da base' })
+    removeDocument(@Req() req: any, @Param('id') id: string) {
+        return this.knowledgeService.removeDocument(req.user.companyId, id);
     }
 
     @Get('documents/:id/download')
