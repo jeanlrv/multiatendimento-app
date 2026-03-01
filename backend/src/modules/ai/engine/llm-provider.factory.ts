@@ -418,14 +418,16 @@ export class LLMProviderFactory {
             || (provider.id === 'ollama' ? (this.configService.get<string>('OLLAMA_BASE_URL') || provider.baseURL) : undefined)
             || provider.baseURL;
 
+        // @langchain/openai v1.x: usar 'apiKey' (não 'openAIApiKey') + 'configuration.apiKey' quando há baseURL
+        const effectiveKey = apiKey || 'local';
         const config: any = {
             modelName: modelName,
             temperature: temperature,
-            openAIApiKey: apiKey || 'local', // LM Studio / Ollama não precisam de key real
+            apiKey: effectiveKey,
         };
 
         if (baseURL) {
-            config.configuration = { baseURL };
+            config.configuration = { baseURL, apiKey: effectiveKey };
         }
 
         return new ChatOpenAI(config);
