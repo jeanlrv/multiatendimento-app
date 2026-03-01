@@ -295,7 +295,7 @@ export class KnowledgeService {
 
     /**
      * Reprocessa TODOS os documentos de uma base de conhecimento.
-     * Útil para corrigir embeddings nulos ou trocar o embedding provider.
+     * Usa operações em lote para evitar timeout em bases com muitos documentos.
      */
     async reprocessBase(companyId: string, knowledgeBaseId: string) {
         const base = await this.findOneBase(companyId, knowledgeBaseId);
@@ -309,21 +309,24 @@ export class KnowledgeService {
             return { message: 'Nenhum documento na base', count: 0 };
         }
 
-        let queued = 0;
-        for (const doc of docs) {
-            await (this.prisma as any).document.update({
-                where: { id: doc.id },
-                data: { status: 'PENDING' },
-            });
-            await (this.prisma as any).documentChunk.deleteMany({
-                where: { documentId: doc.id },
-            });
-            await this.enqueueProcessing(doc.id, companyId);
-            queued++;
-        }
+        const docIds = docs.map((d: any) => d.id);
+
+        // 1. Apaga todos os chunks da base em uma única query (muito mais rápido que N deleteMany)
+        await (this.prisma as any).documentChunk.deleteMany({
+            where: { documentId: { in: docIds } },
+        });
+
+        // 2. Marca todos os documentos como PENDING em uma única query
+        await (this.prisma as any).document.updateMany({
+            where: { id: { in: docIds } },
+            data: { status: 'PENDING' },
+        });
+
+        // 3. Enfileira todos em paralelo (BullMQ é assíncrono — não bloqueia)
+        await Promise.all(docIds.map((id: string) => this.enqueueProcessing(id, companyId)));
 
         this.emitKnowledgeUpdated(knowledgeBaseId, companyId);
-        return { message: `${queued} documento(s) enviado(s) para reprocessamento`, count: queued };
+        return { message: `${docIds.length} documento(s) enviado(s) para reprocessamento`, count: docIds.length };
     }
 
     async reprocessDocument(companyId: string, documentId: string) {
