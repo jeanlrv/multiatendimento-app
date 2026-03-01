@@ -80,8 +80,24 @@ export default function AIAgentsPage() {
         }
     };
 
+    // Modelo realmente salvo no banco (não o corrigido pelo sync local)
+    const savedModelId = originalAgent?.modelId;
+    const isSavedProviderConfigured = !savedModelId || availableModels.some(p => p.models.some(m => m.id === savedModelId));
+
     const handleChatTest = async () => {
         if (!chatMessage || !currentAgent?.id) return;
+
+        // Bloqueia teste se o provider do modelo SALVO não estiver configurado
+        if (!isSavedProviderConfigured) {
+            toast.error(`Provider do modelo "${getModelDisplayName(savedModelId)}" não está configurado. Configure em Configurações → IA & Modelos ou salve o agente com outro modelo.`);
+            return;
+        }
+
+        // Bloqueia se houver alterações não salvas (backend usa o agente do DB)
+        if (isDirty) {
+            toast.warning('Salve as alterações antes de testar no Playground.');
+            return;
+        }
 
         setChatLoading(true);
         const userMsg = { role: 'user', content: chatMessage };
@@ -93,8 +109,10 @@ export default function AIAgentsPage() {
             const response = await AIAgentsService.chat(currentAgent.id, userMsg.content, updatedHistory.slice(0, -1));
             setChatHistory(prev => [...prev, { role: 'assistant', content: typeof response === 'string' ? response : (response as any)?.textResponse || 'Sem resposta' }]);
         } catch (error: any) {
-            const errorMsg = error.response?.data?.message || 'Erro ao processar mensagem.';
-            setChatHistory(prev => [...prev, { role: 'assistant', content: errorMsg }]);
+            const errorMsg = error.response?.data?.message
+                || error.response?.data?.error
+                || 'Erro ao processar mensagem. Verifique se o provider de IA está configurado.';
+            setChatHistory(prev => [...prev, { role: 'assistant', content: `⚠️ ${errorMsg}` }]);
             toast.error(errorMsg);
         } finally {
             setChatLoading(false);
@@ -583,14 +601,22 @@ export default function AIAgentsPage() {
 
                         {activeTab === 'playground' && (
                             <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="flex flex-col h-[400px]">
-                                {currentAgent?.id && !availableModels.some(p => p.models.some(m => m.id === currentAgent.modelId)) && (
+                                {/* Aviso: provider do modelo SALVO não configurado */}
+                                {currentAgent?.id && !isSavedProviderConfigured && (
                                     <div className="bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800/50 rounded-2xl p-4 mb-4">
                                         <p className="text-xs font-black text-rose-800 dark:text-rose-300 uppercase tracking-wider flex items-center gap-2">
                                             ⚠️ Provider Desconfigurado
                                         </p>
                                         <p className="text-[11px] text-rose-700 dark:text-rose-400 mt-1 font-semibold">
-                                            O modelo selecionado ({getModelDisplayName(currentAgent.modelId)}) pertence a um provider que não está configurado. Configure a API Key ou altere o modelo na aba "Cérebro".
+                                            O modelo salvo <strong>{getModelDisplayName(savedModelId)}</strong> pertence a um provider sem API Key configurada.
+                                            Vá em <strong>Cérebro</strong>, selecione outro modelo e clique em <strong>Sincronizar IA</strong>.
                                         </p>
+                                    </div>
+                                )}
+                                {/* Aviso: alterações pendentes de salvar */}
+                                {currentAgent?.id && isDirty && (
+                                    <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-600/30 rounded-2xl p-4 mb-4 text-xs font-bold text-amber-700 dark:text-amber-300 uppercase tracking-widest text-center">
+                                        ⚠️ Salve as alterações antes de testar
                                     </div>
                                 )}
                                 {!currentAgent?.id && (
@@ -627,14 +653,19 @@ export default function AIAgentsPage() {
                                     <input
                                         value={chatMessage}
                                         onChange={e => setChatMessage(e.target.value)}
-                                        onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleChatTest())}
-                                        placeholder="Envie uma mensagem para testar..."
-                                        disabled={!currentAgent?.id}
+                                        onKeyDown={e => e.key === 'Enter' && !isDirty && isSavedProviderConfigured && (e.preventDefault(), handleChatTest())}
+                                        placeholder={
+                                            !currentAgent?.id ? 'Salve o agente antes de testar...' :
+                                            isDirty ? 'Salve as alterações antes de testar...' :
+                                            !isSavedProviderConfigured ? 'Provider não configurado...' :
+                                            'Envie uma mensagem para testar...'
+                                        }
+                                        disabled={!currentAgent?.id || isDirty || !isSavedProviderConfigured}
                                         className="flex-1 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl px-6 py-4 text-sm font-semibold outline-none focus:ring-2 focus:ring-primary/20 dark:text-white disabled:opacity-50"
                                     />
                                     <button
                                         type="button"
-                                        disabled={chatLoading || !currentAgent?.id}
+                                        disabled={chatLoading || !currentAgent?.id || isDirty || !isSavedProviderConfigured}
                                         onClick={handleChatTest}
                                         className="p-4 bg-primary text-white rounded-2xl hover:scale-105 active:scale-95 transition-all shadow-lg disabled:opacity-50"
                                     >

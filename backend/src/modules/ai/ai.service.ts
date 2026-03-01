@@ -335,7 +335,7 @@ export class AIService {
      */
     async chat(companyId: string, agentId: string, message: string, history: any[] = [], conversationId?: string) {
         if (!message || message.trim().length === 0) {
-            throw new Error('Mensagem não pode ser vazia');
+            throw new BadRequestException('Mensagem não pode ser vazia');
         }
         if (message.length > 4000) message = message.substring(0, 4000);
 
@@ -344,7 +344,7 @@ export class AIService {
 
         const agent = await this.findOneAgent(companyId, agentId);
         if (!agent || !agent.isActive) {
-            throw new Error('Agente não encontrado ou inativo');
+            throw new NotFoundException('Agente não encontrado ou inativo');
         }
 
         await this.checkTokenLimits(companyId);
@@ -353,7 +353,20 @@ export class AIService {
             // Fase 5: Semantic Cache (Interceptação por Vector)
             let promptEmbedding: number[] = [];
             try {
-                promptEmbedding = await this.vectorStoreService.generateEmbedding(message, 'native');
+                const companyConfigs = await this.providerConfigService.getDecryptedForCompany(companyId);
+                const embeddingProvider = agent.embeddingProvider || 'openai';
+                const embeddingConfig = companyConfigs.get(embeddingProvider);
+
+                // Evita carregar o modelo nativo (@xenova) para cache se não for estritamente necessário
+                // ou se o ambiente estiver em modo de economia de memória (Railway 512MB)
+                promptEmbedding = await this.vectorStoreService.generateEmbedding(
+                    message,
+                    embeddingProvider,
+                    agent.embeddingModel,
+                    embeddingConfig?.apiKey || undefined,
+                    embeddingConfig?.baseUrl || undefined
+                );
+
                 const cacheKeyPrefix = `${companyId}:${agentId}:`;
                 for (const [key, cached] of this.semanticCache.entries()) {
                     if (key.startsWith(cacheKeyPrefix)) {
@@ -364,7 +377,10 @@ export class AIService {
                         }
                     }
                 }
-            } catch { /* fallback: avança sem cache */ }
+            } catch (error) {
+                this.logger.debug(`[Cache Skip] Falha ao verificar cache semântico (possível timeout ou OOM): ${error.message}`);
+                /* fallback: avança sem cache */
+            }
 
             // Fase 4: Token Budget Manager
             const budget = this.allocateTokenBudget(message);
@@ -486,7 +502,7 @@ export class AIService {
         history: any[] = []
     ) {
         if (!message || message.trim().length === 0) {
-            throw new Error('Mensagem não pode ser vazia');
+            throw new BadRequestException('Mensagem não pode ser vazia');
         }
         if (message.length > 4000) message = message.substring(0, 4000);
 
@@ -494,12 +510,12 @@ export class AIService {
         history = this.compressContext(history);
 
         if (imageUrls.length > 5) {
-            throw new Error('Máximo de 5 imagens por requisição');
+            throw new BadRequestException('Máximo de 5 imagens por requisição');
         }
 
         const agent = await this.findOneAgent(companyId, agentId);
         if (!agent || !agent.isActive) {
-            throw new Error('Agente não encontrado ou inativo');
+            throw new NotFoundException('Agente não encontrado ou inativo');
         }
 
         await this.checkTokenLimits(companyId);
@@ -831,7 +847,7 @@ export class AIService {
      * Inclui pipeline completo: cache semântico, RAG, overflow guard e rastreamento de tokens.
      */
     streamChat(companyId: string, agentId: string, message: string, history: any[] = []): Observable<any> {
-        if (!message || message.trim().length === 0) throw new Error('Mensagem não pode ser vazia');
+        if (!message || message.trim().length === 0) throw new BadRequestException('Mensagem não pode ser vazia');
         if (message.length > 4000) message = message.substring(0, 4000);
         history = this.compressContext(history);
 
@@ -840,7 +856,7 @@ export class AIService {
 
             (async () => {
                 const agent = await this.findOneAgent(companyId, agentId);
-                if (!agent || !agent.isActive) throw new Error('Agente não encontrado ou inativo');
+                if (!agent || !agent.isActive) throw new NotFoundException('Agente não encontrado ou inativo');
 
                 await this.checkTokenLimits(companyId);
 
