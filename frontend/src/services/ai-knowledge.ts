@@ -71,6 +71,38 @@ export const AIKnowledgeService = {
     reprocessDocument: async (documentId: string): Promise<{ message: string }> => {
         const response = await api.post<{ message: string }>(`/ai/knowledge/documents/${documentId}/reprocess`);
         return response.data;
+    },
+
+    downloadDocument: async (documentId: string, title: string) => {
+        const response = await api.get(`/ai/knowledge/documents/${documentId}/download`, {
+            responseType: 'blob'
+        });
+
+        const url = window.URL.createObjectURL(new Blob([response.data]));
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', title);
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+    },
+
+    batchRemoveDocuments: async (ids: string[]) => {
+        await api.delete('/ai/knowledge/documents/bulk', { data: { ids } });
+    },
+
+    downloadBulkDocuments: async (ids: string[]) => {
+        const response = await api.post('/ai/knowledge/documents/download-bulk', { ids }, {
+            responseType: 'blob'
+        });
+
+        const url = window.URL.createObjectURL(new Blob([response.data]));
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', 'knowledge-base-documents.zip');
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
     }
 };
 

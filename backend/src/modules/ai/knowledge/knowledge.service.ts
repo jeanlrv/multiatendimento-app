@@ -158,12 +158,25 @@ export class KnowledgeService {
             where: { id: documentId, knowledgeBase: { companyId } }
         });
 
-        if (doc && doc.contentUrl && !doc.contentUrl.startsWith('http')) {
+        if (!doc) return { count: 0 };
+
+        // Deletar chunks primeiro (cascade manual se necessário, embora Prisma deva lidar se configurado)
+        await (this.prisma as any).documentChunk.deleteMany({
+            where: { documentId }
+        });
+
+        if (doc.contentUrl && !doc.contentUrl.startsWith('http')) {
             try {
                 const fs = require('fs');
                 if (fs.existsSync(doc.contentUrl)) fs.unlinkSync(doc.contentUrl);
             } catch (error) {
                 this.logger.error(`Erro ao remover arquivo físico: ${error.message}`);
+            }
+        } else if (doc.contentUrl && doc.contentUrl.startsWith('http')) {
+            try {
+                await this.s3Service.deleteFile(doc.contentUrl);
+            } catch (error) {
+                this.logger.error(`Erro ao remover arquivo do S3: ${error.message}`);
             }
         }
 
@@ -175,6 +188,109 @@ export class KnowledgeService {
         });
         if (doc?.knowledgeBaseId) this.emitKnowledgeUpdated(doc.knowledgeBaseId, companyId);
         return deleted;
+    }
+
+    async batchRemoveDocuments(companyId: string, documentIds: string[]) {
+        if (!documentIds || documentIds.length === 0) return { count: 0 };
+
+        const docs = await (this.prisma as any).document.findMany({
+            where: {
+                id: { in: documentIds },
+                knowledgeBase: { companyId }
+            }
+        });
+
+        if (docs.length === 0) return { count: 0 };
+
+        const baseIds = [...new Set(docs.map((d: any) => d.knowledgeBaseId))];
+
+        for (const doc of docs) {
+            // Remover chunks
+            await (this.prisma as any).documentChunk.deleteMany({
+                where: { documentId: doc.id }
+            });
+
+            // Remover arquivo físico
+            if (doc.contentUrl && !doc.contentUrl.startsWith('http')) {
+                try {
+                    const fs = require('fs');
+                    if (fs.existsSync(doc.contentUrl)) fs.unlinkSync(doc.contentUrl);
+                } catch (error) {
+                    this.logger.error(`Erro ao remover arquivo físico (${doc.id}): ${error.message}`);
+                }
+            } else if (doc.contentUrl && doc.contentUrl.startsWith('http')) {
+                try {
+                    await this.s3Service.deleteFile(doc.contentUrl);
+                } catch (error) {
+                    this.logger.error(`Erro ao remover arquivo do S3 (${doc.id}): ${error.message}`);
+                }
+            }
+        }
+
+        const deleted = await (this.prisma as any).document.deleteMany({
+            where: {
+                id: { in: documentIds },
+                knowledgeBase: { companyId }
+            }
+        });
+
+        for (const baseId of baseIds) {
+            this.emitKnowledgeUpdated(baseId as string, companyId);
+        }
+
+        return deleted;
+    }
+
+    async getDocumentFile(companyId: string, documentId: string) {
+        const doc = await (this.prisma as any).document.findFirst({
+            where: {
+                id: documentId,
+                knowledgeBase: { companyId }
+            }
+        });
+
+        if (!doc) throw new NotFoundException('Documento não encontrado');
+        if (!doc.contentUrl) throw new BadRequestException('Documento não possui arquivo físico (ex: fonte de texto/URL)');
+
+        return doc;
+    }
+
+    async createBulkDownloadZip(companyId: string, documentIds: string[]) {
+        const docs = await (this.prisma as any).document.findMany({
+            where: {
+                id: { in: documentIds },
+                knowledgeBase: { companyId },
+                contentUrl: { not: null }
+            }
+        });
+
+        if (docs.length === 0) throw new BadRequestException('Nenhum documento com arquivo físico selecionado');
+
+        const JSZip = require('jszip');
+        const zip = new JSZip();
+        const axios = require('axios');
+        const fs = require('fs');
+
+        for (const doc of docs) {
+            try {
+                let fileData: Buffer;
+                if (doc.contentUrl.startsWith('http')) {
+                    const response = await axios.get(doc.contentUrl, { responseType: 'arraybuffer' });
+                    fileData = Buffer.from(response.data);
+                } else {
+                    if (fs.existsSync(doc.contentUrl)) {
+                        fileData = fs.readFileSync(doc.contentUrl);
+                    } else {
+                        continue;
+                    }
+                }
+                zip.file(doc.title, fileData);
+            } catch (error) {
+                this.logger.error(`Erro ao adicionar arquivo ${doc.title} ao ZIP: ${error.message}`);
+            }
+        }
+
+        return zip.generateAsync({ type: 'nodebuffer' });
     }
 
     async reprocessDocument(companyId: string, documentId: string) {

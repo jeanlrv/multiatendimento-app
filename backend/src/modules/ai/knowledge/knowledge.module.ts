@@ -5,6 +5,7 @@ import { KnowledgeService } from './knowledge.service';
 import { KnowledgeProcessor } from './processors/knowledge.processor';
 import { AIEngineModule } from '../engine/ai-engine.module';
 import { DatabaseModule } from '../../../database/database.module';
+import { SettingsModule } from '../../settings/settings.module';
 import { MulterModule } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import * as path from 'path';
@@ -13,6 +14,7 @@ import * as path from 'path';
     imports: [
         DatabaseModule,
         AIEngineModule,
+        SettingsModule,
         MulterModule.register({
             storage: diskStorage({
                 destination: './storage/uploads',

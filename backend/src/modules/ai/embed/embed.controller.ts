@@ -1,7 +1,6 @@
 import { Controller, Get, Post, Body, Param, Headers, Req, Res } from '@nestjs/common';
 import { EmbedService } from './embed.service';
 import { Response, Request } from 'express';
-// Assumindo que temos um decorador @Public ou similar se usar global AuthGuard
 import { Public } from '../../../common/decorators/public.decorator';
 
 @Controller('embed')
@@ -45,123 +44,167 @@ export class EmbedController {
         @Res() res: Response
     ) {
         const origin = req.headers.origin;
-        // Valida se o agente existe para retornar o script
         const config = await this.embedService.getPublicConfig(embedId, origin as string).catch(() => null);
 
         if (!config) {
-            return res.status(404).send('console.error("Agent not found or disabled.");');
+            return res.status(404).send('console.error("[KSZap] Agent not found or disabled.");');
         }
 
-        // Tentar obter a URL do frontend da variável de ambiente, ou hardcodar para testes/fallback
-        // Acesso via process.env.NEXT_PUBLIC_API_URL seria o endpoint, frontend URL pode ser outra env var
-        // Assumindo que frontend e backend rodam com domínios conhecidos no ambiente
         const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+        const positionProp = config.position === 'bottom-left' ? 'left: 20px;' : 'right: 20px;';
 
-        const positionObj = config.position === 'bottom-left'
-            ? 'left: 20px;'
-            : 'right: 20px;';
+        // Escape values safe for JS string injection
+        const safeName = (config.agentName || 'Chat').replace(/['"\\]/g, '');
+        const safeColor = (config.brandColor || '#4F46E5').replace(/['"\\]/g, '');
+        const safeLogo = (config.brandLogo || '').replace(/['"\\]/g, '');
 
         const scriptContent = `
 (function() {
-    const embedId = "${embedId}";
-    const brandColor = "${config.brandColor}";
-    const frontendUrl = "${frontendUrl}";
-    const positionStyle = "${positionObj}";
+    if (document.getElementById('kszap-embed-container')) return;
 
-    // Container
-    const container = document.createElement('div');
+    var embedId   = "${embedId}";
+    var brandColor = "${safeColor}";
+    var brandLogo  = "${safeLogo}";
+    var agentName  = "${safeName}";
+    var frontendUrl = "${frontendUrl}";
+    var positionStyle = "${positionProp}";
+    var isOpen = false;
+
+    /* ── Injetar CSS de animação ── */
+    var style = document.createElement('style');
+    style.textContent = [
+        '#kszap-embed-iframe {',
+        '  transition: opacity 0.28s ease, transform 0.28s ease;',
+        '  opacity: 0;',
+        '  transform: translateY(12px) scale(0.97);',
+        '  pointer-events: none;',
+        '}',
+        '#kszap-embed-iframe.kszap-open {',
+        '  opacity: 1;',
+        '  transform: translateY(0) scale(1);',
+        '  pointer-events: auto;',
+        '}',
+        '#kszap-embed-button {',
+        '  transition: transform 0.2s ease, box-shadow 0.2s ease;',
+        '}',
+        '#kszap-embed-button:hover {',
+        '  transform: scale(1.08);',
+        '  box-shadow: 0 6px 20px rgba(0,0,0,0.22) !important;',
+        '}',
+        '#kszap-embed-button:active { transform: scale(0.95); }',
+    ].join('\\n');
+    document.head.appendChild(style);
+
+    /* ── Container fixo ── */
+    var container = document.createElement('div');
     container.id = 'kszap-embed-container';
-    container.style.cssText = \`
-        position: fixed;
-        bottom: 20px;
-        \${positionStyle}
-        z-index: 999999;
-        font-family: sans-serif;
-    \`;
+    container.style.cssText = [
+        'position: fixed;',
+        'bottom: 20px;',
+        positionStyle,
+        'z-index: 999999;',
+        'display: flex;',
+        'flex-direction: column;',
+        'align-items: ' + (positionStyle.indexOf('left') !== -1 ? 'flex-start' : 'flex-end') + ';',
+    ].join('');
 
-    // Iframe (hidden initially)
-    const iframe = document.createElement('iframe');
-    iframe.src = \`\${frontendUrl}/embed/\${embedId}\`;
+    /* ── Iframe ── */
+    var iframe = document.createElement('iframe');
+    iframe.src = frontendUrl + '/embed/' + embedId;
     iframe.id = 'kszap-embed-iframe';
-    iframe.style.cssText = \`
-        display: none;
-        width: 380px;
-        height: 600px;
-        max-height: 80vh;
-        border: none;
-        border-radius: 12px;
-        box-shadow: 0 10px 40px rgba(0,0,0,0.15);
-        background: transparent;
-        transition: all 0.3s ease;
-        margin-bottom: 20px;
-    \`;
+    iframe.allow = 'microphone';
+    iframe.style.cssText = [
+        'width: 380px;',
+        'height: 600px;',
+        'max-height: 80vh;',
+        'max-width: calc(100vw - 40px);',
+        'border: none;',
+        'border-radius: 16px;',
+        'box-shadow: 0 12px 48px rgba(0,0,0,0.18);',
+        'background: white;',
+        'margin-bottom: 16px;',
+        'display: block;',
+    ].join('');
 
-    // Adjust size for mobile
-    if (window.innerWidth < 400) {
-       iframe.style.width = (window.innerWidth - 40) + 'px';
-    }
-
-    // Toggle Button
-    const button = document.createElement('button');
+    /* ── Botão toggle ── */
+    var button = document.createElement('button');
     button.id = 'kszap-embed-button';
-    button.style.cssText = \`
-        width: 60px;
-        height: 60px;
-        border-radius: 30px;
-        background-color: \${brandColor};
-        color: white;
-        border: none;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: transform 0.2s ease;
-        padding: 0;
-        margin-left: auto;
-    \`;
-    if (config.position === 'bottom-left') {
-        button.style.marginLeft = '0';
-        button.style.marginRight = 'auto';
+    button.setAttribute('aria-label', 'Abrir chat ' + agentName);
+    button.style.cssText = [
+        'width: 60px;',
+        'height: 60px;',
+        'border-radius: 30px;',
+        'background-color: ' + brandColor + ';',
+        'color: white;',
+        'border: none;',
+        'box-shadow: 0 4px 16px rgba(0,0,0,0.2);',
+        'cursor: pointer;',
+        'display: flex;',
+        'align-items: center;',
+        'justify-content: center;',
+        'padding: 0;',
+        'overflow: hidden;',
+    ].join('');
+
+    var chatIcon = '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>';
+    var closeIcon = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+
+    /* Usa avatar do agente no botão quando disponível */
+    if (brandLogo) {
+        var avatarImg = document.createElement('img');
+        avatarImg.src = brandLogo;
+        avatarImg.alt = agentName;
+        avatarImg.style.cssText = 'width: 60px; height: 60px; border-radius: 50%; object-fit: cover; display: block;';
+        avatarImg.onerror = function() { button.innerHTML = chatIcon; };
+        button.appendChild(avatarImg);
+    } else {
+        button.innerHTML = chatIcon;
     }
 
-    const chatIcon = \`<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>\`;
-    const closeIcon = \`<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>\`;
-    
-    button.innerHTML = chatIcon;
+    function openWidget() {
+        isOpen = true;
+        iframe.classList.add('kszap-open');
+        button.innerHTML = closeIcon;
+        button.style.backgroundColor = brandColor;
+        button.setAttribute('aria-label', 'Fechar chat');
+    }
 
-    let isOpen = false;
-
-    button.onclick = function() {
-        isOpen = !isOpen;
-        if (isOpen) {
-            iframe.style.display = 'block';
-            button.innerHTML = closeIcon;
-            button.style.transform = 'scale(0.9)';
-            setTimeout(() => button.style.transform = 'scale(1)', 150);
+    function closeWidget() {
+        isOpen = false;
+        iframe.classList.remove('kszap-open');
+        button.setAttribute('aria-label', 'Abrir chat ' + agentName);
+        /* Restaura avatar ou ícone */
+        if (brandLogo) {
+            var img = document.createElement('img');
+            img.src = brandLogo;
+            img.alt = agentName;
+            img.style.cssText = 'width: 60px; height: 60px; border-radius: 50%; object-fit: cover; display: block;';
+            img.onerror = function() { button.innerHTML = chatIcon; };
+            button.innerHTML = '';
+            button.appendChild(img);
         } else {
-            iframe.style.display = 'none';
             button.innerHTML = chatIcon;
         }
+    }
+
+    button.onclick = function() {
+        if (isOpen) { closeWidget(); } else { openWidget(); }
     };
 
     container.appendChild(iframe);
     container.appendChild(button);
     document.body.appendChild(container);
 
-    // Listen to messages from iframe if needed (e.g., closing from inside)
+    /* Escuta mensagem de fechar vinda de dentro do iframe */
     window.addEventListener('message', function(event) {
         if (event.origin !== frontendUrl) return;
-        if (event.data === 'KSZAP_CLOSE_EMBED') {
-            isOpen = false;
-            iframe.style.display = 'none';
-            button.innerHTML = chatIcon;
-        }
+        if (event.data === 'KSZAP_CLOSE_EMBED') closeWidget();
     });
 })();
 `;
 
-        res.set('Content-Type', 'application/javascript');
+        res.set('Content-Type', 'application/javascript; charset=utf-8');
+        res.set('Cache-Control', 'no-cache, no-store');
         return res.send(scriptContent);
     }
 }

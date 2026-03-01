@@ -3,6 +3,7 @@ import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { PrismaService } from '../../../../database/prisma.service';
 import { VectorStoreService } from '../../engine/vector-store.service';
+import { ProviderConfigService } from '../../../settings/provider-config.service';
 import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters';
 import axios from 'axios';
 import * as fs from 'fs';
@@ -14,6 +15,7 @@ export class KnowledgeProcessor extends WorkerHost {
     constructor(
         private prisma: PrismaService,
         private vectorStore: VectorStoreService,
+        private providerConfigService: ProviderConfigService,
     ) {
         super();
     }
@@ -52,34 +54,37 @@ export class KnowledgeProcessor extends WorkerHost {
             const chunks = await splitter.splitText(text);
 
             // 5. Gera embeddings usando o provider da base de conhecimento
-            const embeddingProvider = document.knowledgeBase?.embeddingProvider || 'openai';
+            const embeddingProvider = document.knowledgeBase?.embeddingProvider || 'native';
             const embeddingModel = document.knowledgeBase?.embeddingModel || undefined;
+
+            // Busca API key da empresa para o provider de embedding configurado
+            let embeddingApiKey: string | undefined;
+            let embeddingBaseUrl: string | undefined;
+            try {
+                const providerConfigs = await this.providerConfigService.getDecryptedForCompany(companyId);
+                const providerConfig = providerConfigs.get(embeddingProvider);
+                embeddingApiKey = providerConfig?.apiKey ?? undefined;
+                embeddingBaseUrl = providerConfig?.baseUrl ?? undefined;
+            } catch (cfgErr) {
+                this.logger.warn(`Não foi possível carregar configs do provider ${embeddingProvider}: ${cfgErr.message}`);
+            }
 
             let chunkCount = 0;
             for (const content of chunks) {
                 let embedding: number[] | null = null;
                 try {
-                    embedding = await this.vectorStore.generateEmbedding(content, embeddingProvider, embeddingModel);
+                    embedding = await this.vectorStore.generateEmbedding(content, embeddingProvider, embeddingModel, embeddingApiKey, embeddingBaseUrl);
                 } catch (embErr) {
                     this.logger.warn(`Falha ao gerar embedding para chunk (continuando sem embedding): ${embErr.message}`);
                 }
 
-                const createdChunk = await (this.prisma as any).documentChunk.create({
+                await (this.prisma as any).documentChunk.create({
                     data: {
                         documentId,
                         content,
+                        embedding: embedding && embedding.length > 0 ? (embedding as any) : undefined,
                     },
                 });
-
-                // Se gerou embedding com sucesso, injeta no banco via pgvector Raw SQL
-                if (embedding && embedding.length > 0) {
-                    const embeddingStr = `[${embedding.join(',')}]`;
-                    await this.prisma.$executeRaw`
-                        UPDATE document_chunks 
-                        SET embedding = ${embeddingStr}::vector 
-                        WHERE id = ${createdChunk.id}
-                    `;
-                }
 
                 chunkCount++;
             }

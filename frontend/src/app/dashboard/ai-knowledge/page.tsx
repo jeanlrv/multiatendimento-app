@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { AIKnowledgeService, KnowledgeBase, AIDocument } from '@/services/ai-knowledge';
 import { AIAgentsService } from '@/services/ai-agents';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Database, Plus, Trash2, FileText, Globe, FileUp, Loader2, CheckCircle, Activity, ChevronRight, ChevronLeft, Save, Zap, FileCode, UploadCloud, RefreshCw, Music, Youtube, Github, FileSpreadsheet, Presentation, BookOpen, Braces, AlignLeft, X } from 'lucide-react';
+import { Database, Plus, Trash2, FileText, Globe, FileUp, Loader2, CheckCircle, Activity, ChevronRight, ChevronLeft, Save, Zap, FileCode, UploadCloud, RefreshCw, Music, Youtube, Github, FileSpreadsheet, Presentation, BookOpen, Braces, AlignLeft, X, Download, CheckSquare, Square } from 'lucide-react';
 import { toast } from 'sonner';
 
 // Mapeamento de sourceType → ícone e cor
@@ -88,6 +88,10 @@ export default function AIKnowledgePage() {
     const [docMode, setDocMode] = useState<'files' | 'web'>('files');
     const [uploadFiles, setUploadFiles] = useState<File[]>([]);
     const [embeddingProviders, setEmbeddingProviders] = useState<{ id: string; name: string; models: { id: string; name: string; dimensions: number }[] }[]>([]);
+
+    const [selectedDocIds, setSelectedDocIds] = useState<string[]>([]);
+    const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+    const [isBulkDownloading, setIsBulkDownloading] = useState(false);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -244,6 +248,7 @@ export default function AIKnowledgePage() {
                     try {
                         await AIKnowledgeService.removeDocument(id);
                         if (selectedBase) fetchDocuments(selectedBase.id);
+                        setSelectedDocIds(prev => prev.filter(item => item !== id));
                         toast.success('Documento removido');
                     } catch (error) {
                         console.error('Erro ao excluir documento:', error);
@@ -254,6 +259,69 @@ export default function AIKnowledgePage() {
             cancel: { label: 'Cancelar', onClick: () => { } },
             duration: 5000,
         });
+    };
+
+    const handleBulkDelete = () => {
+        if (selectedDocIds.length === 0) return;
+
+        toast(`Remover ${selectedDocIds.length} conhecimentos selecionados?`, {
+            action: {
+                label: 'Remover Todos', onClick: async () => {
+                    try {
+                        setIsBulkDeleting(true);
+                        await AIKnowledgeService.batchRemoveDocuments(selectedDocIds);
+                        if (selectedBase) fetchDocuments(selectedBase.id);
+                        setSelectedDocIds([]);
+                        toast.success(`${selectedDocIds.length} documentos removidos`);
+                    } catch (error) {
+                        console.error('Erro ao excluir em lote:', error);
+                        toast.error('Erro ao remover documentos selecionados');
+                    } finally {
+                        setIsBulkDeleting(false);
+                    }
+                }
+            },
+            cancel: { label: 'Cancelar', onClick: () => { } },
+            duration: 5000,
+        });
+    };
+
+    const handleBulkDownload = async () => {
+        if (selectedDocIds.length === 0) return;
+        try {
+            setIsBulkDownloading(true);
+            await AIKnowledgeService.downloadBulkDocuments(selectedDocIds);
+            toast.success('Download iniciado (ZIP)');
+        } catch (error) {
+            console.error('Erro ao baixar em lote:', error);
+            toast.error('Erro ao gerar pacote de download');
+        } finally {
+            setIsBulkDownloading(false);
+        }
+    };
+
+    const handleDownloadDoc = async (doc: AIDocument) => {
+        try {
+            toast.info(`Iniciando download de ${doc.title}...`);
+            await AIKnowledgeService.downloadDocument(doc.id, doc.title);
+        } catch (error) {
+            console.error('Erro ao baixar documento:', error);
+            toast.error('Falha no download do documento');
+        }
+    };
+
+    const toggleDocSelection = (id: string) => {
+        setSelectedDocIds(prev =>
+            prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+        );
+    };
+
+    const toggleSelectAll = () => {
+        if (selectedDocIds.length === documents.length) {
+            setSelectedDocIds([]);
+        } else {
+            setSelectedDocIds(documents.map(d => d.id));
+        }
     };
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -645,50 +713,116 @@ export default function AIKnowledgePage() {
                                         <p className="text-sm font-bold uppercase tracking-widest">Nenhum dado processado</p>
                                     </div>
                                 ) : (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        {documents.map(doc => (
-                                            <div key={doc.id} className="p-5 bg-white dark:bg-white/5 rounded-3xl border border-slate-100 dark:border-white/10 flex items-center justify-between hover:shadow-lg transition-all group">
-                                                <div className="flex items-center gap-4">
-                                                    <DocTypeIcon sourceType={doc.sourceType} />
-                                                    <div>
-                                                        <p className="text-sm font-black uppercase tracking-tight text-slate-800 dark:text-white line-clamp-1">{doc.title}</p>
-                                                        <div className="flex items-center gap-2 mt-1">
-                                                            <span className={`text-[8px] font-bold uppercase px-1.5 py-0.5 rounded-md ${doc.status === 'READY' ? 'bg-emerald-500/10 text-emerald-600' : doc.status === 'ERROR' ? 'bg-rose-500/10 text-rose-600' : 'bg-slate-100 text-slate-400'}`}>
-                                                                {doc.status}
-                                                            </span>
-                                                            <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">{doc.chunkCount} Vetores</span>
+                                    <div className="space-y-4">
+                                        <div className="flex items-center justify-between px-4 pb-2 border-b border-slate-100 dark:border-white/5">
+                                            <div className="flex items-center gap-3">
+                                                <button
+                                                    onClick={toggleSelectAll}
+                                                    className="p-1 hover:bg-slate-100 dark:hover:bg-white/5 rounded-md transition-all text-primary"
+                                                >
+                                                    {selectedDocIds.length === documents.length ? <CheckSquare size={18} /> : <Square size={18} />}
+                                                </button>
+                                                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                                    {selectedDocIds.length} selecionados
+                                                </span>
+                                            </div>
+
+                                            <AnimatePresence>
+                                                {selectedDocIds.length > 0 && (
+                                                    <motion.div
+                                                        initial={{ opacity: 0, x: 20 }}
+                                                        animate={{ opacity: 1, x: 0 }}
+                                                        exit={{ opacity: 0, x: 20 }}
+                                                        className="flex items-center gap-2"
+                                                    >
+                                                        <button
+                                                            onClick={handleBulkDownload}
+                                                            disabled={isBulkDownloading}
+                                                            className="flex items-center gap-2 px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-[9px] font-black uppercase tracking-widest transition-all disabled:opacity-50"
+                                                        >
+                                                            {isBulkDownloading ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
+                                                            Baixar Selecionados
+                                                        </button>
+                                                        <button
+                                                            onClick={handleBulkDelete}
+                                                            disabled={isBulkDeleting}
+                                                            className="flex items-center gap-2 px-3 py-1.5 bg-rose-500 hover:bg-rose-600 text-white rounded-lg text-[9px] font-black uppercase tracking-widest transition-all disabled:opacity-50"
+                                                        >
+                                                            {isBulkDeleting ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                                                            Excluir Selecionados
+                                                        </button>
+                                                    </motion.div>
+                                                )}
+                                            </AnimatePresence>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            {documents.map(doc => {
+                                                const isSelected = selectedDocIds.includes(doc.id);
+                                                return (
+                                                    <div
+                                                        key={doc.id}
+                                                        className={`p-5 rounded-3xl border transition-all group flex items-center justify-between ${isSelected
+                                                            ? 'bg-primary/5 border-primary shadow-md'
+                                                            : 'bg-white dark:bg-white/5 border-slate-100 dark:border-white/10 hover:shadow-lg'
+                                                            }`}
+                                                    >
+                                                        <div className="flex items-center gap-4 min-w-0">
+                                                            <button
+                                                                onClick={() => toggleDocSelection(doc.id)}
+                                                                className={`p-1 rounded-md transition-all ${isSelected ? 'text-primary' : 'text-slate-300 hover:text-slate-400'}`}
+                                                            >
+                                                                {isSelected ? <CheckSquare size={16} /> : <Square size={16} />}
+                                                            </button>
+                                                            <DocTypeIcon sourceType={doc.sourceType} />
+                                                            <div className="truncate">
+                                                                <p className="text-sm font-black uppercase tracking-tight text-slate-800 dark:text-white truncate">{doc.title}</p>
+                                                                <div className="flex items-center gap-2 mt-1">
+                                                                    <span className={`text-[8px] font-bold uppercase px-1.5 py-0.5 rounded-md ${doc.status === 'READY' ? 'bg-emerald-500/10 text-emerald-600' : doc.status === 'ERROR' ? 'bg-rose-500/10 text-rose-600' : 'bg-slate-100 text-slate-400'}`}>
+                                                                        {doc.status}
+                                                                    </span>
+                                                                    <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">{doc.chunkCount} Vetores</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all ml-4 flex-shrink-0">
+                                                            <button
+                                                                onClick={() => handleDownloadDoc(doc)}
+                                                                className="p-2 hover:text-primary transition-all text-slate-400"
+                                                                title="Baixar arquivo original"
+                                                            >
+                                                                <Download size={16} />
+                                                            </button>
+                                                            {doc.status === 'ERROR' && (
+                                                                <button
+                                                                    onClick={async () => {
+                                                                        try {
+                                                                            await AIKnowledgeService.reprocessDocument(doc.id);
+                                                                            setDocuments(prev => prev.map(d => d.id === doc.id ? { ...d, status: 'PENDING' as const } : d));
+                                                                            toast.success('Documento enviado para reprocessamento');
+                                                                        } catch (error) {
+                                                                            console.error('Erro ao reprocessar documento:', error);
+                                                                            toast.error('Erro ao reprocessar documento');
+                                                                        }
+                                                                    }}
+                                                                    className="p-2 hover:text-primary transition-all text-slate-400"
+                                                                    title="Reprocessar Documento"
+                                                                >
+                                                                    <RefreshCw size={16} />
+                                                                </button>
+                                                            )}
+                                                            <button
+                                                                onClick={() => handleDeleteDoc(doc.id)}
+                                                                className="p-2 hover:text-rose-500 transition-all text-slate-400"
+                                                                title="Remover Documento"
+                                                            >
+                                                                <Trash2 size={16} />
+                                                            </button>
                                                         </div>
                                                     </div>
-                                                </div>
-                                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                                                    {doc.status === 'ERROR' && (
-                                                        <button
-                                                            onClick={async () => {
-                                                                try {
-                                                                    await AIKnowledgeService.reprocessDocument(doc.id);
-                                                                    setDocuments(prev => prev.map(d => d.id === doc.id ? { ...d, status: 'PENDING' as const } : d));
-                                                                    toast.success('Documento enviado para reprocessamento');
-                                                                } catch (error) {
-                                                                    console.error('Erro ao reprocessar documento:', error);
-                                                                    toast.error('Erro ao reprocessar documento');
-                                                                }
-                                                            }}
-                                                            className="p-2 hover:text-primary transition-all"
-                                                            title="Reprocessar Documento"
-                                                        >
-                                                            <RefreshCw size={16} />
-                                                        </button>
-                                                    )}
-                                                    <button
-                                                        onClick={() => handleDeleteDoc(doc.id)}
-                                                        className="p-2 hover:text-rose-500 transition-all"
-                                                        title="Remover Documento"
-                                                    >
-                                                        <Trash2 size={16} />
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        ))}
+                                                );
+                                            })}
+                                        </div>
                                     </div>
                                 )}
                             </div>

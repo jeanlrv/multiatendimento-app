@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Body, Param, Delete, UseGuards, Req, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Param, Delete, UseGuards, Req, UseInterceptors, UploadedFile, Res } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import * as path from 'path';
@@ -78,6 +78,61 @@ export class KnowledgeController {
     @ApiOperation({ summary: 'Remover documento da base' })
     removeDocument(@Req() req: any, @Param('id') id: string) {
         return this.knowledgeService.removeDocument(req.user.companyId, id);
+    }
+
+    @Delete('documents/bulk')
+    @ApiOperation({ summary: 'Remover múltiplos documentos' })
+    @ApiBody({
+        schema: {
+            type: 'object',
+            properties: {
+                ids: { type: 'array', items: { type: 'string' } }
+            }
+        }
+    })
+    batchRemoveDocuments(@Req() req: any, @Body('ids') ids: string[]) {
+        return this.knowledgeService.batchRemoveDocuments(req.user.companyId, ids);
+    }
+
+    @Get('documents/:id/download')
+    @ApiOperation({ summary: 'Baixar arquivo original do documento' })
+    async downloadDocument(@Req() req: any, @Param('id') id: string, @Res() res: any) {
+        const doc = await this.knowledgeService.getDocumentFile(req.user.companyId, id);
+
+        if (doc.contentUrl.startsWith('http')) {
+            // Se for S3, redirecionar para a URL (ou poderíamos fazer stream se fosse privado, 
+            // mas aqui assume-se acessível ou o usuário quer a URL)
+            return res.redirect(doc.contentUrl);
+        } else {
+            // Se for arquivo local
+            const fs = require('fs');
+            if (!fs.existsSync(doc.contentUrl)) {
+                return res.status(404).json({ message: 'Arquivo físico não encontrado no servidor' });
+            }
+            return res.download(doc.contentUrl, doc.title);
+        }
+    }
+
+    @Post('documents/download-bulk')
+    @ApiOperation({ summary: 'Baixar múltiplos arquivos em um ZIP' })
+    @ApiBody({
+        schema: {
+            type: 'object',
+            properties: {
+                ids: { type: 'array', items: { type: 'string' } }
+            }
+        }
+    })
+    async downloadBulkDocuments(@Req() req: any, @Body('ids') ids: string[], @Res() res: any) {
+        const zipBuffer = await this.knowledgeService.createBulkDownloadZip(req.user.companyId, ids);
+
+        res.set({
+            'Content-Type': 'application/zip',
+            'Content-Disposition': `attachment; filename=knowledge-base-documents.zip`,
+            'Content-Length': zipBuffer.length,
+        });
+
+        res.end(zipBuffer);
     }
 
     @Post('documents/:id/reprocess')
