@@ -1472,8 +1472,9 @@ export default function TicketsPage() {
                                     <span className="text-[9px] text-slate-400 italic">Nenhuma tag atribuída</span>
                                 )}
                             </div>
+                        </div>
 
-                            <div className="flex-1 flex overflow-hidden border-x border-b border-slate-200 dark:border-white/10 md:rounded-b-2xl shadow-xl">
+                        <div className="flex-1 flex overflow-hidden border-x border-b border-slate-200 dark:border-white/10 md:rounded-b-2xl shadow-xl">
                                 {/* Mensagens (agora dentro de uma div flex) */}
                                 <div className="flex-1 flex flex-col overflow-hidden relative">
                                     <div

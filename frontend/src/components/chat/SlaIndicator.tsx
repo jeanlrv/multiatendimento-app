@@ -111,7 +111,6 @@ export function SlaIndicator({ ticket }: { ticket: TicketWithSla }) {
 
     if (activeSla.isWarning && !activeSla.isCompleted) {
         return (
-        return (
             <div className="flex items-center gap-1 text-amber-600 bg-amber-50 dark:bg-amber-500/10 px-1.5 py-0.5 rounded-md border border-amber-300 dark:border-amber-500/30 mt-1.5 w-max">
                 <Clock size={10} />
                 <span className="text-[8px] font-black tracking-widest uppercase truncate max-w-[120px]">
@@ -119,12 +118,10 @@ export function SlaIndicator({ ticket }: { ticket: TicketWithSla }) {
                 </span>
             </div>
         );
-        );
     }
 
     // SLA está rolando mas está safe
     if (!activeSla.isCompleted) {
-        return (
         return (
             <div className="flex items-center gap-1 text-slate-500 bg-slate-100 dark:bg-white/5 px-1.5 py-0.5 rounded-md border border-slate-200 dark:border-white/10 mt-1.5 w-max opacity-80">
                 <Clock size={8} />
@@ -132,7 +129,6 @@ export function SlaIndicator({ ticket }: { ticket: TicketWithSla }) {
                     {label}: {activeSla.minutesDiff}m
                 </span>
             </div>
-        );
         );
     }
 
