@@ -909,7 +909,7 @@ export default function TicketsPage() {
                             <motion.button
                                 key={ticket.id}
                                 onClick={() => handleSelectTicket(ticket)}
-                                className={`w-full text-left p-3 rounded-2xl transition-all border relative group/card ${selectedTicket?.id === ticket.id
+                                className={`w-full text-left p-2.5 rounded-2xl transition-all border relative group/card ${selectedTicket?.id === ticket.id
                                     ? 'bg-primary/10 border-primary shadow-md shadow-primary/5'
                                     : 'bg-white/60 dark:bg-transparent border-transparent hover:border-white/40 dark:hover:border-white/10'
                                     } ${selectedTicketIds.includes(ticket.id) ? 'ring-2 ring-primary ring-offset-2 dark:ring-offset-slate-900 border-primary bg-primary/5' : ''}`}
@@ -954,27 +954,27 @@ export default function TicketsPage() {
                                         </div>
                                         <div className="flex-1 min-w-0 transition-transform flex flex-col gap-2">
                                             <div className="flex items-center justify-between">
-                                                <div className="flex items-center gap-2">
-                                                    <h3 className={`text-sm font-black tracking-tight leading-none ${selectedTicket?.id === ticket.id ? 'text-primary' : 'text-slate-800 dark:text-white'}`}>
+                                                <div className="flex items-center gap-1.5 min-w-0">
+                                                    <h3 className={`text-[13px] font-black tracking-tight leading-none truncate ${selectedTicket?.id === ticket.id ? 'text-primary' : 'text-slate-800 dark:text-white'}`}>
                                                         {ticket.contact.name || 'Contato'}
                                                     </h3>
-                                                    <span className="text-[10px] font-mono text-slate-400 bg-slate-100 dark:bg-white/5 px-1.5 py-0.5 rounded-md">
+                                                    <span className="text-[9px] font-mono text-slate-400 bg-slate-100 dark:bg-white/5 px-1 py-0.5 rounded-md shrink-0">
                                                         #{ticket.id.substring(ticket.id.length - 4).toUpperCase()}
                                                     </span>
                                                     {ticket.unreadMessages > 0 && (
-                                                        <span className="h-2 w-2 bg-primary rounded-full animate-ping" />
+                                                        <span className="h-1.5 w-1.5 bg-primary rounded-full animate-ping shrink-0" />
                                                     )}
                                                 </div>
-                                                <div className="flex flex-col items-end gap-1">
+                                                <div className="flex flex-col items-end gap-0.5 shrink-0">
                                                     {ticket.assignedUser && (
-                                                        <div className="flex items-center gap-1 bg-blue-50 dark:bg-blue-500/10 px-1.5 py-0.5 rounded-lg border border-blue-100 dark:border-blue-500/20">
+                                                        <div className="flex items-center gap-1 bg-blue-50 dark:bg-blue-500/10 px-1 py-0.5 rounded-md border border-blue-100 dark:border-blue-500/20">
                                                             <User size={8} className="text-blue-600 dark:text-blue-400" />
-                                                            <span className="text-[8px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-tighter">
+                                                            <span className="text-[7.5px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-tighter">
                                                                 {ticket.assignedUser.name.split(' ')[0]}
                                                             </span>
                                                         </div>
                                                     )}
-                                                    <span className={`px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-tighter ${selectedTicket?.id === ticket.id ? 'bg-primary/20 text-primary border border-primary/20' : 'bg-slate-100 dark:bg-white/5 text-slate-500'}`}>
+                                                    <span className={`px-1.5 py-0.5 rounded-md text-[7.5px] font-black uppercase tracking-tighter ${selectedTicket?.id === ticket.id ? 'bg-primary/20 text-primary border border-primary/20' : 'bg-slate-100 dark:bg-white/5 text-slate-500'}`}>
                                                         {translateStatus(ticket.status)}
                                                     </span>
                                                 </div>
@@ -1032,7 +1032,8 @@ export default function TicketsPage() {
                 onDragOver={onDragOver}
                 onDragLeave={onDragLeave}
                 onDrop={onDrop}
-                className={`flex-1 w-full flex flex-col liquid-glass md:rounded-2xl overflow-hidden border border-slate-200 dark:border-white/10 shadow-xl relative transition-all duration-300 ${!selectedTicket ? 'hidden md:flex' : 'flex absolute inset-0 md:relative z-20 md:z-auto bg-slate-50 dark:bg-gray-900 md:bg-transparent dark:md:bg-transparent'}`}
+                className={`flex-1 w-full flex flex-col liquid-glass md:rounded-2xl relative transition-all duration-300 ${!selectedTicket ? 'hidden md:flex' : 'flex absolute inset-0 md:relative z-20 md:z-auto bg-slate-50 dark:bg-gray-900 md:bg-transparent dark:md:bg-transparent'}`}
+                style={{ overflow: 'visible' }}
             >
                 {/* Overlay de Drag and Drop */}
                 <AnimatePresence>
@@ -1065,1013 +1066,1041 @@ export default function TicketsPage() {
                 ) : (
                     <>
                         {/* Header da Conversa */}
-                        <div className="p-2 md:p-3 border-b border-white/40 dark:border-white/5 flex items-center justify-between gap-2 bg-white/40 dark:bg-black/20 backdrop-blur-xl shrink-0 min-w-0">
-                            <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1">
-                                <button
-                                    onClick={() => setSelectedTicket(null)}
-                                    className="md:hidden p-2 rounded-xl text-slate-500 hover:bg-slate-100 dark:hover:bg-white/5 transition-all flex-shrink-0"
-                                >
-                                    <ArrowLeft size={18} />
-                                </button>
-                                <div className="h-9 w-9 bg-primary text-white rounded-xl flex items-center justify-center text-base font-black shadow-md shadow-primary/30 relative overflow-hidden flex-shrink-0">
-                                    {selectedTicket.contact.name.charAt(0)}
-                                    <div className="absolute inset-0 bg-gradient-to-tr from-white/20 to-transparent pointer-events-none" />
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                    <div className="flex items-center gap-1.5 flex-wrap">
-                                        <h3 className="font-black text-sm md:text-base text-slate-900 dark:text-white tracking-tight leading-none truncate max-w-[120px] md:max-w-[200px]">{selectedTicket.contact.name}</h3>
-                                        <div className="flex items-center gap-1 flex-wrap">
-                                            {selectedTicket.assignedUser ? (
-                                                <div className="flex items-center gap-1.5 bg-blue-50 dark:bg-blue-500/10 px-2.5 py-1 rounded-xl border border-blue-100 dark:border-blue-500/20">
-                                                    <User size={10} className="text-blue-600 dark:text-blue-400" />
-                                                    <span className="text-[9px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest leading-none">
-                                                        {selectedTicket.assignedUser.name.split(' ')[0]}
-                                                    </span>
+                        <div className="p-2 md:p-3 border-b border-white/40 dark:border-white/5 flex flex-col gap-2 bg-white/40 dark:bg-black/20 backdrop-blur-xl shrink-0 min-w-0 md:rounded-t-2xl overflow-hidden border-x border-t border-slate-200 dark:border-white/10">
+                            <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1">
+                                    <button
+                                        onClick={() => setSelectedTicket(null)}
+                                        className="md:hidden p-2 rounded-xl text-slate-500 hover:bg-slate-100 dark:hover:bg-white/5 transition-all flex-shrink-0"
+                                    >
+                                        <ArrowLeft size={18} />
+                                    </button>
+                                    <div className="h-9 w-9 bg-primary text-white rounded-xl flex items-center justify-center text-base font-black shadow-md shadow-primary/30 relative overflow-hidden flex-shrink-0">
+                                        {selectedTicket.contact.name.charAt(0)}
+                                        <div className="absolute inset-0 bg-gradient-to-tr from-white/20 to-transparent pointer-events-none" />
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                            <div className="flex items-center gap-2">
+                                                <h3 className="font-black text-sm md:text-base text-slate-900 dark:text-white tracking-tight leading-none truncate max-w-[120px] md:max-w-[200px]">{selectedTicket.contact.name}</h3>
+                                                <span className="text-[10px] font-mono text-primary bg-primary/10 px-1.5 py-0.5 rounded-md border border-primary/20">
+                                                    #{selectedTicket.id.substring(selectedTicket.id.length - 6).toUpperCase()}
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center gap-1 flex-wrap">
+                                                {selectedTicket.assignedUser ? (
+                                                    <div className="flex items-center gap-1.5 bg-blue-50 dark:bg-blue-500/10 px-2.5 py-1 rounded-xl border border-blue-100 dark:border-blue-500/20">
+                                                        <User size={10} className="text-blue-600 dark:text-blue-400" />
+                                                        <span className="text-[9px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest leading-none">
+                                                            {selectedTicket.assignedUser.name.split(' ')[0]}
+                                                        </span>
+                                                    </div>
+                                                ) : (
+                                                    <button
+                                                        disabled={isAssigning}
+                                                        onClick={async () => {
+                                                            try {
+                                                                setIsAssigning(true);
+                                                                await ticketsService.assign(selectedTicket.id, user!.id);
+                                                                setSelectedTicket(prev => prev ? { ...prev, assignedUser: user as any } : null);
+                                                                fetchTickets();
+                                                                toast.success("Você assumiu!");
+                                                            } catch (error) {
+                                                                toast.error("Erro ao assumir");
+                                                            } finally {
+                                                                setIsAssigning(false);
+                                                            }
+                                                        }}
+                                                        className="flex items-center gap-1 bg-amber-50 dark:bg-amber-500/10 px-2 py-1 rounded-xl border border-amber-100 dark:border-amber-500/20 hover:bg-amber-100 dark:hover:bg-amber-500/20 transition-all active:scale-95 disabled:opacity-50"
+                                                    >
+                                                        <span className="text-[8px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-widest leading-none">
+                                                            Atender
+                                                        </span>
+                                                    </button>
+                                                )}
+                                                <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${selectedTicket.mode === 'AI' ? 'bg-blue-500/20 text-blue-500' : selectedTicket.mode === 'HUMANO' ? 'bg-amber-500/20 text-amber-500' : 'bg-emerald-500/20 text-emerald-500'}`}>
+                                                    {selectedTicket.mode}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-2 mt-1 flex-wrap min-h-[1.25rem]">
+                                            {isEditingSubject ? (
+                                                <div className="flex items-center gap-2 flex-1">
+                                                    <input
+                                                        autoFocus
+                                                        value={editedSubject}
+                                                        onChange={(e) => setEditedSubject(e.target.value)}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter') handleUpdateTicketInfo({ subject: editedSubject });
+                                                            if (e.key === 'Escape') setIsEditingSubject(false);
+                                                        }}
+                                                        className="bg-white/50 dark:bg-white/5 border border-primary/30 rounded-lg px-2 py-0.5 text-xs font-bold outline-none focus:ring-1 ring-primary/50 w-full max-w-sm"
+                                                        placeholder="Assunto do chamado..."
+                                                    />
+                                                    <button
+                                                        onClick={() => handleUpdateTicketInfo({ subject: editedSubject })}
+                                                        className="p-1 hover:bg-emerald-500/20 text-emerald-500 rounded-md transition-all"
+                                                    >
+                                                        <CheckCheck size={14} />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setIsEditingSubject(false)}
+                                                        className="p-1 hover:bg-rose-500/20 text-rose-500 rounded-md transition-all"
+                                                    >
+                                                        <X size={14} />
+                                                    </button>
                                                 </div>
                                             ) : (
-                                                <button
-                                                    disabled={isAssigning}
-                                                    onClick={async () => {
-                                                        try {
-                                                            setIsAssigning(true);
-                                                            await ticketsService.assign(selectedTicket.id, user!.id);
-                                                            setSelectedTicket(prev => prev ? { ...prev, assignedUser: user as any } : null);
-                                                            fetchTickets();
-                                                            toast.success("Você assumiu!");
-                                                        } catch (error) {
-                                                            toast.error("Erro ao assumir");
-                                                        } finally {
-                                                            setIsAssigning(false);
-                                                        }
+                                                <div
+                                                    className="flex items-center gap-2 cursor-pointer group/subject"
+                                                    onClick={() => {
+                                                        setEditedSubject(selectedTicket.subject || '');
+                                                        setIsEditingSubject(true);
                                                     }}
-                                                    className="flex items-center gap-1 bg-amber-50 dark:bg-amber-500/10 px-2 py-1 rounded-xl border border-amber-100 dark:border-amber-500/20 hover:bg-amber-100 dark:hover:bg-amber-500/20 transition-all active:scale-95 disabled:opacity-50"
                                                 >
-                                                    <span className="text-[8px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-widest leading-none">
-                                                        Atender
-                                                    </span>
-                                                </button>
+                                                    <p className="text-xs font-bold text-slate-500 dark:text-slate-400 tracking-tight truncate max-w-[250px]">
+                                                        {selectedTicket.subject || 'Sem assunto (clique para editar)'}
+                                                    </p>
+                                                    <Edit3 size={10} className="text-slate-400 opacity-0 group-hover/subject:opacity-100 transition-opacity" />
+                                                </div>
                                             )}
-                                            <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${selectedTicket.mode === 'AI' ? 'bg-blue-500/20 text-blue-500' : selectedTicket.mode === 'HUMANO' ? 'bg-amber-500/20 text-amber-500' : 'bg-emerald-500/20 text-emerald-500'}`}>
-                                                {selectedTicket.mode}
-                                            </span>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center gap-2 mt-1 flex-wrap min-h-[1.25rem]">
-                                        {isEditingSubject ? (
-                                            <div className="flex items-center gap-2 flex-1">
-                                                <input
-                                                    autoFocus
-                                                    value={editedSubject}
-                                                    onChange={(e) => setEditedSubject(e.target.value)}
-                                                    onKeyDown={(e) => {
-                                                        if (e.key === 'Enter') handleUpdateTicketInfo({ subject: editedSubject });
-                                                        if (e.key === 'Escape') setIsEditingSubject(false);
-                                                    }}
-                                                    className="bg-white/50 dark:bg-white/5 border border-primary/30 rounded-lg px-2 py-0.5 text-xs font-bold outline-none focus:ring-1 ring-primary/50 w-full max-w-sm"
-                                                    placeholder="Assunto do chamado..."
-                                                />
-                                                <button
-                                                    onClick={() => handleUpdateTicketInfo({ subject: editedSubject })}
-                                                    className="p-1 hover:bg-emerald-500/20 text-emerald-500 rounded-md transition-all"
-                                                >
-                                                    <CheckCheck size={14} />
-                                                </button>
-                                                <button
-                                                    onClick={() => setIsEditingSubject(false)}
-                                                    className="p-1 hover:bg-rose-500/20 text-rose-500 rounded-md transition-all"
-                                                >
-                                                    <X size={14} />
-                                                </button>
+                                            <div className="h-3 w-[1px] bg-slate-200 dark:bg-white/10 mx-1" />
+                                            <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">
+                                                <p className="text-primary italic truncate max-w-[100px]">{selectedTicket.department.name}</p>
                                             </div>
-                                        ) : (
-                                            <div
-                                                className="flex items-center gap-2 cursor-pointer group/subject"
-                                                onClick={() => {
-                                                    setEditedSubject(selectedTicket.subject || '');
-                                                    setIsEditingSubject(true);
-                                                }}
-                                            >
-                                                <p className="text-xs font-bold text-slate-500 dark:text-slate-400 tracking-tight truncate max-w-[250px]">
-                                                    {selectedTicket.subject || 'Sem assunto (clique para editar)'}
-                                                </p>
-                                                <Edit3 size={10} className="text-slate-400 opacity-0 group-hover/subject:opacity-100 transition-opacity" />
-                                            </div>
-                                        )}
-                                        <div className="h-3 w-[1px] bg-slate-200 dark:bg-white/10 mx-1" />
-                                        <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">
-                                            <p className="text-primary italic truncate max-w-[100px]">{selectedTicket.department.name}</p>
                                         </div>
                                     </div>
                                 </div>
-                            </div>
-                            <div className="flex items-center gap-1.5 md:gap-2 flex-shrink-0">
-                                {/* Busca na conversa */}
-                                <div className="flex items-center gap-1">
-                                    <div className={`flex items-center transition-all ${isSearching ? 'w-32 md:w-44 opacity-100' : 'w-0 opacity-0 overflow-hidden'}`}>
-                                        <input
-                                            type="text"
-                                            placeholder="Buscar..."
-                                            value={messageSearch}
-                                            onChange={(e) => setMessageSearch(e.target.value)}
-                                            className="bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-2.5 py-1.5 text-xs w-full focus:ring-2 focus:ring-primary/20 outline-none"
-                                            autoFocus
-                                        />
-                                    </div>
-                                    <button
-                                        onClick={() => {
-                                            setIsSearching(!isSearching);
-                                            if (isSearching) setMessageSearch('');
-                                        }}
-                                        className={`p-2 rounded-xl transition-all ${isSearching ? 'bg-primary text-white shadow-lg' : 'bg-white/50 dark:bg-white/5 text-slate-400 hover:text-primary'}`}
-                                        title="Buscar mensagens"
-                                    >
-                                        {isSearching ? <X size={16} /> : <Search size={16} />}
-                                    </button>
-                                </div>
-                                <button
-                                    onClick={() => setShowContactHistory(!showContactHistory)}
-                                    className={`p-2 rounded-xl transition-all ${showContactHistory ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5'}`}
-                                    title="Informações do Contato"
-                                >
-                                    <Info size={16} />
-                                </button>
-                                {selectedTicket.status === 'RESOLVED' && (
-                                    <button
-                                        onClick={async () => {
-                                            try {
-                                                await ticketsService.update(selectedTicket.id, { status: 'OPEN' });
-                                                fetchTickets();
-                                                toast.success("Ticket reaberto com sucesso!");
-                                            } catch (error) {
-                                                toast.error("Erro ao reabrir ticket");
-                                            }
-                                        }}
-                                        className="hidden md:flex items-center gap-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 px-3 py-1.5 rounded-xl border border-emerald-500/20 transition-all font-black text-[9px] uppercase tracking-widest active:scale-95"
-                                    >
-                                        <ArrowRightLeft size={12} />
-                                        Reabrir
-                                    </button>
-                                )}
-
-                                {/* Modo IA / Humano */}
-                                <div className="flex items-center bg-slate-100/50 dark:bg-white/5 p-0.5 rounded-xl border border-white/50 dark:border-white/5 backdrop-blur-md shrink-0">
-                                    {['AI', 'HUMANO'].map((m) => (
+                                <div className="flex items-center gap-1.5 md:gap-2 flex-shrink-0">
+                                    {/* Busca na conversa */}
+                                    <div className="flex items-center gap-1">
+                                        <div className={`flex items-center transition-all ${isSearching ? 'w-32 md:w-44 opacity-100' : 'w-0 opacity-0 overflow-hidden'}`}>
+                                            <input
+                                                type="text"
+                                                placeholder="Buscar..."
+                                                value={messageSearch}
+                                                onChange={(e) => setMessageSearch(e.target.value)}
+                                                className="bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-2.5 py-1.5 text-xs w-full focus:ring-2 focus:ring-primary/20 outline-none"
+                                                autoFocus
+                                            />
+                                        </div>
                                         <button
-                                            key={m}
+                                            onClick={() => {
+                                                setIsSearching(!isSearching);
+                                                if (isSearching) setMessageSearch('');
+                                            }}
+                                            className={`p-2 rounded-xl transition-all ${isSearching ? 'bg-primary text-white shadow-lg' : 'bg-white/50 dark:bg-white/5 text-slate-400 hover:text-primary'}`}
+                                            title="Buscar mensagens"
+                                        >
+                                            {isSearching ? <X size={16} /> : <Search size={16} />}
+                                        </button>
+                                    </div>
+                                    <button
+                                        onClick={() => setShowContactHistory(!showContactHistory)}
+                                        className={`p-2 rounded-xl transition-all ${showContactHistory ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5'}`}
+                                        title="Informações do Contato"
+                                    >
+                                        <Info size={16} />
+                                    </button>
+                                    {selectedTicket.status === 'RESOLVED' && (
+                                        <button
                                             onClick={async () => {
                                                 try {
-                                                    await ticketsService.update(selectedTicket.id, { mode: m });
-                                                    setSelectedTicket(prev => prev ? { ...prev, mode: m as any } : null);
-                                                    toast.success(`Modo alterado para ${m}`);
+                                                    await ticketsService.update(selectedTicket.id, { status: 'OPEN' });
+                                                    fetchTickets();
+                                                    toast.success("Ticket reaberto com sucesso!");
                                                 } catch (error) {
-                                                    toast.error('Erro ao alternar modo');
+                                                    toast.error("Erro ao reabrir ticket");
                                                 }
                                             }}
-                                            className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${selectedTicket.mode === m
-                                                ? 'bg-white dark:bg-primary text-black dark:text-white shadow-md'
-                                                : 'text-slate-400 hover:text-slate-600 dark:hover:text-white'
-                                                }`}
+                                            className="hidden md:flex items-center gap-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 px-3 py-1.5 rounded-xl border border-emerald-500/20 transition-all font-black text-[9px] uppercase tracking-widest active:scale-95"
                                         >
-                                            {m}
+                                            <ArrowRightLeft size={12} />
+                                            Reabrir
                                         </button>
-                                    ))}
-                                </div>
+                                    )}
 
-                                {/* Indicador de sentimento — apenas desktop */}
-                                {(selectedTicket as any).evaluation && (
-                                    <div className="shrink-0 hidden lg:block">
-                                        <SentimentIndicator
-                                            sentiment={(selectedTicket as any).evaluation.aiSentiment}
-                                            score={(selectedTicket as any).evaluation.aiSentimentScore}
-                                            className="scale-90 origin-right"
-                                        />
+                                    {/* Modo IA / Humano */}
+                                    <div className="flex items-center bg-slate-100/50 dark:bg-white/5 p-0.5 rounded-xl border border-white/50 dark:border-white/5 backdrop-blur-md shrink-0">
+                                        {['AI', 'HUMANO'].map((m) => (
+                                            <button
+                                                key={m}
+                                                onClick={async () => {
+                                                    try {
+                                                        await ticketsService.update(selectedTicket.id, { mode: m });
+                                                        setSelectedTicket(prev => prev ? { ...prev, mode: m as any } : null);
+                                                        toast.success(`Modo alterado para ${m}`);
+                                                    } catch (error) {
+                                                        toast.error('Erro ao alternar modo');
+                                                    }
+                                                }}
+                                                className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${selectedTicket.mode === m
+                                                    ? 'bg-white dark:bg-primary text-black dark:text-white shadow-md'
+                                                    : 'text-slate-400 hover:text-slate-600 dark:hover:text-white'
+                                                    }`}
+                                            >
+                                                {m}
+                                            </button>
+                                        ))}
                                     </div>
-                                )}
 
-                                {/* Menu de Ações Secundárias */}
-                                <div ref={optionsMenuRef} className="relative shrink-0">
-                                    <button
-                                        onClick={() => setShowOptionsMenu(v => !v)}
-                                        className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all border text-slate-700 dark:text-slate-300 ${showOptionsMenu ? 'bg-primary/10 border-primary/30 text-primary dark:text-primary' : 'bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 border-slate-200 dark:border-white/5'}`}
-                                    >
-                                        <SlidersHorizontal className="h-4 w-4" />
-                                        <span className="text-[10px] font-black uppercase tracking-widest hidden lg:block">Opções</span>
-                                    </button>
+                                    {/* Indicador de sentimento — apenas desktop */}
+                                    {(selectedTicket as any).evaluation && (
+                                        <div className="shrink-0 hidden lg:block">
+                                            <SentimentIndicator
+                                                sentiment={(selectedTicket as any).evaluation.aiSentiment}
+                                                score={(selectedTicket as any).evaluation.aiSentimentScore}
+                                                className="scale-90 origin-right"
+                                            />
+                                        </div>
+                                    )}
 
-                                    {/* Dropdown Flutuante */}
-                                    <AnimatePresence>
-                                        {showOptionsMenu && (
-                                            <motion.div
-                                                initial={{ opacity: 0, scale: 0.95, y: -4 }}
-                                                animate={{ opacity: 1, scale: 1, y: 0 }}
-                                                exit={{ opacity: 0, scale: 0.95, y: -4 }}
-                                                transition={{ duration: 0.15 }}
-                                                className="absolute top-full right-0 mt-1 w-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 shadow-2xl rounded-2xl p-2 z-[60] flex flex-col gap-1">
+                                    {/* Menu de Ações Secundárias */}
+                                    <div ref={optionsMenuRef} className="relative shrink-0">
+                                        <button
+                                            onClick={() => setShowOptionsMenu(v => !v)}
+                                            className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all border text-slate-700 dark:text-slate-300 ${showOptionsMenu ? 'bg-primary/10 border-primary/30 text-primary dark:text-primary' : 'bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 border-slate-200 dark:border-white/5'}`}
+                                        >
+                                            <SlidersHorizontal className="h-4 w-4" />
+                                            <span className="text-[10px] font-black uppercase tracking-widest hidden lg:block">Opções</span>
+                                        </button>
 
-                                                {/* Pausar */}
-                                                <button
-                                                    disabled={isPausing}
-                                                    onClick={async () => {
-                                                        try {
-                                                            setIsPausing(true);
-                                                            await api.post(`/tickets/${selectedTicket.id}/status`, { status: 'PAUSED' });
-                                                            toast.success("Atendimento pausado");
-                                                            setSelectedTicket(null);
-                                                            fetchTickets();
-                                                        } catch (error) {
-                                                            toast.error("Erro ao pausar atendimento");
-                                                        } finally {
-                                                            setIsPausing(false);
-                                                        }
-                                                    }}
-                                                    className="w-full flex items-center gap-3 p-3 hover:bg-amber-50 dark:hover:bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-xl transition-all disabled:opacity-50 text-left"
-                                                >
-                                                    <Clock className="h-4 w-4" />
-                                                    <span className="text-[10px] font-black uppercase tracking-widest">{isPausing ? 'Pausando...' : 'Pausar Atendimento'}</span>
-                                                </button>
+                                        {/* Dropdown Flutuante */}
+                                        <AnimatePresence>
+                                            {showOptionsMenu && (
+                                                <motion.div
+                                                    initial={{ opacity: 0, scale: 0.95, y: -4 }}
+                                                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                                                    exit={{ opacity: 0, scale: 0.95, y: -4 }}
+                                                    transition={{ duration: 0.15 }}
+                                                    className="absolute top-full right-0 mt-1 w-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 shadow-2xl rounded-2xl p-2 z-[60] flex flex-col gap-1">
 
-                                                {/* Transferir */}
-                                                <button
-                                                    onClick={() => setShowTransferModal(true)}
-                                                    className="w-full flex items-center gap-3 p-3 hover:bg-blue-50 dark:hover:bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-xl transition-all text-left"
-                                                >
-                                                    <ArrowRightLeft className="h-4 w-4" />
-                                                    <span className="text-[10px] font-black uppercase tracking-widest">Transferir Ticket</span>
-                                                </button>
+                                                    {/* Pausar */}
+                                                    <button
+                                                        disabled={isPausing}
+                                                        onClick={async () => {
+                                                            try {
+                                                                setIsPausing(true);
+                                                                await api.post(`/tickets/${selectedTicket.id}/status`, { status: 'PAUSED' });
+                                                                toast.success("Atendimento pausado");
+                                                                setSelectedTicket(null);
+                                                                fetchTickets();
+                                                            } catch (error) {
+                                                                toast.error("Erro ao pausar atendimento");
+                                                            } finally {
+                                                                setIsPausing(false);
+                                                            }
+                                                        }}
+                                                        className="w-full flex items-center gap-3 p-3 hover:bg-amber-50 dark:hover:bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-xl transition-all disabled:opacity-50 text-left"
+                                                    >
+                                                        <Clock className="h-4 w-4" />
+                                                        <span className="text-[10px] font-black uppercase tracking-widest">{isPausing ? 'Pausando...' : 'Pausar Atendimento'}</span>
+                                                    </button>
 
-                                                <div className="h-[1px] w-full bg-slate-100 dark:bg-white/5 my-1" />
+                                                    {/* Transferir */}
+                                                    <button
+                                                        onClick={() => setShowTransferModal(true)}
+                                                        className="w-full flex items-center gap-3 p-3 hover:bg-blue-50 dark:hover:bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-xl transition-all text-left"
+                                                    >
+                                                        <ArrowRightLeft className="h-4 w-4" />
+                                                        <span className="text-[10px] font-black uppercase tracking-widest">Transferir Ticket</span>
+                                                    </button>
 
-                                                {/* Prioridade */}
-                                                <div className="px-3 py-2">
-                                                    <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">Prioridade</div>
-                                                    <div className="grid grid-cols-2 gap-1">
-                                                        {(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const).map((p) => (
-                                                            <button
-                                                                key={p}
-                                                                onClick={async () => {
-                                                                    try {
-                                                                        await ticketsService.update(selectedTicket.id, { priority: p });
-                                                                        setSelectedTicket(prev => prev ? { ...prev, priority: p } : null);
-                                                                        fetchTickets();
-                                                                        toast.success(`Prioridade alterada!`);
-                                                                    } catch (error) {
-                                                                        toast.error("Erro ao alterar prioridade");
-                                                                    }
-                                                                }}
-                                                                className={`px-2 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-tighter transition-all text-center ${selectedTicket.priority === p
-                                                                    ? p === 'CRITICAL' ? 'bg-rose-500 text-white shadow-md' :
-                                                                        p === 'HIGH' ? 'bg-amber-500 text-white shadow-md' :
-                                                                            p === 'MEDIUM' ? 'bg-blue-500 text-white shadow-md' :
-                                                                                'bg-slate-500 text-white shadow-md'
-                                                                    : 'bg-slate-100 dark:bg-white/5 text-slate-500 hover:bg-slate-200 dark:hover:bg-white/10'
-                                                                    }`}
-                                                            >
-                                                                {p === 'CRITICAL' ? 'Crítico' : p === 'HIGH' ? 'Alta' : p === 'MEDIUM' ? 'Média' : 'Baixa'}
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                </div>
+                                                    <div className="h-[1px] w-full bg-slate-100 dark:bg-white/5 my-1" />
 
-                                                <div className="h-[1px] w-full bg-slate-100 dark:bg-white/5 my-1" />
-
-                                                {/* Tags / Categorias */}
-                                                <div className="px-3 py-2">
-                                                    <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">Categorizar (Tags)</div>
-                                                    <div className="max-h-32 overflow-y-auto custom-scrollbar flex flex-col gap-1">
-                                                        {availableTags.map(tag => {
-                                                            const currentTagIds = selectedTicket.tags?.map((t: any) => t.tag?.id || t.id) || [];
-                                                            const isApplied = currentTagIds.includes(tag.id);
-                                                            return (
+                                                    {/* Prioridade */}
+                                                    <div className="px-3 py-2">
+                                                        <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">Prioridade</div>
+                                                        <div className="grid grid-cols-2 gap-1">
+                                                            {(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const).map((p) => (
                                                                 <button
-                                                                    key={tag.id}
+                                                                    key={p}
                                                                     onClick={async () => {
-                                                                        const newTagIds = isApplied
-                                                                            ? currentTagIds.filter((id: string) => id !== tag.id)
-                                                                            : [...currentTagIds, tag.id];
                                                                         try {
-                                                                            const updated = await ticketsService.update(selectedTicket.id, { tagIds: newTagIds });
-                                                                            setSelectedTicket((prev: any) => prev ? { ...prev, tags: updated.tags ?? prev.tags } : prev);
-                                                                            setTickets((prev: any[]) => prev.map((t: any) => t.id === selectedTicket.id ? { ...t, tags: updated.tags ?? t.tags } : t));
-                                                                        } catch {
-                                                                            toast.error('Erro ao atualizar tags');
+                                                                            await ticketsService.update(selectedTicket.id, { priority: p });
+                                                                            setSelectedTicket(prev => prev ? { ...prev, priority: p } : null);
+                                                                            fetchTickets();
+                                                                            toast.success(`Prioridade alterada!`);
+                                                                        } catch (error) {
+                                                                            toast.error("Erro ao alterar prioridade");
                                                                         }
                                                                     }}
-                                                                    className={`w-full flex items-center gap-2 p-2 rounded-lg transition-all text-left border ${isApplied ? 'bg-primary/10 border-primary/30' : 'hover:bg-slate-100 dark:hover:bg-white/5 border-transparent'}`}
+                                                                    className={`px-2 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-tighter transition-all text-center ${selectedTicket.priority === p
+                                                                        ? p === 'CRITICAL' ? 'bg-rose-500 text-white shadow-md' :
+                                                                            p === 'HIGH' ? 'bg-amber-500 text-white shadow-md' :
+                                                                                p === 'MEDIUM' ? 'bg-blue-500 text-white shadow-md' :
+                                                                                    'bg-slate-500 text-white shadow-md'
+                                                                        : 'bg-slate-100 dark:bg-white/5 text-slate-500 hover:bg-slate-200 dark:hover:bg-white/10'
+                                                                        }`}
                                                                 >
-                                                                    <div className="h-2 w-2 rounded-full shadow-sm flex-shrink-0" style={{ backgroundColor: tag.color }} />
-                                                                    <span className="text-[10px] font-bold text-slate-700 dark:text-gray-300 truncate flex-1">{tag.name}</span>
-                                                                    {isApplied && <span className="text-[9px] text-primary font-black">✓</span>}
+                                                                    {p === 'CRITICAL' ? 'Crítico' : p === 'HIGH' ? 'Alta' : p === 'MEDIUM' ? 'Média' : 'Baixa'}
                                                                 </button>
-                                                            );
-                                                        })}
-                                                        {availableTags.length === 0 && (
-                                                            <div className="p-2 text-[9px] text-gray-400 italic text-center">Nenhuma tag</div>
-                                                        )}
+                                                            ))}
+                                                        </div>
                                                     </div>
-                                                </div>
-                                            </motion.div>
-                                        )}
-                                    </AnimatePresence>
-                                </div>
 
-                                {/* Ações Rápidas em Destaque */}
-                                <div className="flex items-center gap-1 bg-slate-100/50 dark:bg-white/5 p-1 rounded-2xl border border-white/50 dark:border-white/5 backdrop-blur-md shrink-0">
-                                    {/* Copilot: botão oculto até feature estar pronta */}
-                                    {false && (
-                                        <button
-                                            onClick={() => setShowCopilot(!showCopilot)}
-                                            className={`p-2 rounded-xl transition-all ${showCopilot ? 'bg-blue-600 text-white shadow-lg' : 'hover:bg-white/50 dark:hover:bg-white/5 text-gray-500 dark:text-gray-400'}`}
-                                            title="Alternar IA Copilot"
-                                        >
-                                            <Bot className="h-4 w-4" />
-                                        </button>
-                                    )}
+                                                    <div className="h-[1px] w-full bg-slate-100 dark:bg-white/5 my-1" />
 
-                                    {selectedTicket.contact?.information && (
-                                        <div className="relative group/info">
-                                            <button
-                                                onClick={() => {
-                                                    navigator.clipboard.writeText(selectedTicket.contact.information!);
-                                                    toast.success("Info copiada!");
-                                                }}
-                                                className="p-2 hover:bg-blue-50 dark:hover:bg-blue-500/20 hover:text-blue-500 text-gray-500 rounded-xl transition-all"
-                                                title="Informação Técnica"
-                                            >
-                                                <Info className="h-4 w-4" />
-                                            </button>
-                                            <div className="absolute top-full right-0 mt-3 w-64 p-4 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border border-slate-200 dark:border-white/10 rounded-2xl opacity-0 translate-y-2 pointer-events-none group-hover/info:opacity-100 group-hover/info:translate-y-0 transition-all z-50 shadow-2xl">
-                                                <p className="text-[10px] font-black uppercase tracking-widest text-primary mb-2">Informação Técnica</p>
-                                                <p className="text-xs font-medium text-slate-700 dark:text-slate-300 line-clamp-4">
-                                                    {selectedTicket.contact.information}
-                                                </p>
-                                                <div className="mt-2 text-[8px] font-bold text-gray-400 italic">Clique no ícone para copiar</div>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    <div className="w-[1px] h-6 bg-slate-200 dark:bg-white/10 mx-1" />
-
-                                    {/* Finalizar (Principal) */}
-                                    <button
-                                        disabled={isResolving}
-                                        onClick={() => {
-                                            const ticketId = selectedTicket.id;
-                                            toast('Finalizar atendimento?', {
-                                                action: {
-                                                    label: 'Finalizar',
-                                                    onClick: async () => {
-                                                        try {
-                                                            setIsResolving(true);
-                                                            await api.post(`/tickets/${ticketId}/resolve`, {});
-                                                            toast.success("Finalizado!");
-                                                            setSelectedTicket(null);
-                                                            fetchTickets();
-                                                        } catch (error) {
-                                                            toast.error("Erro ao finalizar");
-                                                        } finally {
-                                                            setIsResolving(false);
-                                                        }
-                                                    }
-                                                },
-                                                cancel: { label: 'Voltar', onClick: () => { } },
-                                                duration: 4000,
-                                            });
-                                        }}
-                                        className="flex items-center gap-2 px-3 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl shadow-lg transition-all disabled:opacity-50 active:scale-95 group"
-                                    >
-                                        <CheckCheck className="h-4 w-4 group-hover:scale-110 transition-transform" />
-                                        <span className="text-[9px] font-black uppercase tracking-widest hidden xl:block">
-                                            {isResolving ? '...' : 'Finalizar'}
-                                        </span>
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="flex-1 flex overflow-hidden">
-                            {/* Mensagens (agora dentro de uma div flex) */}
-                            <div className="flex-1 flex flex-col overflow-hidden relative">
-                                <div
-                                    ref={messagesContainerRef}
-                                    onScroll={(e) => {
-                                        const el = e.currentTarget;
-                                        setShowScrollBottom(el.scrollTop + el.clientHeight < el.scrollHeight - 250);
-                                    }}
-                                    className="flex-1 overflow-y-auto custom-scrollbar p-4 md:p-6 space-y-4"
-                                >
-                                    {loadingMessages ? (
-                                        <div className="flex items-center justify-center h-full">
-                                            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600"></div>
-                                        </div>
-                                    ) : (
-                                        <>
-                                            {messages.filter(m => m.content?.toLowerCase().includes(messageSearch.toLowerCase()) || m.transcription?.toLowerCase().includes(messageSearch.toLowerCase())).length === 0 && messageSearch && (
-                                                <div className="flex flex-col items-center justify-center h-full opacity-40">
-                                                    <Search size={48} className="mb-4" />
-                                                    <p className="text-sm font-black uppercase tracking-widest">Nenhuma mensagem encontrada</p>
-                                                </div>
-                                            )}
-                                            {messages.filter(m => m.content?.toLowerCase().includes(messageSearch.toLowerCase()) || m.transcription?.toLowerCase().includes(messageSearch.toLowerCase())).map((msg: any, idx) => (
-                                                <motion.div
-                                                    key={msg.id}
-                                                    initial={{ opacity: 0, x: msg.fromMe ? 20 : -20 }}
-                                                    animate={{ opacity: 1, x: 0 }}
-                                                    transition={{ delay: idx > messages.length - 6 ? (idx - Math.max(0, messages.length - 6)) * 0.05 : 0 }}
-                                                    className={`flex ${msg.fromMe ? 'justify-end' : 'justify-start'}`}
-                                                >
-                                                    <div className={`max-w-[70%] ${msg.messageType === 'INTERNAL'
-                                                        ? 'bg-amber-100 dark:bg-amber-900/40 border-2 border-dashed border-amber-300 dark:border-amber-700/50 text-amber-900 dark:text-amber-100 rounded-3xl'
-                                                        : msg.fromMe
-                                                            ? 'bg-primary text-white rounded-[1.5rem] rounded-br-[0.2rem] shadow-[0_10px_30px_-10px_rgba(56,189,248,0.5)]'
-                                                            : 'liquid-glass rounded-[1.5rem] rounded-bl-[0.2rem] border border-slate-200 dark:border-white/5'
-                                                        } px-6 py-4 relative group`}>
-
-                                                        {msg.messageType === 'INTERNAL' && (
-                                                            <div className="flex items-center gap-2 mb-2 pb-2 border-b border-amber-200 dark:border-amber-700/30">
-                                                                <Bot size={12} className="text-amber-600 dark:text-amber-400" />
-                                                                <span className="text-[9px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-400">Nota Interna</span>
-                                                            </div>
-                                                        )}
-
-                                                        {msg.quotedMessageId && (
-                                                            <div className="mb-2 p-3 bg-slate-100 dark:bg-black/40 rounded-xl border-l-4 border-primary">
-                                                                <p className="text-[10px] font-black uppercase tracking-widest text-primary mb-1">
-                                                                    {msg.fromMe ? 'Você respondeu' : 'Contato respondeu'}
-                                                                </p>
-                                                                <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-1 italic">
-                                                                    {messages.find(m => m.id === msg.quotedMessageId)?.content || '[Mensagem original]'}
-                                                                </p>
-                                                            </div>
-                                                        )}
-
-                                                        {msg.messageType === 'INTERNAL' || msg.messageType === 'TEXT' ? (
-                                                            <p className={`text-sm font-medium leading-relaxed ${msg.fromMe && msg.messageType !== 'INTERNAL' ? 'text-white' : 'text-slate-900 dark:text-white'}`}>
-                                                                {msg.content}
-                                                            </p>
-                                                        ) : msg.messageType === 'IMAGE' ? (
-                                                            <div className="space-y-2">
-                                                                <img src={msg.mediaUrl} alt="Imagem" className="rounded-xl max-w-full shadow-sm cursor-pointer hover:opacity-95 transition-opacity" onClick={() => window.open(msg.mediaUrl, '_blank')} />
-                                                                <a href={msg.mediaUrl} download target="_blank" className={`flex items-center gap-1 text-[10px] font-black uppercase tracking-tighter ${msg.fromMe ? 'text-white/70 hover:text-white' : 'text-primary hover:text-primary/80'} transition-colors`}>
-                                                                    📥 Baixar Mídia
-                                                                </a>
-                                                            </div>
-                                                        ) : msg.messageType === 'STICKER' ? (
-                                                            <img src={msg.mediaUrl} alt="Sticker" className="max-w-[150px] max-h-[150px] object-contain" />
-                                                        ) : msg.messageType === 'VIDEO' ? (
-                                                            <div className="space-y-2">
-                                                                <video src={msg.mediaUrl} controls className="rounded-xl max-w-full shadow-sm max-h-64" preload="metadata" />
-                                                                <a href={msg.mediaUrl} download target="_blank" className={`flex items-center gap-1 text-[10px] font-black uppercase tracking-tighter ${msg.fromMe ? 'text-white/70 hover:text-white' : 'text-primary hover:text-primary/80'} transition-colors`}>
-                                                                    📥 Baixar Vídeo
-                                                                </a>
-                                                            </div>
-                                                        ) : msg.messageType === 'AUDIO' ? (
-                                                            <div className="space-y-3 min-w-[280px]">
-                                                                <audio src={msg.mediaUrl} controls className="w-full h-10" />
-                                                                {msg.transcription && (
-                                                                    <motion.div
-                                                                        initial={{ opacity: 0, y: 5 }}
-                                                                        animate={{ opacity: 1, y: 0 }}
-                                                                        className={`text-[11px] font-medium leading-relaxed p-4 rounded-xl border ${msg.fromMe ? 'bg-white/10 border-white/10' : 'bg-black/5 dark:bg-white/5 border-slate-200 dark:border-white/5'}`}
+                                                    {/* Tags / Categorias */}
+                                                    <div className="px-3 py-2">
+                                                        <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">Categorizar (Tags)</div>
+                                                        <div className="max-h-32 overflow-y-auto custom-scrollbar flex flex-col gap-1">
+                                                            {availableTags.map(tag => {
+                                                                const currentTagIds = selectedTicket.tags?.map((t: any) => t.tag?.id || t.id) || [];
+                                                                const isApplied = currentTagIds.includes(tag.id);
+                                                                return (
+                                                                    <button
+                                                                        key={tag.id}
+                                                                        onClick={async () => {
+                                                                            const newTagIds = isApplied
+                                                                                ? currentTagIds.filter((id: string) => id !== tag.id)
+                                                                                : [...currentTagIds, tag.id];
+                                                                            try {
+                                                                                const updated = await ticketsService.update(selectedTicket.id, { tagIds: newTagIds });
+                                                                                setSelectedTicket((prev: any) => prev ? { ...prev, tags: updated.tags ?? prev.tags } : prev);
+                                                                                setTickets((prev: any[]) => prev.map((t: any) => t.id === selectedTicket.id ? { ...t, tags: updated.tags ?? t.tags } : t));
+                                                                            } catch {
+                                                                                toast.error('Erro ao atualizar tags');
+                                                                            }
+                                                                        }}
+                                                                        className={`w-full flex items-center gap-2 p-2 rounded-lg transition-all text-left border ${isApplied ? 'bg-primary/10 border-primary/30' : 'hover:bg-slate-100 dark:hover:bg-white/5 border-transparent'}`}
                                                                     >
-                                                                        <span className="text-[9px] font-black uppercase text-primary block mb-1">Transcrição IA</span>
-                                                                        "{msg.transcription}"
-                                                                    </motion.div>
-                                                                )}
-                                                            </div>
-                                                        ) : (
-                                                            <div className="flex items-center gap-3">
-                                                                <div className={`p-3 rounded-xl ${msg.fromMe ? 'bg-white/20' : 'bg-primary/10 text-primary'}`}>
-                                                                    <Paperclip size={18} />
-                                                                </div>
-                                                                <div className="flex-1 min-w-0">
-                                                                    <p className="text-xs font-black truncate uppercase tracking-widest">{msg.content || msg.messageType}</p>
-                                                                    <a href={msg.mediaUrl} download target="_blank" className="text-[10px] font-bold opacity-60 hover:opacity-100">Clique para baixar</a>
-                                                                </div>
-                                                            </div>
-                                                        )}
-                                                        <div className={`flex items-center gap-2 mt-3 ${msg.fromMe ? 'justify-end' : 'justify-start'}`}>
-                                                            <span className={`text-[9px] font-black uppercase tracking-widest ${msg.fromMe ? 'text-white/60' : 'text-slate-400'}`}>
-                                                                {new Date(msg.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                            </span>
-                                                            {msg.fromMe && (
-                                                                <CheckCheck className={`h-3 w-3 ${msg.status === 'READ' ? 'text-sky-400' : (msg.status === 'DELIVERED' ? 'text-white/80' : 'text-white/40')}`} />
+                                                                        <div className="h-2 w-2 rounded-full shadow-sm flex-shrink-0" style={{ backgroundColor: tag.color }} />
+                                                                        <span className="text-[10px] font-bold text-slate-700 dark:text-gray-300 truncate flex-1">{tag.name}</span>
+                                                                        {isApplied && <span className="text-[9px] text-primary font-black">✓</span>}
+                                                                    </button>
+                                                                );
+                                                            })}
+                                                            {availableTags.length === 0 && (
+                                                                <div className="p-2 text-[9px] text-gray-400 italic text-center">Nenhuma tag</div>
                                                             )}
-                                                            <button
-                                                                onClick={() => setReplyingTo(msg)}
-                                                                className={`p-1 rounded-full transition-all opacity-0 group-hover:opacity-100 ${msg.fromMe ? 'text-white/60 hover:bg-white/20' : 'text-slate-400 hover:bg-slate-200 dark:hover:bg-white/10'}`}
-                                                                title="Responder"
-                                                            >
-                                                                <CornerUpLeft size={12} />
-                                                            </button>
                                                         </div>
                                                     </div>
                                                 </motion.div>
-                                            ))}
-                                            <div ref={messagesEndRef} />
-
-                                            {/* Indicador de digitação */}
-                                            <AnimatePresence>
-                                                {isTyping && (
-                                                    <motion.div
-                                                        initial={{ opacity: 0, scale: 0.8, x: -10 }}
-                                                        animate={{ opacity: 1, scale: 1, x: 0 }}
-                                                        exit={{ opacity: 0, scale: 0.8, x: -10 }}
-                                                        className="flex items-center gap-2"
-                                                    >
-                                                        <div className="flex gap-1">
-                                                            <motion.span animate={{ opacity: [0.4, 1, 0.4] }} transition={{ repeat: Infinity, duration: 1.5, delay: 0 }} className="h-1.5 w-1.5 bg-blue-500 rounded-full" />
-                                                            <motion.span animate={{ opacity: [0.4, 1, 0.4] }} transition={{ repeat: Infinity, duration: 1.5, delay: 0.2 }} className="h-1.5 w-1.5 bg-blue-500 rounded-full" />
-                                                            <motion.span animate={{ opacity: [0.4, 1, 0.4] }} transition={{ repeat: Infinity, duration: 1.5, delay: 0.4 }} className="h-1.5 w-1.5 bg-blue-500 rounded-full" />
-                                                        </div>
-                                                        <span className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest">
-                                                            {isTyping.userName} está digitando...
-                                                        </span>
-                                                    </motion.div>
-                                                )}
-                                            </AnimatePresence>
-                                        </>
-                                    )}
-                                </div>
-
-                                {/* Botão flutuante scroll ao fim */}
-                                <AnimatePresence>
-                                    {showScrollBottom && (
-                                        <motion.button
-                                            initial={{ opacity: 0, scale: 0.8 }}
-                                            animate={{ opacity: 1, scale: 1 }}
-                                            exit={{ opacity: 0, scale: 0.8 }}
-                                            onClick={scrollToBottom}
-                                            className="absolute bottom-4 right-4 z-20 p-2 rounded-full bg-primary shadow-lg shadow-primary/30 text-white hover:bg-primary/90 transition-all"
-                                            title="Ir ao final"
-                                        >
-                                            <ChevronDown className="h-4 w-4" />
-                                        </motion.button>
-                                    )}
-                                </AnimatePresence>
-
-                                {isRecording ? (
-                                    <div className="p-3 bg-white/60 dark:bg-black/40 border-t border-white/40 dark:border-white/5 backdrop-blur-2xl">
-                                        <div className="flex justify-end max-w-6xl mx-auto relative z-10">
-                                            <AudioRecorder
-                                                onSend={handleSendAudio}
-                                                onCancel={() => setIsRecording(false)}
-                                            />
-                                        </div>
+                                            )}
+                                        </AnimatePresence>
                                     </div>
+
+                                    {/* Ações Rápidas em Destaque */}
+                                    <div className="flex items-center gap-1 bg-slate-100/50 dark:bg-white/5 p-1 rounded-2xl border border-white/50 dark:border-white/5 backdrop-blur-md shrink-0">
+                                        {/* Copilot: botão oculto até feature estar pronta */}
+                                        {false && (
+                                            <button
+                                                onClick={() => setShowCopilot(!showCopilot)}
+                                                className={`p-2 rounded-xl transition-all ${showCopilot ? 'bg-blue-600 text-white shadow-lg' : 'hover:bg-white/50 dark:hover:bg-white/5 text-gray-500 dark:text-gray-400'}`}
+                                                title="Alternar IA Copilot"
+                                            >
+                                                <Bot className="h-4 w-4" />
+                                            </button>
+                                        )}
+
+                                        {selectedTicket.contact?.information && (
+                                            <div className="relative group/info">
+                                                <button
+                                                    onClick={() => {
+                                                        navigator.clipboard.writeText(selectedTicket.contact.information!);
+                                                        toast.success("Info copiada!");
+                                                    }}
+                                                    className="p-2 hover:bg-blue-50 dark:hover:bg-blue-500/20 hover:text-blue-500 text-gray-500 rounded-xl transition-all"
+                                                    title="Informação Técnica"
+                                                >
+                                                    <Info className="h-4 w-4" />
+                                                </button>
+                                                <div className="absolute top-full right-0 mt-3 w-64 p-4 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border border-slate-200 dark:border-white/10 rounded-2xl opacity-0 translate-y-2 pointer-events-none group-hover/info:opacity-100 group-hover/info:translate-y-0 transition-all z-50 shadow-2xl">
+                                                    <p className="text-[10px] font-black uppercase tracking-widest text-primary mb-2">Informação Técnica</p>
+                                                    <p className="text-xs font-medium text-slate-700 dark:text-slate-300 line-clamp-4">
+                                                        {selectedTicket.contact.information}
+                                                    </p>
+                                                    <div className="mt-2 text-[8px] font-bold text-gray-400 italic">Clique no ícone para copiar</div>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        <div className="w-[1px] h-6 bg-slate-200 dark:bg-white/10 mx-1" />
+
+                                        {/* Finalizar (Principal) */}
+                                        <button
+                                            disabled={isResolving}
+                                            onClick={() => {
+                                                const ticketId = selectedTicket.id;
+                                                toast('Finalizar atendimento?', {
+                                                    action: {
+                                                        label: 'Finalizar',
+                                                        onClick: async () => {
+                                                            try {
+                                                                setIsResolving(true);
+                                                                await api.post(`/tickets/${ticketId}/resolve`, {});
+                                                                toast.success("Finalizado!");
+                                                                setSelectedTicket(null);
+                                                                fetchTickets();
+                                                            } catch (error) {
+                                                                toast.error("Erro ao finalizar");
+                                                            } finally {
+                                                                setIsResolving(false);
+                                                            }
+                                                        }
+                                                    },
+                                                    cancel: { label: 'Voltar', onClick: () => { } },
+                                                    duration: 4000,
+                                                });
+                                            }}
+                                            className="flex items-center gap-2 px-3 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl shadow-lg transition-all disabled:opacity-50 active:scale-95 group"
+                                        >
+                                            <CheckCheck className="h-4 w-4 group-hover:scale-110 transition-transform" />
+                                            <span className="text-[9px] font-black uppercase tracking-widest hidden xl:block">
+                                                {isResolving ? '...' : 'Finalizar'}
+                                            </span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Barra de Tags do Cabeçalho */}
+                            <div className="px-4 py-2 border-b border-white/40 dark:border-white/5 bg-white/20 dark:bg-black/10 backdrop-blur-md flex flex-wrap gap-1.5 items-center min-h-[36px] border-x border-slate-200 dark:border-white/10">
+                                <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 mr-2">Tags:</span>
+                                {selectedTicket.tags && selectedTicket.tags.length > 0 ? (
+                                    selectedTicket.tags.map((t: any) => (
+                                        <span
+                                            key={t.tag.id}
+                                            className="px-2 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-widest border border-white/20"
+                                            style={{ backgroundColor: `${t.tag.color}20`, color: t.tag.color }}
+                                        >
+                                            {t.tag.name}
+                                        </span>
+                                    ))
                                 ) : (
-                                    <div className="p-3 bg-white/60 dark:bg-black/40 border-t border-white/40 dark:border-white/5 backdrop-blur-2xl">
-                                        <div className="flex items-end gap-3 max-w-6xl mx-auto relative z-10">
-                                            <div className="flex-1 min-w-0 bg-white/50 dark:bg-white/5 rounded-3xl p-1.5 border border-slate-200 dark:border-white/10 relative">
-                                                {/* Preview de Citação (Reply) */}
-                                                {replyingTo && (
-                                                    <div className="mx-4 mt-2 mb-2 p-3 bg-slate-100 dark:bg-black/40 rounded-2xl border-l-4 border-primary flex items-start justify-between group/reply animate-in slide-in-from-bottom-2 duration-300">
-                                                        <div className="min-w-0">
-                                                            <p className="text-[10px] font-black uppercase tracking-widest text-primary mb-1">
-                                                                Respondendo a {replyingTo.fromMe ? 'sua mensagem' : 'contato'}
-                                                            </p>
-                                                            <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-1 italic">
-                                                                {replyingTo.content || '[Mídia]'}
-                                                            </p>
-                                                        </div>
-                                                        <button
-                                                            onClick={() => setReplyingTo(null)}
-                                                            className="p-1 hover:bg-slate-200 dark:hover:bg-white/10 rounded-full transition-colors"
-                                                        >
-                                                            <X size={14} className="text-slate-400" />
-                                                        </button>
+                                    <span className="text-[9px] text-slate-400 italic">Nenhuma tag atribuída</span>
+                                )}
+                            </div>
+
+                            <div className="flex-1 flex overflow-hidden border-x border-b border-slate-200 dark:border-white/10 md:rounded-b-2xl shadow-xl">
+                                {/* Mensagens (agora dentro de uma div flex) */}
+                                <div className="flex-1 flex flex-col overflow-hidden relative">
+                                    <div
+                                        ref={messagesContainerRef}
+                                        onScroll={(e) => {
+                                            const el = e.currentTarget;
+                                            setShowScrollBottom(el.scrollTop + el.clientHeight < el.scrollHeight - 250);
+                                        }}
+                                        className="flex-1 overflow-y-auto custom-scrollbar p-4 md:p-6 space-y-4"
+                                    >
+                                        {loadingMessages ? (
+                                            <div className="flex items-center justify-center h-full">
+                                                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600"></div>
+                                            </div>
+                                        ) : (
+                                            <>
+                                                {messages.filter(m => m.content?.toLowerCase().includes(messageSearch.toLowerCase()) || m.transcription?.toLowerCase().includes(messageSearch.toLowerCase())).length === 0 && messageSearch && (
+                                                    <div className="flex flex-col items-center justify-center h-full opacity-40">
+                                                        <Search size={48} className="mb-4" />
+                                                        <p className="text-sm font-black uppercase tracking-widest">Nenhuma mensagem encontrada</p>
                                                     </div>
                                                 )}
-
-                                                <div className="flex items-center">
-                                                    <input
-                                                        type="file"
-                                                        hidden
-                                                        ref={fileInputRef}
-                                                        onChange={handleFileSelect}
-                                                    />
-                                                    <button
-                                                        onClick={() => fileInputRef.current?.click()}
-                                                        disabled={uploadingFile}
-                                                        className={`p-2.5 transition-all hover:scale-110 ${uploadingFile ? 'text-primary animate-pulse' : 'text-slate-400 hover:text-primary'} disabled:opacity-50`}
-                                                        title="Anexar arquivo"
+                                                {messages.filter(m => m.content?.toLowerCase().includes(messageSearch.toLowerCase()) || m.transcription?.toLowerCase().includes(messageSearch.toLowerCase())).map((msg: any, idx) => (
+                                                    <motion.div
+                                                        key={msg.id}
+                                                        initial={{ opacity: 0, x: msg.fromMe ? 20 : -20 }}
+                                                        animate={{ opacity: 1, x: 0 }}
+                                                        transition={{ delay: idx > messages.length - 6 ? (idx - Math.max(0, messages.length - 6)) * 0.05 : 0 }}
+                                                        className={`flex ${msg.fromMe ? 'justify-end' : 'justify-start'}`}
                                                     >
-                                                        {uploadingFile ? <div className="h-5 w-5 border-2 border-primary border-t-transparent rounded-full animate-spin" /> : <Paperclip className="h-5 w-5" />}
-                                                    </button>
+                                                        <div className={`max-w-[70%] ${msg.messageType === 'INTERNAL'
+                                                            ? 'bg-amber-100 dark:bg-amber-900/40 border-2 border-dashed border-amber-300 dark:border-amber-700/50 text-amber-900 dark:text-amber-100 rounded-3xl'
+                                                            : msg.fromMe
+                                                                ? 'bg-primary text-white rounded-[1.5rem] rounded-br-[0.2rem] shadow-[0_10px_30px_-10px_rgba(56,189,248,0.5)]'
+                                                                : 'liquid-glass rounded-[1.5rem] rounded-bl-[0.2rem] border border-slate-200 dark:border-white/5'
+                                                            } px-6 py-4 relative group`}>
 
-                                                    {/* Toggle Nota Interna */}
-                                                    <button
-                                                        onClick={() => setIsInternal(!isInternal)}
-                                                        className={`p-2 rounded-xl transition-all flex items-center gap-1.5 border ${isInternal
-                                                            ? 'bg-amber-100 dark:bg-amber-900/40 border-amber-300 dark:border-amber-700/50 text-amber-600 dark:text-amber-400'
-                                                            : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 border-transparent'
-                                                            }`}
-                                                        title="Alternar Nota Interna"
-                                                    >
-                                                        <Bot size={16} />
-                                                        <span className="text-[9px] font-black uppercase tracking-widest hidden lg:block">Privado</span>
-                                                    </button>
-
-                                                    {/* Popover de Macros */}
-                                                    <AnimatePresence>
-                                                        {showMacroMenu && (
-                                                            <motion.div
-                                                                initial={{ opacity: 0, y: 10 }}
-                                                                animate={{ opacity: 1, y: 0 }}
-                                                                exit={{ opacity: 0, y: 10 }}
-                                                                className="absolute bottom-full left-0 mb-2 w-96 max-h-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl shadow-2xl overflow-y-auto z-50 custom-scrollbar p-2"
-                                                            >
-                                                                <div className="text-[10px] font-black uppercase text-slate-400 mb-2 px-2 sticky top-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm z-10 py-1">
-                                                                    Respostas Rápidas (Use setas para navegar)
+                                                            {msg.messageType === 'INTERNAL' && (
+                                                                <div className="flex items-center gap-2 mb-2 pb-2 border-b border-amber-200 dark:border-amber-700/30">
+                                                                    <Bot size={12} className="text-amber-600 dark:text-amber-400" />
+                                                                    <span className="text-[9px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-400">Nota Interna</span>
                                                                 </div>
-                                                                {macros.filter(m => m.shortcut.toLowerCase().includes(macroFilter.toLowerCase())).length === 0 ? (
-                                                                    <div className="p-3 text-xs text-slate-500 text-center italic">
-                                                                        Nenhuma resposta rápida encontrada para "{macroFilter}"
+                                                            )}
+
+                                                            {msg.quotedMessageId && (
+                                                                <div className="mb-2 p-3 bg-slate-100 dark:bg-black/40 rounded-xl border-l-4 border-primary">
+                                                                    <p className="text-[10px] font-black uppercase tracking-widest text-primary mb-1">
+                                                                        {msg.fromMe ? 'Você respondeu' : 'Contato respondeu'}
+                                                                    </p>
+                                                                    <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-1 italic">
+                                                                        {messages.find(m => m.id === msg.quotedMessageId)?.content || '[Mensagem original]'}
+                                                                    </p>
+                                                                </div>
+                                                            )}
+
+                                                            {msg.messageType === 'INTERNAL' || msg.messageType === 'TEXT' ? (
+                                                                <p className={`text-sm font-medium leading-relaxed ${msg.fromMe && msg.messageType !== 'INTERNAL' ? 'text-white' : 'text-slate-900 dark:text-white'}`}>
+                                                                    {msg.content}
+                                                                </p>
+                                                            ) : msg.messageType === 'IMAGE' ? (
+                                                                <div className="space-y-2">
+                                                                    <img src={msg.mediaUrl} alt="Imagem" className="rounded-xl max-w-full shadow-sm cursor-pointer hover:opacity-95 transition-opacity" onClick={() => window.open(msg.mediaUrl, '_blank')} />
+                                                                    <a href={msg.mediaUrl} download target="_blank" className={`flex items-center gap-1 text-[10px] font-black uppercase tracking-tighter ${msg.fromMe ? 'text-white/70 hover:text-white' : 'text-primary hover:text-primary/80'} transition-colors`}>
+                                                                        📥 Baixar Mídia
+                                                                    </a>
+                                                                </div>
+                                                            ) : msg.messageType === 'STICKER' ? (
+                                                                <img src={msg.mediaUrl} alt="Sticker" className="max-w-[150px] max-h-[150px] object-contain" />
+                                                            ) : msg.messageType === 'VIDEO' ? (
+                                                                <div className="space-y-2">
+                                                                    <video src={msg.mediaUrl} controls className="rounded-xl max-w-full shadow-sm max-h-64" preload="metadata" />
+                                                                    <a href={msg.mediaUrl} download target="_blank" className={`flex items-center gap-1 text-[10px] font-black uppercase tracking-tighter ${msg.fromMe ? 'text-white/70 hover:text-white' : 'text-primary hover:text-primary/80'} transition-colors`}>
+                                                                        📥 Baixar Vídeo
+                                                                    </a>
+                                                                </div>
+                                                            ) : msg.messageType === 'AUDIO' ? (
+                                                                <div className="space-y-3 min-w-[280px]">
+                                                                    <audio src={msg.mediaUrl} controls className="w-full h-10" />
+                                                                    {msg.transcription && (
+                                                                        <motion.div
+                                                                            initial={{ opacity: 0, y: 5 }}
+                                                                            animate={{ opacity: 1, y: 0 }}
+                                                                            className={`text-[11px] font-medium leading-relaxed p-4 rounded-xl border ${msg.fromMe ? 'bg-white/10 border-white/10' : 'bg-black/5 dark:bg-white/5 border-slate-200 dark:border-white/5'}`}
+                                                                        >
+                                                                            <span className="text-[9px] font-black uppercase text-primary block mb-1">Transcrição IA</span>
+                                                                            "{msg.transcription}"
+                                                                        </motion.div>
+                                                                    )}
+                                                                </div>
+                                                            ) : (
+                                                                <div className="flex items-center gap-3">
+                                                                    <div className={`p-3 rounded-xl ${msg.fromMe ? 'bg-white/20' : 'bg-primary/10 text-primary'}`}>
+                                                                        <Paperclip size={18} />
                                                                     </div>
-                                                                ) : (
-                                                                    macros.filter(m => m.shortcut.toLowerCase().includes(macroFilter.toLowerCase())).map((macro, idx) => (
-                                                                        <button
-                                                                            key={macro.id}
-                                                                            type="button"
-                                                                            className={`w-full text-left p-3 rounded-xl transition-all ${idx === macroSelectedIndex ? 'bg-primary/10 border-primary/20 scale-[0.98]' : 'hover:bg-slate-50 dark:hover:bg-white/5 border-transparent'} border`}
-                                                                            onClick={() => {
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <p className="text-xs font-black truncate uppercase tracking-widest">{msg.content || msg.messageType}</p>
+                                                                        <a href={msg.mediaUrl} download target="_blank" className="text-[10px] font-bold opacity-60 hover:opacity-100">Clique para baixar</a>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                            <div className={`flex items-center gap-2 mt-3 ${msg.fromMe ? 'justify-end' : 'justify-start'}`}>
+                                                                <span className={`text-[9px] font-black uppercase tracking-widest ${msg.fromMe ? 'text-white/60' : 'text-slate-400'}`}>
+                                                                    {new Date(msg.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                                </span>
+                                                                {msg.fromMe && (
+                                                                    <CheckCheck className={`h-3 w-3 ${msg.status === 'READ' ? 'text-sky-400' : (msg.status === 'DELIVERED' ? 'text-white/80' : 'text-white/40')}`} />
+                                                                )}
+                                                                <button
+                                                                    onClick={() => setReplyingTo(msg)}
+                                                                    className={`p-1 rounded-full transition-all opacity-0 group-hover:opacity-100 ${msg.fromMe ? 'text-white/60 hover:bg-white/20' : 'text-slate-400 hover:bg-slate-200 dark:hover:bg-white/10'}`}
+                                                                    title="Responder"
+                                                                >
+                                                                    <CornerUpLeft size={12} />
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    </motion.div>
+                                                ))}
+                                                <div ref={messagesEndRef} />
+
+                                                {/* Indicador de digitação */}
+                                                <AnimatePresence>
+                                                    {isTyping && (
+                                                        <motion.div
+                                                            initial={{ opacity: 0, scale: 0.8, x: -10 }}
+                                                            animate={{ opacity: 1, scale: 1, x: 0 }}
+                                                            exit={{ opacity: 0, scale: 0.8, x: -10 }}
+                                                            className="flex items-center gap-2"
+                                                        >
+                                                            <div className="flex gap-1">
+                                                                <motion.span animate={{ opacity: [0.4, 1, 0.4] }} transition={{ repeat: Infinity, duration: 1.5, delay: 0 }} className="h-1.5 w-1.5 bg-blue-500 rounded-full" />
+                                                                <motion.span animate={{ opacity: [0.4, 1, 0.4] }} transition={{ repeat: Infinity, duration: 1.5, delay: 0.2 }} className="h-1.5 w-1.5 bg-blue-500 rounded-full" />
+                                                                <motion.span animate={{ opacity: [0.4, 1, 0.4] }} transition={{ repeat: Infinity, duration: 1.5, delay: 0.4 }} className="h-1.5 w-1.5 bg-blue-500 rounded-full" />
+                                                            </div>
+                                                            <span className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest">
+                                                                {isTyping.userName} está digitando...
+                                                            </span>
+                                                        </motion.div>
+                                                    )}
+                                                </AnimatePresence>
+                                            </>
+                                        )}
+                                    </div>
+
+                                    {/* Botão flutuante scroll ao fim */}
+                                    <AnimatePresence>
+                                        {showScrollBottom && (
+                                            <motion.button
+                                                initial={{ opacity: 0, scale: 0.8 }}
+                                                animate={{ opacity: 1, scale: 1 }}
+                                                exit={{ opacity: 0, scale: 0.8 }}
+                                                onClick={scrollToBottom}
+                                                className="absolute bottom-4 right-4 z-20 p-2 rounded-full bg-primary shadow-lg shadow-primary/30 text-white hover:bg-primary/90 transition-all"
+                                                title="Ir ao final"
+                                            >
+                                                <ChevronDown className="h-4 w-4" />
+                                            </motion.button>
+                                        )}
+                                    </AnimatePresence>
+
+                                    {isRecording ? (
+                                        <div className="p-3 bg-white/60 dark:bg-black/40 border-t border-white/40 dark:border-white/5 backdrop-blur-2xl">
+                                            <div className="flex justify-end max-w-6xl mx-auto relative z-10">
+                                                <AudioRecorder
+                                                    onSend={handleSendAudio}
+                                                    onCancel={() => setIsRecording(false)}
+                                                />
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="p-3 bg-white/60 dark:bg-black/40 border-t border-white/40 dark:border-white/5 backdrop-blur-2xl">
+                                            <div className="flex items-end gap-3 max-w-6xl mx-auto relative z-10">
+                                                <div className="flex-1 min-w-0 bg-white/50 dark:bg-white/5 rounded-3xl p-1.5 border border-slate-200 dark:border-white/10 relative">
+                                                    {/* Preview de Citação (Reply) */}
+                                                    {replyingTo && (
+                                                        <div className="mx-4 mt-2 mb-2 p-3 bg-slate-100 dark:bg-black/40 rounded-2xl border-l-4 border-primary flex items-start justify-between group/reply animate-in slide-in-from-bottom-2 duration-300">
+                                                            <div className="min-w-0">
+                                                                <p className="text-[10px] font-black uppercase tracking-widest text-primary mb-1">
+                                                                    Respondendo a {replyingTo.fromMe ? 'sua mensagem' : 'contato'}
+                                                                </p>
+                                                                <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-1 italic">
+                                                                    {replyingTo.content || '[Mídia]'}
+                                                                </p>
+                                                            </div>
+                                                            <button
+                                                                onClick={() => setReplyingTo(null)}
+                                                                className="p-1 hover:bg-slate-200 dark:hover:bg-white/10 rounded-full transition-colors"
+                                                            >
+                                                                <X size={14} className="text-slate-400" />
+                                                            </button>
+                                                        </div>
+                                                    )}
+
+                                                    <div className="flex items-center">
+                                                        <input
+                                                            type="file"
+                                                            hidden
+                                                            ref={fileInputRef}
+                                                            onChange={handleFileSelect}
+                                                        />
+                                                        <button
+                                                            onClick={() => fileInputRef.current?.click()}
+                                                            disabled={uploadingFile}
+                                                            className={`p-2.5 transition-all hover:scale-110 ${uploadingFile ? 'text-primary animate-pulse' : 'text-slate-400 hover:text-primary'} disabled:opacity-50`}
+                                                            title="Anexar arquivo"
+                                                        >
+                                                            {uploadingFile ? <div className="h-5 w-5 border-2 border-primary border-t-transparent rounded-full animate-spin" /> : <Paperclip className="h-5 w-5" />}
+                                                        </button>
+
+                                                        {/* Toggle Nota Interna */}
+                                                        <button
+                                                            onClick={() => setIsInternal(!isInternal)}
+                                                            className={`p-2 rounded-xl transition-all flex items-center gap-1.5 border ${isInternal
+                                                                ? 'bg-amber-100 dark:bg-amber-900/40 border-amber-300 dark:border-amber-700/50 text-amber-600 dark:text-amber-400'
+                                                                : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 border-transparent'
+                                                                }`}
+                                                            title="Alternar Nota Interna"
+                                                        >
+                                                            <Bot size={16} />
+                                                            <span className="text-[9px] font-black uppercase tracking-widest hidden lg:block">Privado</span>
+                                                        </button>
+
+                                                        {/* Popover de Macros */}
+                                                        <AnimatePresence>
+                                                            {showMacroMenu && (
+                                                                <motion.div
+                                                                    initial={{ opacity: 0, y: 10 }}
+                                                                    animate={{ opacity: 1, y: 0 }}
+                                                                    exit={{ opacity: 0, y: 10 }}
+                                                                    className="absolute bottom-full left-0 mb-2 w-96 max-h-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl shadow-2xl overflow-y-auto z-50 custom-scrollbar p-2"
+                                                                >
+                                                                    <div className="text-[10px] font-black uppercase text-slate-400 mb-2 px-2 sticky top-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm z-10 py-1">
+                                                                        Respostas Rápidas (Use setas para navegar)
+                                                                    </div>
+                                                                    {macros.filter(m => m.shortcut.toLowerCase().includes(macroFilter.toLowerCase())).length === 0 ? (
+                                                                        <div className="p-3 text-xs text-slate-500 text-center italic">
+                                                                            Nenhuma resposta rápida encontrada para "{macroFilter}"
+                                                                        </div>
+                                                                    ) : (
+                                                                        macros.filter(m => m.shortcut.toLowerCase().includes(macroFilter.toLowerCase())).map((macro, idx) => (
+                                                                            <button
+                                                                                key={macro.id}
+                                                                                type="button"
+                                                                                className={`w-full text-left p-3 rounded-xl transition-all ${idx === macroSelectedIndex ? 'bg-primary/10 border-primary/20 scale-[0.98]' : 'hover:bg-slate-50 dark:hover:bg-white/5 border-transparent'} border`}
+                                                                                onClick={() => {
+                                                                                    const lastSlashIndex = newMessage.lastIndexOf('/');
+                                                                                    const beforeSlash = newMessage.slice(0, lastSlashIndex);
+                                                                                    const newText = beforeSlash + macro.content;
+                                                                                    setNewMessage(newText);
+                                                                                    if (selectedTicket) localStorage.setItem(`draft_${selectedTicket.id}`, newText);
+                                                                                    setShowMacroMenu(false);
+                                                                                }}
+                                                                            >
+                                                                                <div className="flex items-center gap-2 mb-1">
+                                                                                    <Bot className="h-4 w-4 text-primary" />
+                                                                                    <span className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-wider">{macro.shortcut}</span>
+                                                                                </div>
+                                                                                <p className="text-[10px] text-slate-500 line-clamp-2 leading-relaxed">{macro.content}</p>
+                                                                            </button>
+                                                                        ))
+                                                                    )}
+                                                                </motion.div>
+                                                            )}
+                                                        </AnimatePresence>
+
+                                                        {/* Popover de Menções */}
+                                                        <AnimatePresence>
+                                                            {showMentionMenu && (
+                                                                <motion.div
+                                                                    initial={{ opacity: 0, y: 10 }}
+                                                                    animate={{ opacity: 1, y: 0 }}
+                                                                    exit={{ opacity: 0, y: 10 }}
+                                                                    className="absolute bottom-full left-0 mb-2 w-72 max-h-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl shadow-2xl overflow-y-auto z-50 custom-scrollbar p-2"
+                                                                >
+                                                                    <div className="text-[10px] font-black uppercase text-slate-400 mb-2 px-2 sticky top-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm z-10 py-1">
+                                                                        Mencionar Agente
+                                                                    </div>
+                                                                    {mentionableUsers.filter(u => u.name.toLowerCase().includes(mentionFilter.toLowerCase()) || u.email.toLowerCase().includes(mentionFilter.toLowerCase())).length === 0 ? (
+                                                                        <div className="p-3 text-xs text-slate-500 text-center italic">
+                                                                            Nenhum agente encontrado
+                                                                        </div>
+                                                                    ) : (
+                                                                        mentionableUsers.filter(u => u.name.toLowerCase().includes(mentionFilter.toLowerCase()) || u.email.toLowerCase().includes(mentionFilter.toLowerCase())).map((mUser, idx) => (
+                                                                            <button
+                                                                                key={mUser.id}
+                                                                                type="button"
+                                                                                className={`w-full text-left p-3 rounded-xl transition-all flex items-center gap-3 ${idx === mentionSelectedIndex ? 'bg-primary/10 border-primary/20 scale-[0.98]' : 'hover:bg-slate-50 dark:hover:bg-white/5 border-transparent'} border`}
+                                                                                onClick={() => {
+                                                                                    const lastAtIndex = newMessage.lastIndexOf('@');
+                                                                                    const beforeAt = newMessage.slice(0, lastAtIndex);
+                                                                                    const newText = beforeAt + '@' + mUser.name + ' ';
+                                                                                    setNewMessage(newText);
+                                                                                    if (selectedTicket) localStorage.setItem(`draft_${selectedTicket.id}`, newText);
+                                                                                    setShowMentionMenu(false);
+                                                                                }}
+                                                                            >
+                                                                                <div className="h-8 w-8 rounded-lg bg-primary/20 flex items-center justify-center text-primary font-black text-xs">
+                                                                                    {mUser.avatar ? <img src={mUser.avatar} className="h-full w-full object-cover rounded-lg" /> : mUser.name.charAt(0)}
+                                                                                </div>
+                                                                                <div className="flex-1">
+                                                                                    <span className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-wider block">{mUser.name}</span>
+                                                                                    <span className="text-[9px] text-slate-500 uppercase tracking-tight">{mUser.email}</span>
+                                                                                </div>
+                                                                            </button>
+                                                                        ))
+                                                                    )}
+                                                                </motion.div>
+                                                            )}
+                                                        </AnimatePresence>
+
+                                                        <div className="flex-1 flex flex-col relative">
+                                                            <textarea
+                                                                value={newMessage}
+                                                                onChange={(e) => handleMessageChange(e.target.value)}
+                                                                onKeyDown={(e) => {
+                                                                    if (showMacroMenu) {
+                                                                        const filteredMacros = macros.filter(m => m.shortcut.toLowerCase().includes(macroFilter.toLowerCase()));
+                                                                        if (e.key === 'ArrowDown') {
+                                                                            e.preventDefault();
+                                                                            setMacroSelectedIndex(prev => Math.min(prev + 1, Math.max(0, filteredMacros.length - 1)));
+                                                                            return;
+                                                                        }
+                                                                        if (e.key === 'ArrowUp') {
+                                                                            e.preventDefault();
+                                                                            setMacroSelectedIndex(prev => Math.max(prev - 1, 0));
+                                                                            return;
+                                                                        }
+                                                                        if (e.key === 'Enter') {
+                                                                            e.preventDefault();
+                                                                            if (filteredMacros[macroSelectedIndex]) {
+                                                                                const macro = filteredMacros[macroSelectedIndex];
                                                                                 const lastSlashIndex = newMessage.lastIndexOf('/');
                                                                                 const beforeSlash = newMessage.slice(0, lastSlashIndex);
                                                                                 const newText = beforeSlash + macro.content;
                                                                                 setNewMessage(newText);
                                                                                 if (selectedTicket) localStorage.setItem(`draft_${selectedTicket.id}`, newText);
                                                                                 setShowMacroMenu(false);
-                                                                            }}
-                                                                        >
-                                                                            <div className="flex items-center gap-2 mb-1">
-                                                                                <Bot className="h-4 w-4 text-primary" />
-                                                                                <span className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-wider">{macro.shortcut}</span>
-                                                                            </div>
-                                                                            <p className="text-[10px] text-slate-500 line-clamp-2 leading-relaxed">{macro.content}</p>
-                                                                        </button>
-                                                                    ))
-                                                                )}
-                                                            </motion.div>
-                                                        )}
-                                                    </AnimatePresence>
+                                                                            }
+                                                                            return;
+                                                                        }
+                                                                        if (e.key === 'Escape') {
+                                                                            setShowMacroMenu(false);
+                                                                            return;
+                                                                        }
+                                                                    }
 
-                                                    {/* Popover de Menções */}
-                                                    <AnimatePresence>
-                                                        {showMentionMenu && (
-                                                            <motion.div
-                                                                initial={{ opacity: 0, y: 10 }}
-                                                                animate={{ opacity: 1, y: 0 }}
-                                                                exit={{ opacity: 0, y: 10 }}
-                                                                className="absolute bottom-full left-0 mb-2 w-72 max-h-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl shadow-2xl overflow-y-auto z-50 custom-scrollbar p-2"
-                                                            >
-                                                                <div className="text-[10px] font-black uppercase text-slate-400 mb-2 px-2 sticky top-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm z-10 py-1">
-                                                                    Mencionar Agente
-                                                                </div>
-                                                                {mentionableUsers.filter(u => u.name.toLowerCase().includes(mentionFilter.toLowerCase()) || u.email.toLowerCase().includes(mentionFilter.toLowerCase())).length === 0 ? (
-                                                                    <div className="p-3 text-xs text-slate-500 text-center italic">
-                                                                        Nenhum agente encontrado
-                                                                    </div>
-                                                                ) : (
-                                                                    mentionableUsers.filter(u => u.name.toLowerCase().includes(mentionFilter.toLowerCase()) || u.email.toLowerCase().includes(mentionFilter.toLowerCase())).map((mUser, idx) => (
-                                                                        <button
-                                                                            key={mUser.id}
-                                                                            type="button"
-                                                                            className={`w-full text-left p-3 rounded-xl transition-all flex items-center gap-3 ${idx === mentionSelectedIndex ? 'bg-primary/10 border-primary/20 scale-[0.98]' : 'hover:bg-slate-50 dark:hover:bg-white/5 border-transparent'} border`}
-                                                                            onClick={() => {
+                                                                    if (showMentionMenu) {
+                                                                        const filteredUsers = mentionableUsers.filter(u => u.name.toLowerCase().includes(mentionFilter.toLowerCase()) || u.email.toLowerCase().includes(mentionFilter.toLowerCase()));
+                                                                        if (e.key === 'ArrowDown') {
+                                                                            e.preventDefault();
+                                                                            setMentionSelectedIndex(prev => Math.min(prev + 1, Math.max(0, filteredUsers.length - 1)));
+                                                                            return;
+                                                                        }
+                                                                        if (e.key === 'ArrowUp') {
+                                                                            e.preventDefault();
+                                                                            setMentionSelectedIndex(prev => Math.max(prev - 1, 0));
+                                                                            return;
+                                                                        }
+                                                                        if (e.key === 'Enter') {
+                                                                            e.preventDefault();
+                                                                            if (filteredUsers[mentionSelectedIndex]) {
+                                                                                const mUser = filteredUsers[mentionSelectedIndex];
                                                                                 const lastAtIndex = newMessage.lastIndexOf('@');
                                                                                 const beforeAt = newMessage.slice(0, lastAtIndex);
                                                                                 const newText = beforeAt + '@' + mUser.name + ' ';
                                                                                 setNewMessage(newText);
                                                                                 if (selectedTicket) localStorage.setItem(`draft_${selectedTicket.id}`, newText);
                                                                                 setShowMentionMenu(false);
-                                                                            }}
-                                                                        >
-                                                                            <div className="h-8 w-8 rounded-lg bg-primary/20 flex items-center justify-center text-primary font-black text-xs">
-                                                                                {mUser.avatar ? <img src={mUser.avatar} className="h-full w-full object-cover rounded-lg" /> : mUser.name.charAt(0)}
-                                                                            </div>
-                                                                            <div className="flex-1">
-                                                                                <span className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-wider block">{mUser.name}</span>
-                                                                                <span className="text-[9px] text-slate-500 uppercase tracking-tight">{mUser.email}</span>
-                                                                            </div>
-                                                                        </button>
-                                                                    ))
-                                                                )}
-                                                            </motion.div>
-                                                        )}
-                                                    </AnimatePresence>
-
-                                                    <div className="flex-1 flex flex-col relative">
-                                                        <textarea
-                                                            value={newMessage}
-                                                            onChange={(e) => handleMessageChange(e.target.value)}
-                                                            onKeyDown={(e) => {
-                                                                if (showMacroMenu) {
-                                                                    const filteredMacros = macros.filter(m => m.shortcut.toLowerCase().includes(macroFilter.toLowerCase()));
-                                                                    if (e.key === 'ArrowDown') {
-                                                                        e.preventDefault();
-                                                                        setMacroSelectedIndex(prev => Math.min(prev + 1, Math.max(0, filteredMacros.length - 1)));
-                                                                        return;
-                                                                    }
-                                                                    if (e.key === 'ArrowUp') {
-                                                                        e.preventDefault();
-                                                                        setMacroSelectedIndex(prev => Math.max(prev - 1, 0));
-                                                                        return;
-                                                                    }
-                                                                    if (e.key === 'Enter') {
-                                                                        e.preventDefault();
-                                                                        if (filteredMacros[macroSelectedIndex]) {
-                                                                            const macro = filteredMacros[macroSelectedIndex];
-                                                                            const lastSlashIndex = newMessage.lastIndexOf('/');
-                                                                            const beforeSlash = newMessage.slice(0, lastSlashIndex);
-                                                                            const newText = beforeSlash + macro.content;
-                                                                            setNewMessage(newText);
-                                                                            if (selectedTicket) localStorage.setItem(`draft_${selectedTicket.id}`, newText);
-                                                                            setShowMacroMenu(false);
+                                                                            }
+                                                                            return;
                                                                         }
-                                                                        return;
-                                                                    }
-                                                                    if (e.key === 'Escape') {
-                                                                        setShowMacroMenu(false);
-                                                                        return;
-                                                                    }
-                                                                }
-
-                                                                if (showMentionMenu) {
-                                                                    const filteredUsers = mentionableUsers.filter(u => u.name.toLowerCase().includes(mentionFilter.toLowerCase()) || u.email.toLowerCase().includes(mentionFilter.toLowerCase()));
-                                                                    if (e.key === 'ArrowDown') {
-                                                                        e.preventDefault();
-                                                                        setMentionSelectedIndex(prev => Math.min(prev + 1, Math.max(0, filteredUsers.length - 1)));
-                                                                        return;
-                                                                    }
-                                                                    if (e.key === 'ArrowUp') {
-                                                                        e.preventDefault();
-                                                                        setMentionSelectedIndex(prev => Math.max(prev - 1, 0));
-                                                                        return;
-                                                                    }
-                                                                    if (e.key === 'Enter') {
-                                                                        e.preventDefault();
-                                                                        if (filteredUsers[mentionSelectedIndex]) {
-                                                                            const mUser = filteredUsers[mentionSelectedIndex];
-                                                                            const lastAtIndex = newMessage.lastIndexOf('@');
-                                                                            const beforeAt = newMessage.slice(0, lastAtIndex);
-                                                                            const newText = beforeAt + '@' + mUser.name + ' ';
-                                                                            setNewMessage(newText);
-                                                                            if (selectedTicket) localStorage.setItem(`draft_${selectedTicket.id}`, newText);
+                                                                        if (e.key === 'Escape') {
                                                                             setShowMentionMenu(false);
+                                                                            return;
                                                                         }
-                                                                        return;
                                                                     }
-                                                                    if (e.key === 'Escape') {
-                                                                        setShowMentionMenu(false);
-                                                                        return;
-                                                                    }
-                                                                }
 
-                                                                if (e.key === 'Enter' && !e.shiftKey) {
-                                                                    e.preventDefault();
-                                                                    handleSendMessage();
-                                                                }
-                                                                if (e.key === 'Tab') {
-                                                                    // Tab key behavior can be standard now
-                                                                }
-                                                            }}
-                                                            placeholder={isInternal ? "Sua nota privada (interna)..." : "Digite sua mensagem..."}
-                                                            className={`w-full bg-transparent outline-none resize-none text-sm font-medium tracking-normal ${isInternal ? 'text-amber-700 dark:text-amber-300' : 'text-slate-900 dark:text-white'} placeholder:text-slate-400/60 min-h-[44px] py-3`}
-                                                            rows={1}
-                                                            maxLength={2000}
-                                                        />
-                                                        <div className={`absolute bottom-1 right-0 text-[9px] font-black uppercase tracking-tighter ${newMessage.length > 2000 * 0.9 ? 'text-rose-500' : 'text-slate-400 opacity-40 hover:opacity-100 transition-opacity'}`}>
-                                                            {newMessage.length}/2000
-                                                        </div>
-                                                    </div>
-                                                    <div className="flex items-center gap-1">
-                                                        <button
-                                                            onClick={() => setShowScheduleModal(true)}
-                                                            className="p-2.5 text-emerald-500 hover:text-emerald-600 transition-all hover:scale-110"
-                                                            title="Agendar Compromisso"
-                                                        >
-                                                            <Calendar className="h-5 w-5" />
-                                                        </button>
-                                                        <button
-                                                            onClick={() => setIsRecording(true)}
-                                                            className="p-2.5 text-slate-400 hover:text-red-500 transition-all hover:scale-110"
-                                                            title="Gravar áudio"
-                                                        >
-                                                            <Mic className="h-5 w-5" />
-                                                        </button>
-                                                        <div className="relative flex items-center">
-                                                            <button
-                                                                type="button"
-                                                                onClick={(e) => {
-                                                                    e.preventDefault();
-                                                                    setShowEmojiPicker(!showEmojiPicker);
+                                                                    if (e.key === 'Enter' && !e.shiftKey) {
+                                                                        e.preventDefault();
+                                                                        handleSendMessage();
+                                                                    }
+                                                                    if (e.key === 'Tab') {
+                                                                        // Tab key behavior can be standard now
+                                                                    }
                                                                 }}
-                                                                className={`p-2.5 transition-all hover:scale-110 ${showEmojiPicker ? 'text-primary' : 'text-slate-400 hover:text-primary'}`}
+                                                                placeholder={isInternal ? "Sua nota privada (interna)..." : "Digite sua mensagem..."}
+                                                                className={`w-full bg-transparent outline-none resize-none text-sm font-medium tracking-normal ${isInternal ? 'text-amber-700 dark:text-amber-300' : 'text-slate-900 dark:text-white'} placeholder:text-slate-400/60 min-h-[44px] py-3`}
+                                                                rows={1}
+                                                                maxLength={2000}
+                                                            />
+                                                            <div className={`absolute bottom-1 right-0 text-[9px] font-black uppercase tracking-tighter ${newMessage.length > 2000 * 0.9 ? 'text-rose-500' : 'text-slate-400 opacity-40 hover:opacity-100 transition-opacity'}`}>
+                                                                {newMessage.length}/2000
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex items-center gap-1">
+                                                            <button
+                                                                onClick={() => setShowScheduleModal(true)}
+                                                                className="p-2.5 text-emerald-500 hover:text-emerald-600 transition-all hover:scale-110"
+                                                                title="Agendar Compromisso"
                                                             >
-                                                                <Smile className="h-5 w-5" />
+                                                                <Calendar className="h-5 w-5" />
                                                             </button>
+                                                            <button
+                                                                onClick={() => setIsRecording(true)}
+                                                                className="p-2.5 text-slate-400 hover:text-red-500 transition-all hover:scale-110"
+                                                                title="Gravar áudio"
+                                                            >
+                                                                <Mic className="h-5 w-5" />
+                                                            </button>
+                                                            <div className="relative flex items-center">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => {
+                                                                        e.preventDefault();
+                                                                        setShowEmojiPicker(!showEmojiPicker);
+                                                                    }}
+                                                                    className={`p-2.5 transition-all hover:scale-110 ${showEmojiPicker ? 'text-primary' : 'text-slate-400 hover:text-primary'}`}
+                                                                >
+                                                                    <Smile className="h-5 w-5" />
+                                                                </button>
 
-                                                            <AnimatePresence>
-                                                                {showEmojiPicker && (
-                                                                    <motion.div
-                                                                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                                                                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                                                                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                                                                        className="absolute bottom-full right-0 mb-4 z-50 shadow-2xl rounded-[2rem] overflow-hidden border border-slate-200 dark:border-white/10"
-                                                                    >
-                                                                        <EmojiPicker
-                                                                            onEmojiClick={(emojiData) => {
-                                                                                setNewMessage(prev => prev + emojiData.emoji);
-                                                                            }}
-                                                                            theme={'auto' as any}
-                                                                        />
-                                                                    </motion.div>
-                                                                )}
-                                                            </AnimatePresence>
+                                                                <AnimatePresence>
+                                                                    {showEmojiPicker && (
+                                                                        <motion.div
+                                                                            initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                                            exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                                            className="absolute bottom-full right-0 mb-4 z-50 shadow-2xl rounded-[2rem] overflow-hidden border border-slate-200 dark:border-white/10"
+                                                                        >
+                                                                            <EmojiPicker
+                                                                                onEmojiClick={(emojiData) => {
+                                                                                    setNewMessage(prev => prev + emojiData.emoji);
+                                                                                }}
+                                                                                theme={'auto' as any}
+                                                                            />
+                                                                        </motion.div>
+                                                                    )}
+                                                                </AnimatePresence>
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 </div>
-                                            </div>
-                                            <button
-                                                onClick={handleSendMessage}
-                                                disabled={!newMessage.trim() || sending}
-                                                className="h-12 w-12 md:h-14 md:w-14 bg-primary text-white rounded-full flex items-center justify-center hover:bg-primary/90 active:scale-90 transition-all shadow-xl shadow-primary/40 disabled:opacity-50 flex-shrink-0"
-                                            >
-                                                {sending ? (
-                                                    <div className="h-5 w-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                                ) : (
-                                                    <Send className="h-5 w-5 ml-0.5" />
-                                                )}
-                                            </button>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    </>
-                )}
-                {/* Painel Lateral de Informações do Contato */}
-                <AnimatePresence>
-                    {showContactHistory && selectedTicket && (
-                        <motion.div
-                            initial={{ x: '100%' }}
-                            animate={{ x: 0 }}
-                            exit={{ x: '100%' }}
-                            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                            className="absolute inset-y-0 right-0 w-80 bg-white/80 dark:bg-slate-900/90 backdrop-blur-2xl border-l border-slate-200 dark:border-white/10 z-30 shadow-2xl flex flex-col"
-                        >
-                            <div className="p-6 border-b border-slate-200 dark:border-white/10 flex items-center justify-between">
-                                <h4 className="font-black text-xs uppercase tracking-[0.2em] text-slate-400">Contexto do Cliente</h4>
-                                <button onClick={() => setShowContactHistory(false)} className="p-2 hover:bg-slate-100 dark:hover:bg-white/5 rounded-xl text-slate-400">
-                                    <X size={18} />
-                                </button>
-                            </div>
-
-                            <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
-                                {/* Perfil */}
-                                <div className="text-center">
-                                    <div className="h-20 w-20 bg-primary/10 rounded-3xl flex items-center justify-center text-3xl font-black text-primary mx-auto mb-4 shadow-inner">
-                                        {selectedTicket.contact.name.charAt(0)}
-                                    </div>
-                                    <h3 className="font-black text-lg text-slate-900 dark:text-white leading-tight">{selectedTicket.contact.name}</h3>
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1">{selectedTicket.contact.phoneNumber}</p>
-                                </div>
-
-                                {/* Notas */}
-                                <div className="space-y-4">
-                                    <div className="bg-amber-50/50 dark:bg-amber-500/5 rounded-2xl p-4 border border-amber-100/50 dark:border-amber-500/10 group/notes relative">
-                                        <div className="flex items-center justify-between mb-2">
-                                            <p className="text-[9px] font-black uppercase tracking-widest text-amber-600/60 dark:text-amber-400/40">Notas de Atendimento</p>
-                                            {!isEditingNotes && (
                                                 <button
-                                                    onClick={() => {
-                                                        setEditedNotes(selectedTicket.notes || '');
-                                                        setIsEditingNotes(true);
-                                                    }}
-                                                    className="p-1 hover:bg-amber-100 dark:hover:bg-white/5 rounded-md text-amber-600 dark:text-amber-400 opacity-0 group-hover/notes:opacity-100 transition-all"
+                                                    onClick={handleSendMessage}
+                                                    disabled={!newMessage.trim() || sending}
+                                                    className="h-12 w-12 md:h-14 md:w-14 bg-primary text-white rounded-full flex items-center justify-center hover:bg-primary/90 active:scale-90 transition-all shadow-xl shadow-primary/40 disabled:opacity-50 flex-shrink-0"
                                                 >
-                                                    <Edit3 size={12} />
+                                                    {sending ? (
+                                                        <div className="h-5 w-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                                    ) : (
+                                                        <Send className="h-5 w-5 ml-0.5" />
+                                                    )}
                                                 </button>
-                                            )}
-                                        </div>
-
-                                        {isEditingNotes ? (
-                                            <div className="space-y-2">
-                                                <textarea
-                                                    autoFocus
-                                                    value={editedNotes}
-                                                    onChange={(e) => setEditedNotes(e.target.value)}
-                                                    className="w-full bg-white dark:bg-black/20 border border-amber-200 dark:border-amber-500/30 rounded-xl p-3 text-xs font-bold outline-none focus:ring-1 ring-amber-500/50 min-h-[100px] text-slate-700 dark:text-slate-200"
-                                                    placeholder="Adicione observações importantes sobre este cliente..."
-                                                />
-                                                <div className="flex items-center gap-2 justify-end">
-                                                    <button
-                                                        onClick={() => setIsEditingNotes(false)}
-                                                        className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 transition-all"
-                                                    >
-                                                        Cancelar
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleUpdateTicketInfo({ notes: editedNotes })}
-                                                        disabled={updatingInfo}
-                                                        className="px-3 py-1.5 bg-amber-500 text-white rounded-lg text-[10px] font-black uppercase tracking-widest shadow-lg shadow-amber-500/20 hover:bg-amber-600 active:scale-95 transition-all disabled:opacity-50"
-                                                    >
-                                                        {updatingInfo ? 'Salvando...' : 'Salvar Nota'}
-                                                    </button>
-                                                </div>
                                             </div>
-                                        ) : (
-                                            <p className="text-xs font-bold text-amber-800/80 dark:text-amber-200/60 leading-relaxed italic whitespace-pre-wrap">
-                                                {selectedTicket.notes || 'Nenhuma observação interna registrada.'}
-                                            </p>
-                                        )}
-                                    </div>
-
-                                    <div className="bg-slate-50 dark:bg-white/5 rounded-2xl p-4 border border-slate-100 dark:border-white/5">
-                                        <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">Canal Principal</p>
-                                        <div className="flex items-center gap-2 text-primary font-black text-sm">
-                                            <Phone size={14} />
-                                            WhatsApp
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Histórico */}
-                                <div className="space-y-4">
-                                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">Histórico Resumido</p>
-                                    {loadingHistory ? (
-                                        <div className="flex justify-center py-4"><div className="h-5 w-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" /></div>
-                                    ) : contactHistory.length === 0 ? (
-                                        <p className="text-[10px] font-bold text-slate-400 italic">Nenhum chamado anterior encontrado.</p>
-                                    ) : (
-                                        <div className="space-y-3">
-                                            {contactHistory.map((h) => (
-                                                <div key={h.id} className="bg-white/50 dark:bg-black/20 rounded-xl p-3 border border-white/40 dark:border-white/5 group hover:border-primary/30 transition-all">
-                                                    <div className="flex justify-between items-start mb-1">
-                                                        <span className="text-[10px] font-black text-primary truncate">#{h.id.substring(h.id.length - 4).toUpperCase()}</span>
-                                                        <span className="text-[8px] font-bold text-slate-400">{new Date(h.createdAt).toLocaleDateString()}</span>
-                                                    </div>
-                                                    <p className="text-[11px] font-black text-slate-700 dark:text-gray-300 line-clamp-1">{h.subject || 'Sem assunto'}</p>
-                                                    <div className="flex items-center gap-2 mt-2 opacity-60">
-                                                        <div className="h-1 w-1 rounded-full bg-slate-400" />
-                                                        <span className="text-[8px] font-black uppercase tracking-tighter text-slate-500">{h.department.name}</span>
-                                                    </div>
-                                                </div>
-                                            ))}
                                         </div>
                                     )}
                                 </div>
                             </div>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
-            </div>
+                        </>
+                )}
+                        {/* Painel Lateral de Informações do Contato */}
+                        <AnimatePresence>
+                            {showContactHistory && selectedTicket && (
+                                <motion.div
+                                    initial={{ x: '100%' }}
+                                    animate={{ x: 0 }}
+                                    exit={{ x: '100%' }}
+                                    transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                                    className="absolute inset-y-0 right-0 w-80 bg-white/80 dark:bg-slate-900/90 backdrop-blur-2xl border-l border-slate-200 dark:border-white/10 z-30 shadow-2xl flex flex-col"
+                                >
+                                    <div className="p-6 border-b border-slate-200 dark:border-white/10 flex items-center justify-between">
+                                        <h4 className="font-black text-xs uppercase tracking-[0.2em] text-slate-400">Contexto do Cliente</h4>
+                                        <button onClick={() => setShowContactHistory(false)} className="p-2 hover:bg-slate-100 dark:hover:bg-white/5 rounded-xl text-slate-400">
+                                            <X size={18} />
+                                        </button>
+                                    </div>
 
-            {/* Modais */}
-            <CreateTicketModal
-                isOpen={isCreateModalOpen}
-                onClose={() => setIsCreateModalOpen(false)}
-                onSuccess={() => {
-                    fetchTickets();
-                    setIsCreateModalOpen(false);
-                }}
-            />
+                                    <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
+                                        {/* Perfil */}
+                                        <div className="text-center">
+                                            <div className="h-20 w-20 bg-primary/10 rounded-3xl flex items-center justify-center text-3xl font-black text-primary mx-auto mb-4 shadow-inner">
+                                                {selectedTicket.contact.name.charAt(0)}
+                                            </div>
+                                            <h3 className="font-black text-lg text-slate-900 dark:text-white leading-tight">{selectedTicket.contact.name}</h3>
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1">{selectedTicket.contact.phoneNumber}</p>
+                                        </div>
 
-            {selectedTicket && (
-                <TransferTicketModal
-                    isOpen={showTransferModal}
-                    onClose={() => setShowTransferModal(false)}
-                    ticketId={selectedTicket.id}
+                                        {/* Notas */}
+                                        <div className="space-y-4">
+                                            <div className="bg-amber-50/50 dark:bg-amber-500/5 rounded-2xl p-4 border border-amber-100/50 dark:border-amber-500/10 group/notes relative">
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <p className="text-[9px] font-black uppercase tracking-widest text-amber-600/60 dark:text-amber-400/40">Notas de Atendimento</p>
+                                                    {!isEditingNotes && (
+                                                        <button
+                                                            onClick={() => {
+                                                                setEditedNotes(selectedTicket.notes || '');
+                                                                setIsEditingNotes(true);
+                                                            }}
+                                                            className="p-1 hover:bg-amber-100 dark:hover:bg-white/5 rounded-md text-amber-600 dark:text-amber-400 opacity-0 group-hover/notes:opacity-100 transition-all"
+                                                        >
+                                                            <Edit3 size={12} />
+                                                        </button>
+                                                    )}
+                                                </div>
+
+                                                {isEditingNotes ? (
+                                                    <div className="space-y-2">
+                                                        <textarea
+                                                            autoFocus
+                                                            value={editedNotes}
+                                                            onChange={(e) => setEditedNotes(e.target.value)}
+                                                            className="w-full bg-white dark:bg-black/20 border border-amber-200 dark:border-amber-500/30 rounded-xl p-3 text-xs font-bold outline-none focus:ring-1 ring-amber-500/50 min-h-[100px] text-slate-700 dark:text-slate-200"
+                                                            placeholder="Adicione observações importantes sobre este cliente..."
+                                                        />
+                                                        <div className="flex items-center gap-2 justify-end">
+                                                            <button
+                                                                onClick={() => setIsEditingNotes(false)}
+                                                                className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 transition-all"
+                                                            >
+                                                                Cancelar
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleUpdateTicketInfo({ notes: editedNotes })}
+                                                                disabled={updatingInfo}
+                                                                className="px-3 py-1.5 bg-amber-500 text-white rounded-lg text-[10px] font-black uppercase tracking-widest shadow-lg shadow-amber-500/20 hover:bg-amber-600 active:scale-95 transition-all disabled:opacity-50"
+                                                            >
+                                                                {updatingInfo ? 'Salvando...' : 'Salvar Nota'}
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <p className="text-xs font-bold text-amber-800/80 dark:text-amber-200/60 leading-relaxed italic whitespace-pre-wrap">
+                                                        {selectedTicket.notes || 'Nenhuma observação interna registrada.'}
+                                                    </p>
+                                                )}
+                                            </div>
+
+                                            <div className="bg-slate-50 dark:bg-white/5 rounded-2xl p-4 border border-slate-100 dark:border-white/5">
+                                                <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">Canal Principal</p>
+                                                <div className="flex items-center gap-2 text-primary font-black text-sm">
+                                                    <Phone size={14} />
+                                                    WhatsApp
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Histórico */}
+                                        <div className="space-y-4">
+                                            <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">Histórico Resumido</p>
+                                            {loadingHistory ? (
+                                                <div className="flex justify-center py-4"><div className="h-5 w-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" /></div>
+                                            ) : contactHistory.length === 0 ? (
+                                                <p className="text-[10px] font-bold text-slate-400 italic">Nenhum chamado anterior encontrado.</p>
+                                            ) : (
+                                                <div className="space-y-3">
+                                                    {contactHistory.map((h) => (
+                                                        <div key={h.id} className="bg-white/50 dark:bg-black/20 rounded-xl p-3 border border-white/40 dark:border-white/5 group hover:border-primary/30 transition-all">
+                                                            <div className="flex justify-between items-start mb-1">
+                                                                <span className="text-[10px] font-black text-primary truncate">#{h.id.substring(h.id.length - 4).toUpperCase()}</span>
+                                                                <span className="text-[8px] font-bold text-slate-400">{new Date(h.createdAt).toLocaleDateString()}</span>
+                                                            </div>
+                                                            <p className="text-[11px] font-black text-slate-700 dark:text-gray-300 line-clamp-1">{h.subject || 'Sem assunto'}</p>
+                                                            <div className="flex items-center gap-2 mt-2 opacity-60">
+                                                                <div className="h-1 w-1 rounded-full bg-slate-400" />
+                                                                <span className="text-[8px] font-black uppercase tracking-tighter text-slate-500">{h.department.name}</span>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </div>
+
+                {/* Modais */}
+                <CreateTicketModal
+                    isOpen={isCreateModalOpen}
+                    onClose={() => setIsCreateModalOpen(false)}
                     onSuccess={() => {
-                        setShowTransferModal(false);
                         fetchTickets();
-                        if (selectedTicket) {
-                            fetchMessages(selectedTicket.id);
-                        }
+                        setIsCreateModalOpen(false);
                     }}
                 />
-            )}
 
-            {selectedTicket && (
-                <CreateScheduleModal
-                    isOpen={showScheduleModal}
-                    onClose={() => setShowScheduleModal(false)}
-                    contactId={selectedTicket.contactId || selectedTicket.contact?.id || ''}
-                    contactName={selectedTicket.contact.name}
-                    departmentId={selectedTicket.department.id}
+                {
+                    selectedTicket && (
+                        <TransferTicketModal
+                            isOpen={showTransferModal}
+                            onClose={() => setShowTransferModal(false)}
+                            ticketId={selectedTicket.id}
+                            onSuccess={() => {
+                                setShowTransferModal(false);
+                                fetchTickets();
+                                if (selectedTicket) {
+                                    fetchMessages(selectedTicket.id);
+                                }
+                            }}
+                        />
+                    )
+                }
+
+                {
+                    selectedTicket && (
+                        <CreateScheduleModal
+                            isOpen={showScheduleModal}
+                            onClose={() => setShowScheduleModal(false)}
+                            contactId={selectedTicket.contactId || selectedTicket.contact?.id || ''}
+                            contactName={selectedTicket.contact.name}
+                            departmentId={selectedTicket.department.id}
+                            onSuccess={() => {
+                                setShowScheduleModal(false);
+                                // Pode disparar reload adicional se necessário!
+                            }}
+                        />
+                    )
+                }
+                <BulkActionBar
+                    selectedIds={selectedTicketIds}
+                    onClear={() => setSelectedTicketIds([])}
                     onSuccess={() => {
-                        setShowScheduleModal(false);
-                        // Pode disparar reload adicional se necessário!
+                        setSelectedTicketIds([]);
+                        fetchTickets();
                     }}
                 />
-            )}
-            <BulkActionBar
-                selectedIds={selectedTicketIds}
-                onClear={() => setSelectedTicketIds([])}
-                onSuccess={() => {
-                    setSelectedTicketIds([]);
-                    fetchTickets();
-                }}
-            />
-        </div>
-    );
+            </div >
+            );
 }

@@ -84,9 +84,9 @@ export function SlaIndicator({ ticket }: { ticket: TicketWithSla }) {
     } else {
         // Tudo Cumprido dentro do prazo (Opcional mostrar verdinho)
         return (
-            <div className="flex items-center gap-1 text-emerald-500 bg-emerald-50 dark:bg-emerald-500/10 px-2 py-0.5 rounded-lg border border-emerald-200 dark:border-emerald-500/20 shadow-sm mt-2 opacity-60">
-                <CheckCircle2 size={10} />
-                <span className="text-[9px] font-black uppercase tracking-widest">SLA OK</span>
+            <div className="flex items-center gap-1 text-emerald-500 bg-emerald-50 dark:bg-emerald-500/10 px-1.5 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-500/20 mt-1.5 opacity-60">
+                <CheckCircle2 size={8} />
+                <span className="text-[8px] font-black uppercase tracking-widest">SLA OK</span>
             </div>
         );
     }
@@ -99,11 +99,11 @@ export function SlaIndicator({ ticket }: { ticket: TicketWithSla }) {
                 initial={{ opacity: 0.5 }}
                 animate={{ opacity: 1 }}
                 transition={{ repeat: Infinity, duration: 2, repeatType: "reverse" }}
-                className="flex items-center gap-1.5 text-rose-600 bg-rose-50 dark:bg-rose-500/10 px-2.5 py-1 rounded-lg border border-rose-300 dark:border-rose-500/30 shadow-md mt-2 w-max"
+                className="flex items-center gap-1 text-rose-600 bg-rose-50 dark:bg-rose-500/10 px-1.5 py-0.5 rounded-md border border-rose-300 dark:border-rose-500/30 mt-1.5 w-max"
             >
-                <AlertTriangle size={12} className="animate-pulse" />
-                <span className="text-[10px] font-black tracking-widest uppercase">
-                    SLA {label} Quebrado ({activeSla.minutesDiff}m atraso)
+                <AlertTriangle size={10} className="animate-pulse" />
+                <span className="text-[8px] font-black tracking-widest uppercase truncate max-w-[120px]">
+                    SLA {label} ({activeSla.minutesDiff}m)
                 </span>
             </motion.div>
         );
@@ -111,24 +111,28 @@ export function SlaIndicator({ ticket }: { ticket: TicketWithSla }) {
 
     if (activeSla.isWarning && !activeSla.isCompleted) {
         return (
-            <div className="flex items-center gap-1.5 text-amber-600 bg-amber-50 dark:bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-300 dark:border-amber-500/30 shadow-sm mt-2 w-max">
-                <Clock size={12} />
-                <span className="text-[10px] font-black tracking-widest uppercase">
-                    Atenção {label}: {activeSla.minutesDiff}m restam
+        return (
+            <div className="flex items-center gap-1 text-amber-600 bg-amber-50 dark:bg-amber-500/10 px-1.5 py-0.5 rounded-md border border-amber-300 dark:border-amber-500/30 mt-1.5 w-max">
+                <Clock size={10} />
+                <span className="text-[8px] font-black tracking-widest uppercase truncate max-w-[120px]">
+                    {label}: {activeSla.minutesDiff}m
                 </span>
             </div>
+        );
         );
     }
 
     // SLA está rolando mas está safe
     if (!activeSla.isCompleted) {
         return (
-            <div className="flex items-center gap-1.5 text-slate-500 bg-slate-100 dark:bg-white/5 px-2 py-0.5 rounded-lg border border-slate-200 dark:border-white/10 mt-2 w-max opacity-80">
-                <Clock size={10} />
-                <span className="text-[9px] font-black tracking-widest uppercase">
-                    Alvo {label}: {activeSla.minutesDiff}m
+        return (
+            <div className="flex items-center gap-1 text-slate-500 bg-slate-100 dark:bg-white/5 px-1.5 py-0.5 rounded-md border border-slate-200 dark:border-white/10 mt-1.5 w-max opacity-80">
+                <Clock size={8} />
+                <span className="text-[8px] font-black tracking-widest uppercase">
+                    {label}: {activeSla.minutesDiff}m
                 </span>
             </div>
+        );
         );
     }
 

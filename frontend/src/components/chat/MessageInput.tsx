@@ -143,6 +143,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
                                             <EmojiPicker
                                                 onEmojiClick={(emojiData) => setNewMessage(newMessage + emojiData.emoji)}
                                                 theme={'auto' as any}
+                                                searchPlaceholder="Pesquisar emoji..."
                                             />
                                         </motion.div>
                                     )}
