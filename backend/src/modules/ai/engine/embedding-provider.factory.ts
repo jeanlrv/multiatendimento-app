@@ -110,10 +110,35 @@ export class EmbeddingProviderFactory implements OnModuleInit {
     constructor(private configService: ConfigService) { }
 
     /** Aquece o modelo nativo na inicialização para eliminar cold-start de 5-15s na primeira request */
-    onModuleInit() {
-        // Desativado warm-up automático para evitar crash 'Ort::Exception' no boot do Railway
-        // O carregamento agora é dinâmico apenas sob demanda em createNativeEmbeddings
-        this.logger.log(`[AI] EmbeddingProviderFactory inicializado (Warm-up nativo desativado para estabilidade)`);
+    async onModuleInit() {
+        const defaultModel = 'Xenova/all-MiniLM-L6-v2';
+        this.logger.log(`[AI] Iniciando warm-up do modelo nativo: ${defaultModel}`);
+
+        try {
+            const { pipeline, env } = await import('@xenova/transformers');
+
+            // Configurações de estabilidade para ambiente de servidor/container
+            env.allowLocalModels = false;
+            env.useBrowserCache = false;
+
+            // Evitar crash de threads no Node.js/Railway
+            (env as any).remoteHost = 'https://huggingface.co';
+            (env as any).remoteHostEnabled = true;
+
+            // O warm-up deve ser assíncrono para não travar o boot, mas protegido
+            const warmUpPromise = pipeline('feature-extraction', defaultModel, {
+                quantized: true,
+            }).then(() => {
+                this.logger.log(`[AI] Warm-up concluído: ${defaultModel} pronto.`);
+            }).catch(e => {
+                this.logger.error(`[AI] Falha no warm-up do modelo '${defaultModel}': ${e.message}`);
+                // Não deletamos do cache aqui para permitir nova tentativa sob demanda
+            });
+
+            nativePipelineCache.set(defaultModel, warmUpPromise);
+        } catch (error) {
+            this.logger.error(`[AI] Erro crítico ao inicializar motor de AI Nativa: ${error.message}`);
+        }
     }
 
     /**
