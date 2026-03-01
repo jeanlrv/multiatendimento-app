@@ -1,4 +1,4 @@
-import { Injectable, Logger, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, ForbiddenException, NotFoundException, BadRequestException, ServiceUnavailableException } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../../database/prisma.service';
@@ -380,8 +380,23 @@ export class AIService {
             this.logger.log(`Chat "${agent.name}" | modelo: ${finalModelId} | chunks: ${budget.chunkLimit}`);
 
             const companyConfigs = await this.providerConfigService.getDecryptedForCompany(companyId);
-            const llmConfig = companyConfigs.get(this.detectProviderFromModelId(finalModelId));
-            const embeddingConfig = companyConfigs.get(agent.embeddingProvider || 'openai');
+            const providerId = this.detectProviderFromModelId(finalModelId);
+            const llmConfig = companyConfigs.get(providerId);
+
+            // Validação de Provider LLM
+            if (!llmConfig && providerId !== 'ollama' && providerId !== 'lmstudio') {
+                this.logger.warn(`[Chat] Configuração ausente para provider '${providerId}' (empresa: ${companyId})`);
+                throw new BadRequestException(`O provider '${providerId}' não está configurado ou habilitado. Configure em Configurações > IA & Modelos.`);
+            }
+
+            const embeddingProvider = agent.embeddingProvider || 'openai';
+            const embeddingConfig = companyConfigs.get(embeddingProvider);
+
+            // Validação de Provider de Embedding (exceto nativo)
+            if (embeddingProvider !== 'native' && !embeddingConfig && embeddingProvider !== 'ollama' && embeddingProvider !== 'anythingllm') {
+                this.logger.warn(`[Chat] Configuração de embedding ausente para provider '${embeddingProvider}'`);
+                // Não trava o chat se for apenas embedding mas avisa
+            }
 
             // Sumarização progressiva: carrega resumo da conversa se disponível
             let conversationSummary: string | undefined;
@@ -857,8 +872,15 @@ export class AIService {
                 }
 
                 const companyConfigs = await this.providerConfigService.getDecryptedForCompany(companyId);
-                const llmConfig = companyConfigs.get(this.detectProviderFromModelId(finalModelId));
-                const embeddingConfig = companyConfigs.get(agent.embeddingProvider || 'openai');
+                const providerId = this.detectProviderFromModelId(finalModelId);
+                const llmConfig = companyConfigs.get(providerId);
+
+                if (!llmConfig && providerId !== 'ollama' && providerId !== 'lmstudio') {
+                    throw new BadRequestException(`Provider '${providerId}' não configurado.`);
+                }
+
+                const embeddingProvider = agent.embeddingProvider || 'openai';
+                const embeddingConfig = companyConfigs.get(embeddingProvider);
 
                 let context = '';
                 if (agent.knowledgeBaseId) {

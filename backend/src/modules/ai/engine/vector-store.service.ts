@@ -42,7 +42,14 @@ export class VectorStoreService {
         }
 
         const embeddings = this.embeddingFactory.createEmbeddings(provider, model, apiKeyOverride, baseUrlOverride);
-        const embedding = await embeddings.embedQuery(text);
+
+        // Timeout de 15s para geração de embedding (evita travamento no modelo nativo)
+        const embedding = await Promise.race([
+            embeddings.embedQuery(text),
+            new Promise<number[]>((_, reject) =>
+                setTimeout(() => reject(new Error(`Timeout gerando embedding (${provider}). O modelo pode estar demorando para carregar.`)), 15000)
+            )
+        ]);
 
         // Evict LRU entry se cache cheio
         if (this.embeddingCache.size >= this.EMBEDDING_CACHE_LIMIT) {

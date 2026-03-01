@@ -92,8 +92,10 @@ export default function AIAgentsPage() {
         try {
             const response = await AIAgentsService.chat(currentAgent.id, userMsg.content, updatedHistory.slice(0, -1));
             setChatHistory(prev => [...prev, { role: 'assistant', content: typeof response === 'string' ? response : (response as any)?.textResponse || 'Sem resposta' }]);
-        } catch {
-            setChatHistory(prev => [...prev, { role: 'assistant', content: 'Erro ao processar mensagem.' }]);
+        } catch (error: any) {
+            const errorMsg = error.response?.data?.message || 'Erro ao processar mensagem.';
+            setChatHistory(prev => [...prev, { role: 'assistant', content: errorMsg }]);
+            toast.error(errorMsg);
         } finally {
             setChatLoading(false);
         }
@@ -150,9 +152,10 @@ export default function AIAgentsPage() {
             if (model) return model.name;
         }
 
-        // Se não encontrar no mapping, tenta limpar o ID (remover prefixo provider:)
+        // Caso o modelo não seja encontrado (ex: provider desabilitado)
         const parts = modelId.split(':');
-        return parts.length > 1 ? parts[1] : modelId;
+        const name = parts.length > 1 ? parts[1] : modelId;
+        return `${name} (Não configurado)`;
     };
 
     const getProviderName = (modelId?: string) => {
@@ -160,7 +163,16 @@ export default function AIAgentsPage() {
         for (const provider of availableModels) {
             if (provider.models.some(m => m.id === modelId)) return provider.providerName;
         }
-        return modelId.split(':')[0] || 'Desconhecido';
+
+        // Detecta provider por prefixo ou fallback
+        const prefix = modelId.split(':')[0];
+        const knownProviders: Record<string, string> = {
+            'gpt': 'OpenAI', 'claude': 'Anthropic', 'gemini': 'Google',
+            'deepseek': 'DeepSeek', 'mistral': 'Mistral', 'codestral': 'Mistral'
+        };
+
+        if (knownProviders[prefix]) return knownProviders[prefix];
+        return prefix.charAt(0).toUpperCase() + prefix.slice(1) || 'Desconhecido';
     };
 
     const currentEmbeddingProvider = (currentAgent as any)?.embeddingProvider || 'native';
@@ -545,6 +557,16 @@ export default function AIAgentsPage() {
 
                         {activeTab === 'playground' && (
                             <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="flex flex-col h-[400px]">
+                                {currentAgent?.id && !availableModels.some(p => p.models.some(m => m.id === currentAgent.modelId)) && (
+                                    <div className="bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800/50 rounded-2xl p-4 mb-4">
+                                        <p className="text-xs font-black text-rose-800 dark:text-rose-300 uppercase tracking-wider flex items-center gap-2">
+                                            ⚠️ Provider Desconfigurado
+                                        </p>
+                                        <p className="text-[11px] text-rose-700 dark:text-rose-400 mt-1 font-semibold">
+                                            O modelo selecionado ({getModelDisplayName(currentAgent.modelId)}) pertence a um provider que não está configurado. Configure a API Key ou altere o modelo na aba "Cérebro".
+                                        </p>
+                                    </div>
+                                )}
                                 {!currentAgent?.id && (
                                     <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-600/30 rounded-2xl p-4 mb-4 text-xs font-bold text-amber-700 dark:text-amber-300 uppercase tracking-widest text-center">
                                         Salve o agente antes de testar no Playground
