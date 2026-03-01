@@ -157,11 +157,13 @@ export class KnowledgeController {
             properties: {
                 name: { type: 'string', example: 'Base de Conhecimento Atualizada' },
                 description: { type: 'string', example: 'Descrição atualizada' },
-                language: { type: 'string', example: 'pt-BR' }
+                language: { type: 'string', example: 'pt-BR' },
+                embeddingProvider: { type: 'string', example: 'native' },
+                embeddingModel: { type: 'string', example: 'Xenova/all-MiniLM-L6-v2' }
             }
         }
     })
-    updateBase(@Req() req: any, @Param('id') id: string, @Body() data: { name?: string; description?: string; language?: string }) {
+    updateBase(@Req() req: any, @Param('id') id: string, @Body() data: { name?: string; description?: string; language?: string; embeddingProvider?: string; embeddingModel?: string }) {
         return this.knowledgeService.updateBase(req.user.companyId, id, data);
     }
 

@@ -397,7 +397,7 @@ export class KnowledgeService {
 
     // ========== Edição de Bases de Conhecimento ==========
 
-    async updateBase(companyId: string, id: string, data: { name?: string; description?: string; language?: string }) {
+    async updateBase(companyId: string, id: string, data: { name?: string; description?: string; language?: string; embeddingProvider?: string; embeddingModel?: string }) {
         // Verifica se a base pertence à empresa
         const base = await this.findOneBase(companyId, id);
 

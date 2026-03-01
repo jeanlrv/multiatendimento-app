@@ -461,8 +461,8 @@ model KnowledgeBase {
   description       String?
   companyId         String
   language          String   @default("portuguese")
-  embeddingProvider String   @default("openai")
-  embeddingModel    String   @default("text-embedding-3-small")
+  embeddingProvider String   @default("native")
+  embeddingModel    String   @default("Xenova/all-MiniLM-L6-v2")
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
@@ -522,8 +522,8 @@ model AIAgent {
   isActive               Boolean  @default(true)
   companyId              String
   knowledgeBaseId        String?
-  embeddingProvider      String   @default("openai")
-  embeddingModel         String   @default("text-embedding-3-small")
+  embeddingProvider      String   @default("native")
+  embeddingModel         String   @default("Xenova/all-MiniLM-L6-v2")
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 
