@@ -666,20 +666,39 @@ export default function AIKnowledgePage() {
                         ) : (
                             <div className="space-y-3">
                                 {bases.map(base => (
-                                    <button
-                                        key={base.id}
-                                        onClick={() => fetchDocuments(base.id)}
-                                        className={`w-full p-5 rounded-2xl flex items-center justify-between transition-all group ${selectedBase?.id === base.id ? 'bg-primary text-white shadow-xl translate-x-1' : 'bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300'}`}
-                                    >
-                                        <div className="flex items-center gap-4 truncate">
-                                            <Database size={18} className={selectedBase?.id === base.id ? 'text-white' : 'text-primary'} />
-                                            <div className="text-left truncate">
-                                                <p className="text-sm font-black uppercase tracking-tight truncate">{base.name}</p>
-                                                <p className={`text-[9px] font-bold uppercase tracking-widest ${selectedBase?.id === base.id ? 'text-white/70' : 'text-slate-400'}`}>{base._count?.documents || 0} Docs</p>
+                                    <div key={base.id} className="relative group">
+                                        <button
+                                            onClick={() => fetchDocuments(base.id)}
+                                            className={`w-full p-5 rounded-2xl flex items-center justify-between transition-all ${selectedBase?.id === base.id ? 'bg-primary text-white shadow-xl translate-x-1' : 'bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300'}`}
+                                        >
+                                            <div className="flex items-center gap-4 truncate">
+                                                <Database size={18} className={selectedBase?.id === base.id ? 'text-white' : 'text-primary'} />
+                                                <div className="text-left truncate">
+                                                    <p className="text-sm font-black uppercase tracking-tight truncate">{base.name}</p>
+                                                    <p className={`text-[9px] font-bold uppercase tracking-widest ${selectedBase?.id === base.id ? 'text-white/70' : 'text-slate-400'}`}>{base._count?.documents || 0} Docs</p>
+                                                </div>
                                             </div>
-                                        </div>
-                                        <ChevronRight size={16} className={`transition-transform ${selectedBase?.id === base.id ? 'translate-x-1' : 'group-hover:translate-x-1'}`} />
-                                    </button>
+                                            <ChevronRight size={16} className={`transition-transform ${selectedBase?.id === base.id ? 'translate-x-1' : 'group-hover:translate-x-1'}`} />
+                                        </button>
+                                        <button
+                                            onClick={async (e) => {
+                                                e.stopPropagation();
+                                                if (!confirm(`Excluir permanentemente a base "${base.name}"?\n\nTODOS os documentos e vetores serão removidos.`)) return;
+                                                try {
+                                                    await AIKnowledgeService.removeBase(base.id);
+                                                    setBases(prev => prev.filter(b => b.id !== base.id));
+                                                    if (selectedBase?.id === base.id) setSelectedBase(null);
+                                                    toast.success('Base de conhecimento excluída');
+                                                } catch {
+                                                    toast.error('Erro ao excluir base');
+                                                }
+                                            }}
+                                            className="absolute -right-2 -top-2 p-2 bg-rose-500 text-white rounded-full opacity-0 group-hover:opacity-100 hover:scale-110 transition-all shadow-lg z-20"
+                                            title="Excluir Base"
+                                        >
+                                            <X size={12} />
+                                        </button>
+                                    </div>
                                 ))}
                             </div>
                         )}

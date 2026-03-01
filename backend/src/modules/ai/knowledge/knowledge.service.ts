@@ -78,9 +78,27 @@ export class KnowledgeService {
     }
 
     async removeBase(companyId: string, id: string) {
-        return (this.prisma as any).knowledgeBase.deleteMany({
+        // 1. Buscar todos os documentos desta base para limpar arquivos físicos
+        const docs = await (this.prisma as any).document.findMany({
+            where: { knowledgeBaseId: id, knowledgeBase: { companyId } },
+            select: { id: true }
+        });
+
+        // 2. Remover cada documento individualmente (faz cleanup de chunks, arquivos e cache)
+        for (const doc of docs) {
+            await this.removeDocument(companyId, doc.id);
+        }
+
+        // 3. Remover a base (os agentes que usam essa base terão knowledgeBaseId setado como null ou erro se não for opcional, 
+        // mas o Cascade no Document já foi tratado no passo acima para segurança extra de arquivos)
+        const deleted = await (this.prisma as any).knowledgeBase.deleteMany({
             where: { id, companyId }
         });
+
+        // 4. Invalidação final de cache para a base
+        this.emitKnowledgeUpdated(id, companyId);
+
+        return deleted;
     }
 
     async addDocument(companyId: string, baseId: string, data: AddDocumentDto) {
