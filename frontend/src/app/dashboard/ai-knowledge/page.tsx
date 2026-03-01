@@ -217,8 +217,14 @@ export default function AIKnowledgePage() {
             setSubmitting(true);
 
             if (docMode === 'files') {
-                // Upload todos os arquivos selecionados (em paralelo)
-                await Promise.all(uploadFiles.map(file => AIKnowledgeService.uploadDocument(selectedBase.id, file)));
+                // Upload sequencial para evitar sobrecarregar o servidor (502)
+                let uploaded = 0;
+                for (const file of uploadFiles) {
+                    uploaded++;
+                    toast.loading(`Enviando ${uploaded}/${uploadFiles.length}: ${file.name}`, { id: 'upload-progress' });
+                    await AIKnowledgeService.uploadDocument(selectedBase.id, file);
+                }
+                toast.dismiss('upload-progress');
             } else {
                 await AIKnowledgeService.addDocument(selectedBase.id, {
                     title: newDoc.title,
