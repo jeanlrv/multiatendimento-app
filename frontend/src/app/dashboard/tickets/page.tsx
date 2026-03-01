@@ -1589,7 +1589,7 @@ export default function TicketsPage() {
                                         <button
                                             key={t.tag.id}
                                             onClick={async () => {
-                                                const currentTagIds = selectedTicket.tags.map((tg: any) => tg.tag?.id || tg.id);
+                                                const currentTagIds = (selectedTicket.tags ?? []).map((tg: any) => tg.tag?.id || tg.id);
                                                 const newTagIds = currentTagIds.filter((id: string) => id !== (t.tag?.id || t.id));
                                                 try {
                                                     const updated = await ticketsService.update(selectedTicket.id, { tagIds: newTagIds });
