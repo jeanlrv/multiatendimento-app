@@ -123,31 +123,42 @@ export class KnowledgeService {
     async addDocumentFromFile(companyId: string, baseId: string, file: Express.Multer.File) {
         await this.findOneBase(companyId, baseId);
 
+        const fs = require('fs');
         const ext = file.originalname.split('.').pop()?.toLowerCase() || '';
         const sourceType = detectSourceType(ext);
 
         // Determinar o content type para S3
         const contentType = getMimeType(ext);
 
-        // Fazer upload para S3
-        let contentUrl = file.path; // fallback para path local
+        // Tentar upload para S3
+        let contentUrl: string | null = null;
+        let rawContent: string | null = null;
         try {
             contentUrl = await this.s3Service.uploadFile(file.path, file.originalname, contentType);
-            // Remover arquivo local após upload bem-sucedido
-            const fs = require('fs');
-            if (fs.existsSync(file.path)) {
-                fs.unlinkSync(file.path);
-            }
+            this.logger.log(`Arquivo enviado ao S3: ${file.originalname}`);
         } catch (error) {
-            this.logger.warn(`Falha ao fazer upload para S3, usando armazenamento local: ${error.message}`);
-            // Continua usando o path local em caso de falha no S3
+            this.logger.warn(`Falha ao fazer upload para S3: ${error.message}. Lendo conteúdo para o banco.`);
+            // S3 indisponível: ler conteúdo do arquivo diretamente para rawContent
+            // Isso evita depender do /tmp/ efêmero em containers (Railway, Docker, etc.)
+            try {
+                const buffer = fs.readFileSync(file.path);
+                rawContent = buffer.toString('utf-8').substring(0, 500000); // limite de 500k chars
+            } catch (readErr) {
+                this.logger.error(`Falha ao ler arquivo local: ${readErr.message}`);
+            }
         }
+
+        // Limpar arquivo temporário sempre
+        try {
+            if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
+        } catch { /* ignore */ }
 
         const document = await (this.prisma as any).document.create({
             data: {
                 title: file.originalname,
                 sourceType,
-                contentUrl, // Agora pode ser URL S3 ou path local
+                contentUrl, // URL S3 ou null
+                rawContent, // Conteúdo lido do arquivo ou null
                 knowledgeBaseId: baseId,
                 status: 'PENDING',
             },
