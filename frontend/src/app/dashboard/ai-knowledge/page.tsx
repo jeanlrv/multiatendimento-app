@@ -664,10 +664,9 @@ export default function AIKnowledgePage() {
                         setCurrentBase({
                             name: '',
                             description: '',
-                            language: 'portuguese',
                             embeddingProvider: 'native',
-                            embeddingModel: 'Xenova/bge-micro-v2', // Usando default micro preventivo
-                        }); // Default model alterado pro Micro
+                            embeddingModel: 'Xenova/bge-micro-v2',
+                        });
                         setIsBaseModalOpen(true);
                     }}
                     className="flex items-center gap-3 px-8 py-4 bg-primary text-white rounded-[1.5rem] shadow-2xl shadow-primary/30 transition-all active:scale-95 font-bold text-xs uppercase tracking-widest group"
@@ -921,6 +920,6 @@ export default function AIKnowledgePage() {
                 </div>
             </div>
 
-        </div>
+        </div >
     );
 }
