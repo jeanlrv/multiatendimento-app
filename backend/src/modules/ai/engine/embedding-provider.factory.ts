@@ -109,51 +109,12 @@ export class EmbeddingProviderFactory implements OnModuleInit {
 
     constructor(private configService: ConfigService) { }
 
-    /** Aquece o modelo nativo na inicialização para eliminar cold-start de 5-15s na primeira request */
+    /**
+     * O warm-up automático foi removido para garantir estabilidade no Railway.
+     * O modelo será carregado sob demanda no primeiro uso pelo método createNativeEmbeddings.
+     */
     async onModuleInit() {
-        const defaultModel = 'Xenova/all-MiniLM-L6-v2';
-
-        // Delay de 15 segundos para garantir que o Railway não esteja sob pressão de CPU/RAM inicial
-        setTimeout(async () => {
-            this.logger.log(`[AI] Tentativa de Warm-up Seguro (Ultra-Stability Mode): ${defaultModel}`);
-
-            try {
-                const { pipeline, env } = await import('@xenova/transformers');
-
-                // CONFIGURAÇÃO DE SEGURANÇA CRÍTICA
-                env.allowLocalModels = false;
-                env.useBrowserCache = false;
-                env.allowRemoteModels = true;
-                (env as any).remoteHost = 'https://huggingface.co';
-
-                // Forçar desativação total de acelerações que causam Ort::Exception
-                if (env.backends && env.backends.onnx) {
-                    env.backends.onnx.wasm.numThreads = 1;
-                    env.backends.onnx.wasm.proxy = false;
-                    env.backends.onnx.gpu = false;
-
-                    // Compatibilidade com diferentes versões de flags
-                    if ((env.backends.onnx.wasm as any).wasmFeatures) {
-                        (env.backends.onnx.wasm as any).wasmFeatures.simd = false;
-                    }
-                    (env.backends.onnx.wasm as any).simd = false;
-                }
-
-                this.logger.log(`[AI] Configurações de sobrevivência aplicadas. Inicializando pipeline...`);
-
-                const warmUpPromise = pipeline('feature-extraction', defaultModel, {
-                    quantized: true, // Manter quantized por economia de memória, mas protegido
-                }).then(() => {
-                    this.logger.log(`[AI] Warm-up concluído: ${defaultModel} está ONLINE.`);
-                }).catch(e => {
-                    this.logger.error(`[AI] Modelo nativo falhou (erro capturado): ${e.message}`);
-                });
-
-                nativePipelineCache.set(defaultModel, warmUpPromise);
-            } catch (error) {
-                this.logger.error(`[AI] Erro fatal inicializando bibliotecas: ${error.message}`);
-            }
-        }, 15000);
+        this.logger.log('[AI] EmbeddingProviderFactory inicializado (Warm-up automático desativado para estabilidade).');
     }
 
     /**
@@ -272,19 +233,25 @@ export class EmbeddingProviderFactory implements OnModuleInit {
         // Retorna um wrapper LangChain que reutiliza o pipeline em cache
         const getExtractor = async (): Promise<any> => {
             if (!nativePipelineCache.has(model)) {
-                this.logger.log(`[NativeEmbed] Carregando pipeline '${model}' (primeira vez)`);
+                const startTime = Date.now();
+                this.logger.log(`[NativeEmbed] Carregando pipeline '${model}' sob demanda...`);
                 try {
                     const { pipeline, env } = await import('@xenova/transformers');
 
                     env.allowLocalModels = false;
                     env.useBrowserCache = false;
                     env.allowRemoteModels = true;
+                    (env as any).remoteHost = 'https://huggingface.co';
 
                     // Replicar configurações de segurança no carregamento sob demanda
                     if (env.backends && env.backends.onnx) {
                         env.backends.onnx.wasm.numThreads = 1;
                         env.backends.onnx.wasm.proxy = false;
                         env.backends.onnx.gpu = false;
+                        if ((env.backends.onnx.wasm as any).wasmFeatures) {
+                            (env.backends.onnx.wasm as any).wasmFeatures.simd = false;
+                        }
+                        (env.backends.onnx.wasm as any).simd = false;
                     }
 
                     const p = pipeline('feature-extraction', model, {
@@ -292,10 +259,13 @@ export class EmbeddingProviderFactory implements OnModuleInit {
                     });
 
                     nativePipelineCache.set(model, p);
+
+                    const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+                    this.logger.log(`[NativeEmbed] Pipeline '${model}' carregado com sucesso em ${duration}s`);
                 } catch (error) {
                     this.logger.error(`[NativeEmbed] Falha fatal ao carregar pipeline nativo: ${error.message}`);
                     nativePipelineCache.delete(model);
-                    throw new Error(`Modelo de embedding nativo indisponível neste ambiente: ${error.message}`);
+                    throw new Error(`Modelo de embedding nativo indisponível: ${error.message}`);
                 }
             }
             return nativePipelineCache.get(model)!;
@@ -303,18 +273,28 @@ export class EmbeddingProviderFactory implements OnModuleInit {
 
         return {
             embedDocuments: async (docs: string[]): Promise<number[][]> => {
-                const extractor = await getExtractor();
-                const embeddings: number[][] = [];
-                for (const text of docs) {
-                    const output = await extractor(text, { pooling: 'mean', normalize: true });
-                    embeddings.push(Array.from(output.data as Float32Array));
+                try {
+                    const extractor = await getExtractor();
+                    const embeddings: number[][] = [];
+                    for (const text of docs) {
+                        const output = await extractor(text, { pooling: 'mean', normalize: true });
+                        embeddings.push(Array.from(output.data as Float32Array));
+                    }
+                    return embeddings;
+                } catch (error) {
+                    this.logger.error(`[NativeEmbed] Erro ao gerar embeddings de documentos: ${error.message}`);
+                    throw error;
                 }
-                return embeddings;
             },
             embedQuery: async (query: string): Promise<number[]> => {
-                const extractor = await getExtractor();
-                const output = await extractor(query, { pooling: 'mean', normalize: true });
-                return Array.from(output.data as Float32Array);
+                try {
+                    const extractor = await getExtractor();
+                    const output = await extractor(query, { pooling: 'mean', normalize: true });
+                    return Array.from(output.data as Float32Array);
+                } catch (error) {
+                    this.logger.error(`[NativeEmbed] Erro ao gerar embedding de query: ${error.message}`);
+                    throw error;
+                }
             }
         } as Embeddings;
     }

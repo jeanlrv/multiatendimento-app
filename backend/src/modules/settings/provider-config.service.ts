@@ -140,57 +140,46 @@ export class ProviderConfigService {
         providerName: string;
         models: { id: string; name: string; contextWindow?: number; multimodal?: boolean }[];
     }[]> {
-        const companyConfigs = await this.getDecryptedForCompany(companyId);
-        const { MULTIMODAL_MODELS } = require('../ai/engine/llm-provider.factory');
+        try {
+            const companyConfigs = await this.getDecryptedForCompany(companyId);
+            const { MULTIMODAL_MODELS } = require('../ai/engine/llm-provider.factory');
 
-        return LLM_PROVIDERS
-            .filter(p => {
-                const config = companyConfigs.get(p.id);
-                return config && config.isEnabled;
-            })
-            .map(p => {
-                const config = companyConfigs.get(p.id);
-                const models = [...p.models];
+            return LLM_PROVIDERS
+                .filter(p => {
+                    const config = companyConfigs.get(p.id);
+                    return config && config.isEnabled;
+                })
+                .map(p => {
+                    const config = companyConfigs.get(p.id);
+                    let models = [...p.models];
 
-                // Se houver um modelo customizado no extraConfig, filtra/adiciona ele como a ÚNICA/primeira opção
-                if (config?.extraConfig?.model) {
-                    const customModelId = `${p.id}:${config.extraConfig.model}`;
+                    // Se houver um modelo customizado no extraConfig, filtra/adiciona ele como a ÚNICA/primeira opção
+                    if (config?.extraConfig?.model) {
+                        const customModelId = `${p.id}:${config.extraConfig.model}`;
+                        const existingModel = models.find(m => m.id === customModelId || m.name === config.extraConfig.model);
 
-                    // Queremos expor APENAS o modelo selecionado para este provedor (se o user configurou no menu settings)
-                    // Mas se o modelo configurado já existia na base do factory, nós o mantemos; se não, nós injetamos.
-                    const existingModel = models.find(m => m.id === customModelId || m.name === config.extraConfig.model);
-
-                    const filteredModels = existingModel
-                        ? [existingModel]
-                        : [{
-                            id: customModelId,
-                            name: `${config.extraConfig.model}`,
-                            contextWindow: 128000 // default genérico para customizados
-                        }];
-
-                    this.logger.log(`Empresa ${companyId}: Filtrando modelos para ${p.id} -> [${filteredModels.map(m => m.name).join(', ')}]`);
+                        models = existingModel
+                            ? [existingModel]
+                            : [{
+                                id: customModelId,
+                                name: `${config.extraConfig.model}`,
+                                contextWindow: 128000
+                            }];
+                    }
 
                     return {
                         provider: p.id,
                         providerName: p.name,
-                        models: filteredModels.map(m => ({
+                        models: models.map(m => ({
                             ...m,
                             multimodal: MULTIMODAL_MODELS.includes(m.id.split(':').pop() || m.id),
                         })),
                     };
-                }
-
-                this.logger.debug(`Empresa ${companyId}: Sem modelo específico para ${p.id}, retornando todos do factory.`);
-
-                return {
-                    provider: p.id,
-                    providerName: p.name,
-                    models: models.map(m => ({
-                        ...m,
-                        multimodal: MULTIMODAL_MODELS.includes(m.id.split(':').pop() || m.id),
-                    })),
-                };
-            });
+                });
+        } catch (error) {
+            this.logger.error(`Erro ao listar LLM providers para empresa ${companyId}: ${error.message}`);
+            return [];
+        }
     }
 
     /** Retorna providers de embedding disponíveis para uma empresa (DB + env vars) */
@@ -199,24 +188,19 @@ export class ProviderConfigService {
         name: string;
         models: { id: string; name: string; dimensions: number }[];
     }[]> {
-        const companyConfigs = await this.getDecryptedForCompany(companyId);
+        try {
+            const companyConfigs = await this.getDecryptedForCompany(companyId);
 
-        return EMBEDDING_PROVIDERS
-            .filter(p => {
-                if (p.id === 'native') return true; // Sempre disponível
-                try {
+            return EMBEDDING_PROVIDERS
+                .filter(p => {
+                    if (p.id === 'native') return true;
                     const config = companyConfigs.get(p.id);
                     return config && config.isEnabled;
-                } catch {
-                    return false;
-                }
-            })
-            .map(p => {
-                try {
+                })
+                .map(p => {
                     const config = companyConfigs.get(p.id);
                     const models = [...p.models];
 
-                    // Para AnythingLLM e Ollama, se houver modelo customizado, adicionar/ajustar
                     if (config?.extraConfig?.model && (p.id === 'anythingllm' || p.id === 'ollama')) {
                         const customId = `${p.id}:${config.extraConfig.model}`;
                         if (!models.some(m => m.id === customId)) {
@@ -229,13 +213,11 @@ export class ProviderConfigService {
                     }
 
                     return { id: p.id, name: p.name, models };
-                } catch (error) {
-                    this.logger.error(`Erro ao processar provider de embedding ${p.id}: ${error.message}`);
-                    if (p.id === 'native') return { id: p.id, name: p.name, models: p.models };
-                    return null;
-                }
-            })
-            .filter(p => p !== null) as any;
+                });
+        } catch (error) {
+            this.logger.error(`Erro ao listar embedding providers para empresa ${companyId}: ${error.message}`);
+            return EMBEDDING_PROVIDERS.filter(p => p.id === 'native').map(p => ({ id: p.id, name: p.name, models: p.models }));
+        }
     }
 
     /** Mascara a API key para exibição segura */

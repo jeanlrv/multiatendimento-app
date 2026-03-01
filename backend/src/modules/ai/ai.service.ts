@@ -83,20 +83,20 @@ export class AIService {
 
     /** Custo estimado por 1.000 tokens de entrada (USD) — para rastreamento de custo */
     private readonly COST_INPUT: Record<string, number> = {
-        'gpt-4o-mini': 0.00015,    'gpt-4o': 0.005,
-        'claude-3-5-sonnet-20241022': 0.003,  'claude-3-5-haiku-20241022': 0.0008,
+        'gpt-4o-mini': 0.00015, 'gpt-4o': 0.005,
+        'claude-3-5-sonnet-20241022': 0.003, 'claude-3-5-haiku-20241022': 0.0008,
         'claude-3-opus-20240229': 0.015,
         'gemini-2.0-flash': 0.0001, 'gemini-1.5-pro': 0.00125,
-        'deepseek-chat': 0.00027,   'deepseek-reasoner': 0.00055,
+        'deepseek-chat': 0.00027, 'deepseek-reasoner': 0.00055,
         'llama-3.1-8b-instant': 0.00005, 'llama-3.1-70b-versatile': 0.00059,
         'mistral-large-latest': 0.002,
     };
     private readonly COST_OUTPUT: Record<string, number> = {
-        'gpt-4o-mini': 0.0006,     'gpt-4o': 0.015,
-        'claude-3-5-sonnet-20241022': 0.015,  'claude-3-5-haiku-20241022': 0.004,
+        'gpt-4o-mini': 0.0006, 'gpt-4o': 0.015,
+        'claude-3-5-sonnet-20241022': 0.015, 'claude-3-5-haiku-20241022': 0.004,
         'claude-3-opus-20240229': 0.075,
         'gemini-2.0-flash': 0.0004, 'gemini-1.5-pro': 0.005,
-        'deepseek-chat': 0.00110,   'deepseek-reasoner': 0.00219,
+        'deepseek-chat': 0.00110, 'deepseek-reasoner': 0.00219,
         'llama-3.1-8b-instant': 0.00008, 'llama-3.1-70b-versatile': 0.00079,
         'mistral-large-latest': 0.006,
     };
@@ -725,54 +725,70 @@ export class AIService {
     }
 
     /**
-     * Retorna métricas detalhadas de uso da IA
+     * Retorna métricas detalhadas de uso da IA com proteção contra lentidão no DB.
      */
     async getDetailedMetrics(companyId: string) {
-        // Métricas gerais
-        const usage = await this.getUsage(companyId);
+        try {
+            // Métricas gerais
+            const usage = await this.getUsage(companyId);
 
-        // Uso por dia (últimos 30 dias)
-        const dailyUsage = await (this.prisma as any).$queryRaw`
-            SELECT 
-                DATE("createdAt") as date,
-                SUM(tokens) as tokens,
-                COUNT(*) as calls
-            FROM "AIUsage"
-            WHERE "companyId" = ${companyId}
-            AND "createdAt" >= CURRENT_DATE - INTERVAL '30 days'
-            GROUP BY DATE("createdAt")
-            ORDER BY date ASC
-        `;
+            // Uso por dia (últimos 30 dias) - Tempo limite implícito via Promise.race ou apenas try-catch para evitar crash
+            const dailyUsagePromise = (this.prisma as any).$queryRaw`
+                SELECT 
+                    DATE("createdAt") as date,
+                    SUM(tokens) as tokens,
+                    COUNT(*) as calls
+                FROM "ai_usage"
+                WHERE "companyId" = ${companyId}
+                AND "createdAt" >= CURRENT_DATE - INTERVAL '30 days'
+                GROUP BY DATE("createdAt")
+                ORDER BY date ASC
+            `;
 
-        // Uso por agente (lista agentes com totais gerais da empresa)
-        const agentUsage = await (this.prisma as any).$queryRaw`
-            SELECT 
-                a.name as "agentName",
-                a."modelId" as model,
-                a."isActive" as active
-            FROM "AIAgent" a
-            WHERE a."companyId" = ${companyId}
-            ORDER BY a.name ASC
-        `;
+            // Uso por agente
+            const agentUsagePromise = (this.prisma as any).$queryRaw`
+                SELECT 
+                    a.name as "agentName",
+                    a."modelId" as model,
+                    a."isActive" as active
+                FROM "ai_agents" a
+                WHERE a."companyId" = ${companyId}
+                ORDER BY a.name ASC
+            `;
 
-        // Uso por modelo (agrupado pelas configurações dos agentes)
-        const modelUsage = await (this.prisma as any).$queryRaw`
-            SELECT 
-                a."modelId" as model,
-                COUNT(a.id) as "agentCount"
-            FROM "AIAgent" a
-            WHERE a."companyId" = ${companyId}
-            AND a."modelId" IS NOT NULL
-            GROUP BY a."modelId"
-            ORDER BY "agentCount" DESC
-        `;
+            // Uso por modelo
+            const modelUsagePromise = (this.prisma as any).$queryRaw`
+                SELECT 
+                    a."modelId" as model,
+                    COUNT(a.id) as "agentCount"
+                FROM "ai_agents" a
+                WHERE a."companyId" = ${companyId}
+                AND a."modelId" IS NOT NULL
+                GROUP BY a."modelId"
+                ORDER BY "agentCount" DESC
+            `;
 
-        return {
-            usage,
-            dailyUsage,
-            agentUsage,
-            modelUsage
-        };
+            const [dailyUsage, agentUsage, modelUsage] = await Promise.all([
+                dailyUsagePromise.catch(() => []),
+                agentUsagePromise.catch(() => []),
+                modelUsagePromise.catch(() => []),
+            ]);
+
+            return {
+                usage,
+                dailyUsage: Array.isArray(dailyUsage) ? dailyUsage : [],
+                agentUsage: Array.isArray(agentUsage) ? agentUsage : [],
+                modelUsage: Array.isArray(modelUsage) ? modelUsage : []
+            };
+        } catch (error) {
+            this.logger.error(`Erro ao buscar métricas detalhadas de AI para empresa ${companyId}: ${error.message}`);
+            return {
+                usage: { totalTokens: 0, totalCost: 0, totalCalls: 0 },
+                dailyUsage: [],
+                agentUsage: [],
+                modelUsage: []
+            };
+        }
     }
 
     /**
