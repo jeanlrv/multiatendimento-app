@@ -113,43 +113,47 @@ export class EmbeddingProviderFactory implements OnModuleInit {
     async onModuleInit() {
         const defaultModel = 'Xenova/all-MiniLM-L6-v2';
 
-        // Delay maior para garantir que o Railway tenha estabilizado memoria e threads
+        // Delay de 15 segundos para garantir que o Railway não esteja sob pressão de CPU/RAM inicial
         setTimeout(async () => {
-            this.logger.log(`[AI] Tentando warm-up de segurança máxima: ${defaultModel}`);
+            this.logger.log(`[AI] Tentativa de Warm-up Seguro (Ultra-Stability Mode): ${defaultModel}`);
 
             try {
                 const { pipeline, env } = await import('@xenova/transformers');
 
-                // CONFIGURAÇÃO DE BLINDAGEM CONTRA Ort::Exception
+                // CONFIGURAÇÃO DE SEGURANÇA CRÍTICA
                 env.allowLocalModels = false;
                 env.useBrowserCache = false;
                 env.allowRemoteModels = true;
                 (env as any).remoteHost = 'https://huggingface.co';
 
-                // Forçar modo de thread única garantido
+                // Forçar desativação total de acelerações que causam Ort::Exception
                 if (env.backends && env.backends.onnx) {
                     env.backends.onnx.wasm.numThreads = 1;
-                    env.backends.onnx.wasm.simd = false; // Desativa instruções SIMD que podem crashar em CPUs antigas/virtuais
                     env.backends.onnx.wasm.proxy = false;
                     env.backends.onnx.gpu = false;
+
+                    // Compatibilidade com diferentes versões de flags
+                    if ((env.backends.onnx.wasm as any).wasmFeatures) {
+                        (env.backends.onnx.wasm as any).wasmFeatures.simd = false;
+                    }
+                    (env.backends.onnx.wasm as any).simd = false;
                 }
 
-                this.logger.log(`[AI] Configurações de segurança aplicadas. Baixando/Carregando modelo...`);
+                this.logger.log(`[AI] Configurações de sobrevivência aplicadas. Inicializando pipeline...`);
 
                 const warmUpPromise = pipeline('feature-extraction', defaultModel, {
-                    quantized: true,
-                    // Passar flags de execução diretamente se possível
+                    quantized: true, // Manter quantized por economia de memória, mas protegido
                 }).then(() => {
-                    this.logger.log(`[AI] Warm-up realizado com sucesso: ${defaultModel} PRONTO.`);
+                    this.logger.log(`[AI] Warm-up concluído: ${defaultModel} está ONLINE.`);
                 }).catch(e => {
-                    this.logger.error(`[AI] Erro controlado no modelo nativo: ${e.message}`);
+                    this.logger.error(`[AI] Modelo nativo falhou (erro capturado): ${e.message}`);
                 });
 
                 nativePipelineCache.set(defaultModel, warmUpPromise);
             } catch (error) {
-                this.logger.error(`[AI] Erro fatal ao carregar bibliotecas de AI: ${error.message}`);
+                this.logger.error(`[AI] Erro fatal inicializando bibliotecas: ${error.message}`);
             }
-        }, 10000); // 10 segundos de folga para o boot
+        }, 15000);
     }
 
     /**
