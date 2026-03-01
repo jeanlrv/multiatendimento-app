@@ -54,8 +54,8 @@ export class KnowledgeProcessor extends WorkerHost {
             const chunks = await splitter.splitText(text);
 
             // 5. Gera embeddings usando o provider da base de conhecimento
-            const embeddingProvider = document.knowledgeBase?.embeddingProvider || 'native';
-            const embeddingModel = document.knowledgeBase?.embeddingModel || undefined;
+            let embeddingProvider = document.knowledgeBase?.embeddingProvider || 'openai';
+            let embeddingModel = document.knowledgeBase?.embeddingModel || undefined;
 
             // Busca API key da empresa para o provider de embedding configurado
             let embeddingApiKey: string | undefined;
@@ -69,12 +69,28 @@ export class KnowledgeProcessor extends WorkerHost {
                 this.logger.warn(`Não foi possível carregar configs do provider ${embeddingProvider}: ${cfgErr.message}`);
             }
 
-            // Se o provider falhar, faz fallback para nativo e atualiza a KB uma única vez
-            let resolvedProvider = embeddingProvider;
-            let resolvedModel: string | undefined = embeddingModel;
-            let resolvedApiKey: string | undefined = embeddingApiKey;
-            let resolvedBaseUrl: string | undefined = embeddingBaseUrl;
-            let kbFallbackApplied = false;
+            this.logger.log(`[Processor] Documento ${documentId} — provider: ${embeddingProvider}, model: ${embeddingModel ?? 'default'}, apiKey: ${embeddingApiKey ? 'configurada' : 'não encontrada (usará env var)'}`);
+
+            // Validação antecipada: se o provider precisa de API key e não encontramos, abortar cedo.
+            // Exceção: se AnythingLLM estiver configurado ou for 'native/ollama', prosseguir.
+            const requiresKey = !['native', 'ollama'].includes(embeddingProvider);
+            const anythingllmFallbackAvailable = (() => {
+                const u = process.env.ANYTHINGLLM_BASE_URL || process.env.ANYTHINGLLM_API_URL;
+                const k = process.env.ANYTHINGLLM_API_KEY;
+                return !!(u && k && k !== 'your-anythingllm-api-key' && embeddingProvider !== 'anythingllm');
+            })();
+
+            if (requiresKey && !embeddingApiKey && !process.env.OPENAI_API_KEY && !process.env[`${embeddingProvider.toUpperCase()}_API_KEY`]) {
+                if (anythingllmFallbackAvailable) {
+                    this.logger.warn(`Provider '${embeddingProvider}' sem chave, mas fallback AnythingLLM disponível.`);
+                } else {
+                    throw new Error(
+                        `Provider '${embeddingProvider}' requer API key, mas nenhuma foi encontrada ` +
+                        `(nem nas configurações da empresa nem nas variáveis de ambiente). ` +
+                        `Configure em Configurações > IA & Modelos.`
+                    );
+                }
+            }
 
             // Gera embeddings e acumula dados para inserção em lote
             const chunkData: { documentId: string; content: string; embedding?: any }[] = [];
@@ -82,30 +98,38 @@ export class KnowledgeProcessor extends WorkerHost {
             for (const content of chunks) {
                 let embedding: number[] | null = null;
                 try {
-                    embedding = await this.vectorStore.generateEmbedding(content, resolvedProvider, resolvedModel, resolvedApiKey, resolvedBaseUrl);
+                    embedding = await this.vectorStore.generateEmbedding(
+                        content, embeddingProvider, embeddingModel, embeddingApiKey, embeddingBaseUrl
+                    );
                 } catch (embErr) {
-                    this.logger.warn(`Falha ao gerar embedding com provider '${resolvedProvider}': ${embErr.message}`);
-                    // Fallback para provider nativo (Xenova/local) — não requer API key
-                    if (resolvedProvider !== 'native') {
-                        try {
-                            this.logger.log(`[Fallback] Tentando embedding nativo (Xenova) para chunk.`);
-                            embedding = await this.vectorStore.generateEmbedding(content, 'native', undefined, undefined, undefined);
-                            // Muda o provider para native para os próximos chunks e para a KB
-                            resolvedProvider = 'native';
-                            resolvedModel = 'Xenova/all-MiniLM-L6-v2';
-                            resolvedApiKey = undefined;
-                            resolvedBaseUrl = undefined;
-                            if (!kbFallbackApplied) {
-                                kbFallbackApplied = true;
-                                await (this.prisma as any).knowledgeBase.update({
-                                    where: { id: document.knowledgeBaseId },
-                                    data: { embeddingProvider: 'native', embeddingModel: 'Xenova/all-MiniLM-L6-v2' },
-                                });
-                                this.logger.warn(`[Fallback] Knowledge base ${document.knowledgeBaseId} atualizada para embeddingProvider='native'.`);
-                            }
-                        } catch (nativeErr) {
-                            this.logger.error(`[Fallback] Embedding nativo também falhou: ${nativeErr.message}. Chunk sem embedding.`);
-                        }
+                    // Fallback para AnythingLLM quando configurado: usa HTTP puro (OpenAI-compat),
+                    // sem libs nativas/WASM — seguro em Railway e qualquer container de produção.
+                    const anythingllmUrl = process.env.ANYTHINGLLM_BASE_URL || process.env.ANYTHINGLLM_API_URL;
+                    const anythingllmKey = process.env.ANYTHINGLLM_API_KEY;
+                    const canFallback = anythingllmUrl
+                        && anythingllmKey
+                        && anythingllmKey !== 'your-anythingllm-api-key'
+                        && embeddingProvider !== 'anythingllm';
+
+                    if (canFallback) {
+                        this.logger.warn(
+                            `[Processor] Provider '${embeddingProvider}' falhou: ${embErr.message}. ` +
+                            `Fallback AnythingLLM para os demais chunks deste documento.`
+                        );
+                        // Permanente: próximos chunks já usam AnythingLLM diretamente
+                        embeddingProvider = 'anythingllm';
+                        embeddingModel = 'anythingllm:embedding';
+                        embeddingApiKey = anythingllmKey!;
+                        embeddingBaseUrl = anythingllmUrl!;
+                        embedding = await this.vectorStore.generateEmbedding(
+                            content, embeddingProvider, embeddingModel, embeddingApiKey, embeddingBaseUrl
+                        );
+                    } else {
+                        // Sem fallback disponível: marcar documento como ERROR com mensagem clara
+                        throw new Error(
+                            `Falha ao gerar embedding com provider '${embeddingProvider}': ${embErr.message}. ` +
+                            `Configure um provider válido em Configurações > IA & Modelos e reprocesse o documento.`
+                        );
                     }
                 }
 
@@ -116,7 +140,7 @@ export class KnowledgeProcessor extends WorkerHost {
                 });
             }
 
-            // Insere todos os chunks em uma única query (createMany) — muito mais eficiente que N inserts
+            // Insere todos os chunks em uma única query (createMany)
             await (this.prisma as any).documentChunk.createMany({ data: chunkData });
             const chunkCount = chunkData.length;
 

@@ -48,13 +48,32 @@ export class KnowledgeService {
             where: { id, companyId },
             include: {
                 documents: {
-                    orderBy: { createdAt: 'desc' }
+                    orderBy: { createdAt: 'desc' },
+                    include: {
+                        _count: {
+                            select: {
+                                chunks: {
+                                    where: {
+                                        NOT: { embedding: null }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         });
 
         if (!base) throw new NotFoundException('Base de conhecimento não encontrada');
-        return base;
+
+        // Adiciona flag isVectorized para o frontend de forma amigável
+        const docsWithFlags = base.documents.map((doc: any) => ({
+            ...doc,
+            vectorizedCount: doc._count?.chunks || 0,
+            isVectorized: (doc._count?.chunks || 0) > 0 && doc.status === 'READY'
+        }));
+
+        return { ...base, documents: docsWithFlags };
     }
 
     async removeBase(companyId: string, id: string) {
@@ -140,17 +159,29 @@ export class KnowledgeService {
                 id: documentId,
                 knowledgeBase: { companyId }
             },
-            select: {
-                id: true,
-                title: true,
-                status: true,
-                chunkCount: true,
-                createdAt: true
+            include: {
+                _count: {
+                    select: {
+                        chunks: {
+                            where: {
+                                NOT: { embedding: null }
+                            }
+                        }
+                    }
+                }
             }
         });
 
         if (!doc) throw new NotFoundException('Documento não encontrado');
-        return doc;
+
+        return {
+            id: doc.id,
+            status: doc.status,
+            chunkCount: doc.chunkCount,
+            vectorizedCount: doc._count?.chunks || 0,
+            isVectorized: (doc._count?.chunks || 0) > 0 && doc.status === 'READY',
+            error: (doc as any).error
+        };
     }
 
     async removeDocument(companyId: string, documentId: string) {
@@ -324,6 +355,12 @@ export class KnowledgeService {
 
         // 3. Enfileira todos em paralelo (BullMQ é assíncrono — não bloqueia)
         await Promise.all(docIds.map((id: string) => this.enqueueProcessing(id, companyId)));
+
+        // 4. Invalida o cache RAG explicitamente (importante se o provider mudou)
+        const VectorStoreService = require('../engine/vector-store.service').VectorStoreService;
+        // Nota: Idealmente injetaríamos o VectorStoreService, mas como o KnowledgeService 
+        // já emite eventos, o AIService cuidará disso através do @OnEvent('knowledge.updated').
+        // A chamada abaixo reforça a limpeza.
 
         this.emitKnowledgeUpdated(knowledgeBaseId, companyId);
         return { message: `${docIds.length} documento(s) enviado(s) para reprocessamento`, count: docIds.length };

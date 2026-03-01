@@ -218,8 +218,12 @@ export class EmbeddingProviderFactory implements OnModuleInit {
 
     private createAnythingLLMEmbeddings(model: string, apiKeyOverride?: string, baseUrlOverride?: string): Embeddings {
         const apiKey = apiKeyOverride || this.configService.get<string>('ANYTHINGLLM_API_KEY');
-        const baseURL = (baseUrlOverride || this.configService.get<string>('ANYTHINGLLM_BASE_URL') || 'http://localhost:3001/api/v1')
-            .replace(/\/api\/v1\/?$/, '') + '/api/v1';
+        // Aceita tanto ANYTHINGLLM_BASE_URL quanto ANYTHINGLLM_API_URL (alias usado no docker-compose)
+        const rawUrl = baseUrlOverride
+            || this.configService.get<string>('ANYTHINGLLM_BASE_URL')
+            || this.configService.get<string>('ANYTHINGLLM_API_URL')
+            || 'http://localhost:3001/api/v1';
+        const baseURL = rawUrl.replace(/\/api\/v1\/?$/, '') + '/api/v1';
         if (!apiKey) throw new Error('ANYTHINGLLM_API_KEY não configurada. Configure em Configurações > IA & Modelos.');
         // AnythingLLM expõe endpoint OpenAI-compat para embeddings
         return new OpenAIEmbeddings({

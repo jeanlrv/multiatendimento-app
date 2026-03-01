@@ -57,6 +57,8 @@ services:
       ZAPI_BASE_URL: ${ZAPI_BASE_URL:-https://api.z-api.io}
       BACKEND_PUBLIC_URL: ${BACKEND_PUBLIC_URL:-}
       ANYTHINGLLM_API_URL: ${ANYTHINGLLM_API_URL:-http://host.docker.internal:3001}
+      # Alias lido pela EmbeddingProviderFactory (mantém compatibilidade com ambos os nomes)
+      ANYTHINGLLM_BASE_URL: ${ANYTHINGLLM_API_URL:-http://host.docker.internal:3001}
       ANYTHINGLLM_API_KEY: ${ANYTHINGLLM_API_KEY:-your-anythingllm-api-key}
       # ── LLM Providers adicionais ─────────────────────────────────────────────
       AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}

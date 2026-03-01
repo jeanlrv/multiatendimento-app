@@ -396,10 +396,28 @@ export default function AIKnowledgePage() {
                                 onChange={e => setCurrentBase({ ...currentBase, embeddingModel: e.target.value })}
                                 className="w-full p-4 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 font-bold text-sm outline-none appearance-none"
                             >
-                                {(embeddingProviders.find(p => p.id === (currentBase?.embeddingProvider || embeddingProviders[0]?.id))?.models || []).map((m: { id: string; name: string; dimensions: number }) => (
-                                    <option key={m.id} value={m.id}>{m.name}</option>
-                                ))}
-                                {embeddingProviders.length === 0 && <option value="">Nenhum modelo disponível</option>}
+                                {(() => {
+                                    const selectedProviderId = currentBase?.embeddingProvider || (embeddingProviders.length > 0 ? embeddingProviders[0].id : 'native');
+                                    const provider = embeddingProviders.find(p => p.id === selectedProviderId);
+
+                                    if (provider && provider.models.length > 0) {
+                                        return provider.models.map((m: { id: string; name: string; dimensions: number }) => (
+                                            <option key={m.id} value={m.id}>{m.name}</option>
+                                        ));
+                                    }
+
+                                    // Fallback se o provider não tiver modelos carregados (ex: nativo em erro de API)
+                                    if (selectedProviderId === 'native') {
+                                        return (
+                                            <>
+                                                <option value="Xenova/all-MiniLM-L6-v2">all-MiniLM-L6-v2 (Padrão)</option>
+                                                <option value="Xenova/bge-micro-v2">bge-micro-v2 (Rápido)</option>
+                                            </>
+                                        );
+                                    }
+
+                                    return <option value="">Nenhum modelo disponível</option>;
+                                })()}
                             </select>
                         </div>
                     </div>
@@ -795,11 +813,18 @@ export default function AIKnowledgePage() {
                                                             <DocTypeIcon sourceType={doc.sourceType} />
                                                             <div className="truncate">
                                                                 <p className="text-sm font-black uppercase tracking-tight text-slate-800 dark:text-white truncate">{doc.title}</p>
-                                                                <div className="flex items-center gap-2 mt-1">
+                                                                <div className="flex flex-wrap items-center gap-2 mt-1">
                                                                     <span className={`text-[8px] font-bold uppercase px-1.5 py-0.5 rounded-md ${doc.status === 'READY' ? 'bg-emerald-500/10 text-emerald-600' : doc.status === 'ERROR' ? 'bg-rose-500/10 text-rose-600' : 'bg-slate-100 text-slate-400'}`}>
                                                                         {doc.status}
                                                                     </span>
-                                                                    <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">{doc.chunkCount} Vetores</span>
+                                                                    {doc.isVectorized && (
+                                                                        <span className="text-[8px] font-bold uppercase px-1.5 py-0.5 rounded-md bg-primary/10 text-primary flex items-center gap-1">
+                                                                            <Zap size={8} className="fill-current" /> Vetorizado no Banco
+                                                                        </span>
+                                                                    )}
+                                                                    <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">
+                                                                        {doc.vectorizedCount !== undefined ? `${doc.vectorizedCount} / ${doc.chunkCount}` : doc.chunkCount} Vetores
+                                                                    </span>
                                                                 </div>
                                                             </div>
                                                         </div>

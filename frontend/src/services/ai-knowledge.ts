@@ -23,6 +23,9 @@ export interface AIDocument {
     rawContent?: string;
     status: 'PENDING' | 'PROCESSING' | 'READY' | 'ERROR';
     chunkCount: number;
+    vectorizedCount?: number;
+    isVectorized?: boolean;
+    error?: string;
     createdAt: string;
     updatedAt: string;
 }
