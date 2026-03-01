@@ -661,7 +661,13 @@ export default function AIKnowledgePage() {
 
                 <button
                     onClick={() => {
-                        setCurrentBase({ name: '', description: '', embeddingProvider: 'native', embeddingModel: 'Xenova/all-MiniLM-L6-v2' });
+                        setCurrentBase({
+                            name: '',
+                            description: '',
+                            language: 'portuguese',
+                            embeddingProvider: 'native',
+                            embeddingModel: 'Xenova/bge-micro-v2', // Usando default micro preventivo
+                        }); // Default model alterado pro Micro
                         setIsBaseModalOpen(true);
                     }}
                     className="flex items-center gap-3 px-8 py-4 bg-primary text-white rounded-[1.5rem] shadow-2xl shadow-primary/30 transition-all active:scale-95 font-bold text-xs uppercase tracking-widest group"

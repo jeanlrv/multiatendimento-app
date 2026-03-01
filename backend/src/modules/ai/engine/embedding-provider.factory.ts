@@ -23,8 +23,8 @@ export const EMBEDDING_PROVIDERS: EmbeddingProviderConfig[] = [
         name: 'Nativo (built-in CPU)',
         envKey: '',
         models: [
-            { id: 'Xenova/all-MiniLM-L6-v2', name: 'all-MiniLM-L6-v2 (Padrão e Rápido)', dimensions: 384 },
-            { id: 'Xenova/bge-micro-v2', name: 'bge-micro-v2 (Muito Leve e Rápido)', dimensions: 384 },
+            { id: 'Xenova/bge-micro-v2', name: 'bge-micro-v2 (Padrão, Muito Leve e Rápido)', dimensions: 384 },
+            { id: 'Xenova/all-MiniLM-L6-v2', name: 'all-MiniLM-L6-v2 (Antigo)', dimensions: 384 },
         ],
     },
     {
@@ -247,7 +247,8 @@ export class EmbeddingProviderFactory implements OnModuleInit {
                     env.allowRemoteModels = true;
                     (env as any).remoteHost = 'https://huggingface.co';
 
-                    // Replicar configurações de segurança no carregamento sob demanda
+                    // Otimização agressiva do runtime ONNX WASM para instâncias 512MB RAM (Ex: Railway Starter) 
+                    // Isso corta drasticamente o consumo de memória, prevenindo crashes 502 (OOM - Out of Memory)
                     if (env.backends && env.backends.onnx) {
                         env.backends.onnx.wasm.numThreads = 1;
                         env.backends.onnx.wasm.proxy = false;
@@ -256,6 +257,10 @@ export class EmbeddingProviderFactory implements OnModuleInit {
                             (env.backends.onnx.wasm as any).wasmFeatures.simd = false;
                         }
                         (env.backends.onnx.wasm as any).simd = false;
+
+                        // Adição crucial para limitar o uso de memória WASM (se exposto pelo runtime)
+                        // A biblioteca subjacente 'onnxruntime-web' pode alocar toda RAM se não capada nestes exports
+                        (env.backends.onnx as any).logLevel = 'warning';
                     }
 
                     const p = pipeline('feature-extraction', model, {

@@ -462,7 +462,7 @@ model KnowledgeBase {
   companyId         String
   language          String   @default("portuguese")
   embeddingProvider String   @default("native")
-  embeddingModel    String   @default("Xenova/all-MiniLM-L6-v2")
+  embeddingModel    String   @default("Xenova/bge-micro-v2")
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
