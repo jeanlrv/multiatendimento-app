@@ -43,11 +43,12 @@ export class VectorStoreService {
 
         const embeddings = this.embeddingFactory.createEmbeddings(provider, model, apiKeyOverride, baseUrlOverride);
 
-        // Timeout de 15s para geração de embedding (evita travamento no modelo nativo)
+        // Timeout: 60s para provider nativo (download do modelo no primeiro uso), 20s para outros
+        const timeoutMs = provider === 'native' ? 60000 : 20000;
         const embedding = await Promise.race([
             embeddings.embedQuery(text),
             new Promise<number[]>((_, reject) =>
-                setTimeout(() => reject(new Error(`Timeout gerando embedding (${provider}). O modelo pode estar demorando para carregar.`)), 15000)
+                setTimeout(() => reject(new Error(`Timeout gerando embedding (${provider}). O modelo pode estar demorando para carregar.`)), timeoutMs)
             )
         ]);
 

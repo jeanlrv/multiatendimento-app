@@ -8,7 +8,7 @@ import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters';
 import axios from 'axios';
 import * as fs from 'fs';
 
-@Processor('knowledge-processing')
+@Processor('knowledge-processing', { concurrency: 1 })
 export class KnowledgeProcessor extends WorkerHost {
     private readonly logger = new Logger(KnowledgeProcessor.name);
 
@@ -76,7 +76,9 @@ export class KnowledgeProcessor extends WorkerHost {
             let resolvedBaseUrl: string | undefined = embeddingBaseUrl;
             let kbFallbackApplied = false;
 
-            let chunkCount = 0;
+            // Gera embeddings e acumula dados para inserção em lote
+            const chunkData: { documentId: string; content: string; embedding?: any }[] = [];
+
             for (const content of chunks) {
                 let embedding: number[] | null = null;
                 try {
@@ -95,7 +97,6 @@ export class KnowledgeProcessor extends WorkerHost {
                             resolvedBaseUrl = undefined;
                             if (!kbFallbackApplied) {
                                 kbFallbackApplied = true;
-                                // Atualiza a KB para que a busca RAG use o mesmo provider
                                 await (this.prisma as any).knowledgeBase.update({
                                     where: { id: document.knowledgeBaseId },
                                     data: { embeddingProvider: 'native', embeddingModel: 'Xenova/all-MiniLM-L6-v2' },
@@ -108,16 +109,16 @@ export class KnowledgeProcessor extends WorkerHost {
                     }
                 }
 
-                await (this.prisma as any).documentChunk.create({
-                    data: {
-                        documentId,
-                        content,
-                        embedding: embedding && embedding.length > 0 ? (embedding as any) : undefined,
-                    },
+                chunkData.push({
+                    documentId,
+                    content,
+                    embedding: embedding && embedding.length > 0 ? (embedding as any) : undefined,
                 });
-
-                chunkCount++;
             }
+
+            // Insere todos os chunks em uma única query (createMany) — muito mais eficiente que N inserts
+            await (this.prisma as any).documentChunk.createMany({ data: chunkData });
+            const chunkCount = chunkData.length;
 
             // 6. Finaliza documento
             await (this.prisma as any).document.update({
