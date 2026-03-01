@@ -54,7 +54,7 @@ export class KnowledgeService {
                             select: {
                                 chunks: {
                                     where: {
-                                        NOT: { embedding: null }
+                                        embedding: { not: null }
                                     }
                                 }
                             }
@@ -164,7 +164,7 @@ export class KnowledgeService {
                     select: {
                         chunks: {
                             where: {
-                                NOT: { embedding: null }
+                                embedding: { not: null }
                             }
                         }
                     }
