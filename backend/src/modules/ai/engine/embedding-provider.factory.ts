@@ -113,41 +113,43 @@ export class EmbeddingProviderFactory implements OnModuleInit {
     async onModuleInit() {
         const defaultModel = 'Xenova/all-MiniLM-L6-v2';
 
-        // Pequeno delay para permitir que o servidor termine o boot antes de carregar o modelo pesado
+        // Delay maior para garantir que o Railway tenha estabilizado memoria e threads
         setTimeout(async () => {
-            this.logger.log(`[AI] Iniciando warm-up do modelo nativo (Safe Mode): ${defaultModel}`);
+            this.logger.log(`[AI] Tentando warm-up de segurança máxima: ${defaultModel}`);
 
             try {
                 const { pipeline, env } = await import('@xenova/transformers');
 
-                // CONFIGURAÇÕES DE ESTABILIDADE MÁXIMA PARA CONTAINERS (Railway/Docker)
+                // CONFIGURAÇÃO DE BLINDAGEM CONTRA Ort::Exception
                 env.allowLocalModels = false;
                 env.useBrowserCache = false;
                 env.allowRemoteModels = true;
                 (env as any).remoteHost = 'https://huggingface.co';
 
-                // Forçar CPU-only e thread única para evitar Ort::Exception de concorrência nativa
+                // Forçar modo de thread única garantido
                 if (env.backends && env.backends.onnx) {
                     env.backends.onnx.wasm.numThreads = 1;
+                    env.backends.onnx.wasm.simd = false; // Desativa instruções SIMD que podem crashar em CPUs antigas/virtuais
                     env.backends.onnx.wasm.proxy = false;
                     env.backends.onnx.gpu = false;
                 }
 
-                // O warm-up deve ser assíncrono e isolado
+                this.logger.log(`[AI] Configurações de segurança aplicadas. Baixando/Carregando modelo...`);
+
                 const warmUpPromise = pipeline('feature-extraction', defaultModel, {
                     quantized: true,
+                    // Passar flags de execução diretamente se possível
                 }).then(() => {
-                    this.logger.log(`[AI] Warm-up concluído com sucesso: ${defaultModel}`);
+                    this.logger.log(`[AI] Warm-up realizado com sucesso: ${defaultModel} PRONTO.`);
                 }).catch(e => {
-                    this.logger.error(`[AI] Falha ao carregar modelo nativo: ${e.message}`);
-                    // Mantemos a falha no cache para não tentar novamente se já sabemos que falha
+                    this.logger.error(`[AI] Erro controlado no modelo nativo: ${e.message}`);
                 });
 
                 nativePipelineCache.set(defaultModel, warmUpPromise);
             } catch (error) {
-                this.logger.error(`[AI] Erro fatal no motor de AI Nativa: ${error.message}`);
+                this.logger.error(`[AI] Erro fatal ao carregar bibliotecas de AI: ${error.message}`);
             }
-        }, 5000); // 5 segundos após o boot
+        }, 10000); // 10 segundos de folga para o boot
     }
 
     /**
