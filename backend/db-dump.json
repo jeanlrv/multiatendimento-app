@@ -34,7 +34,7 @@
       "embeddingProvider": "openai",
       "embeddingModel": "text-embedding-3-small",
       "createdAt": "2026-02-26T22:06:18.835Z",
-      "updatedAt": "2026-03-01T03:15:54.031Z",
+      "updatedAt": "2026-03-01T03:42:15.924Z",
       "embedId": null,
       "embedEnabled": false,
       "embedBrandColor": "#4F46E5",

@@ -106,9 +106,9 @@ export default function AIAgentsPage() {
         try {
             setSubmitting(true);
             if (currentAgent?.id) {
-                // Remover campos não pertencentes ao DTO (retornados pelo Prisma mas não aceitos na atualização)
+                // Remover campos internos ou derivados que o Prisma não deve receber via spread no update
                 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                const { id: _id, companyId: _co, createdAt: _cr, updatedAt: _up, embedId: _ei, allowModelDowngrade: _amd, limitTokensPerDay: _ltd, ...payload } = currentAgent as any;
+                const { id: _id, companyId: _co, createdAt: _cr, updatedAt: _up, embedId: _ei, ...payload } = currentAgent as any;
                 await AIAgentsService.update(currentAgent.id, payload);
                 toast.success('Agente atualizado com sucesso');
             } else {
@@ -180,15 +180,28 @@ export default function AIAgentsPage() {
         || (embeddingProviders.find(p => p.id === 'native')?.models)
         || (embeddingProviders.length > 0 ? embeddingProviders[0].models : []);
 
-    // Garantir que um modelo padrão esteja selecionado ao mudar o provider
+    // Garantir que um modelo válido esteja selecionado (sync de estado)
     useEffect(() => {
         if (isModalOpen && currentAgent) {
+            // 1. Sincroniza LLM se o modelo atual for inválido/desconfigurado
+            const isModelValid = availableModels.some(p => p.models.some(m => m.id === currentAgent.modelId));
+            if (!isModelValid && availableModels.length > 0) {
+                const firstModelId = availableModels[0].models[0]?.id;
+                if (firstModelId && currentAgent.modelId !== firstModelId) {
+                    console.log(`[Sync] Corrigindo modelId inválido: ${currentAgent.modelId} -> ${firstModelId}`);
+                    setCurrentAgent(prev => ({ ...prev, modelId: firstModelId }));
+                }
+            }
+
+            // 2. Sincroniza Embedding se o modelo atual for inválido
             const currentModels = embeddingProviders.find(p => p.id === currentEmbeddingProvider)?.models || [];
-            if (currentModels.length > 0 && !(currentAgent as any).embeddingModel) {
+            const isEmbValid = currentModels.some(m => m.id === (currentAgent as any).embeddingModel);
+
+            if (!isEmbValid && currentModels.length > 0) {
                 setCurrentAgent(prev => ({ ...prev, embeddingModel: currentModels[0].id } as any));
             }
         }
-    }, [currentEmbeddingProvider, embeddingProviders, isModalOpen]);
+    }, [isModalOpen, availableModels, currentEmbeddingProvider, embeddingProviders]);
 
     if (!isModalOpen) return (
         <div className="space-y-8 relative liquid-glass aurora min-h-[calc(100dvh-6rem)] md:min-h-[calc(100vh-6rem)] pb-12">
@@ -206,7 +219,20 @@ export default function AIAgentsPage() {
 
                 <div className="flex items-center gap-4">
                     <button
-                        onClick={() => openModal({ name: '', modelId: 'gpt-4o-mini', temperature: 0.7, isActive: true, embeddingProvider: 'native', embeddingModel: 'Xenova/all-MiniLM-L6-v2' })}
+                        onClick={() => {
+                            const defaultModel = availableModels[0]?.models[0]?.id || 'gpt-4o-mini';
+                            const defaultEmbProv = embeddingProviders[0]?.id || 'native';
+                            const defaultEmbModel = embeddingProviders[0]?.models[0]?.id || 'Xenova/all-MiniLM-L6-v2';
+
+                            openModal({
+                                name: '',
+                                modelId: defaultModel,
+                                temperature: 0.7,
+                                isActive: true,
+                                embeddingProvider: defaultEmbProv,
+                                embeddingModel: defaultEmbModel
+                            });
+                        }}
                         className="flex items-center gap-3 px-8 py-4 bg-primary text-white rounded-[1.5rem] shadow-2xl shadow-primary/30 transition-all active:scale-95 font-bold text-xs uppercase tracking-widest group"
                     >
                         <Plus className="h-5 w-5 group-hover:rotate-90 transition-transform" />
