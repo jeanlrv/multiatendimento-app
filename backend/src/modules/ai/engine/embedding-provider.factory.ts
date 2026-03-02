@@ -247,19 +247,25 @@ export class EmbeddingProviderFactory implements OnModuleInit {
                     env.allowRemoteModels = true;
                     (env as any).remoteHost = 'https://huggingface.co';
 
-                    // Otimização agressiva do runtime ONNX WASM para instâncias 512MB RAM (Ex: Railway Starter) 
-                    // Isso corta drasticamente o consumo de memória, prevenindo crashes 502 (OOM - Out of Memory)
+                    // Otimização agressiva do runtime ONNX WASM para instâncias em Alpine Linux (Railway)
+                    // A biblioteca nativa C++ do ONNX WASM (Ort) crasha ('Ort::Exception') se threads ou SIMD
+                    // falham ao inicializar num container restrito. Garantimos fallback seguro.
                     if (env.backends && env.backends.onnx) {
+                        // Desativar threads estritamente
                         env.backends.onnx.wasm.numThreads = 1;
-                        env.backends.onnx.wasm.proxy = false;
-                        env.backends.onnx.gpu = false;
+
+                        // Estas flags evitam que o bind WebAssembly tente invocar instruções vetoriais não suportadas
+                        env.backends.onnx.wasm.simd = false;
                         if ((env.backends.onnx.wasm as any).wasmFeatures) {
                             (env.backends.onnx.wasm as any).wasmFeatures.simd = false;
                         }
-                        (env.backends.onnx.wasm as any).simd = false;
 
-                        // Adição crucial para limitar o uso de memória WASM (se exposto pelo runtime)
-                        // A biblioteca subjacente 'onnxruntime-web' pode alocar toda RAM se não capada nestes exports
+                        env.backends.onnx.wasm.proxy = false;
+                        env.backends.onnx.gpu = false;
+
+                        // Se existe a flag executionProviders, forçamos 'wasm' plano
+                        (env.backends.onnx as any).executionProviders = ['wasm'];
+
                         (env.backends.onnx as any).logLevel = 'warning';
                     }
 
