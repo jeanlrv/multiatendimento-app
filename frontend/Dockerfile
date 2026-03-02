@@ -13,7 +13,8 @@ ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_WS_URL=$NEXT_PUBLIC_WS_URL
 ENV BACKEND_URL=$BACKEND_URL
 ENV BACKEND_INTERNAL_URL=$BACKEND_INTERNAL_URL
-ENV NODE_OPTIONS="--max-old-space-size=4096"
+# O Front-end consome muito menos memória, mas no Hobby plan temos 8GB. Aumentando para 6GB de teto
+ENV NODE_OPTIONS="--max-old-space-size=6144"
 
 COPY package*.json ./
 RUN npm ci --legacy-peer-deps

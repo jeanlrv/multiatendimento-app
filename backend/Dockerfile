@@ -25,6 +25,9 @@ RUN npm run build
 # Stage 2 - Production
 FROM node:22-alpine
 
+# Definir limite de memória elevado (6GB) para o plano Hobby do Railway
+ENV NODE_OPTIONS="--max-old-space-size=6144"
+
 # Instalar dependências de runtime
 RUN apk add --no-cache openssl libc6-compat curl netcat-openbsd
 

@@ -146,10 +146,22 @@ export class KnowledgeService {
             // S3 indisponível: ler conteúdo do arquivo diretamente para rawContent
             // Isso evita depender do /tmp/ efêmero em containers (Railway, Docker, etc.)
             try {
-                const buffer = fs.readFileSync(file.path);
-                // O PostgreSQL (e o Prisma) falham violentamente ao tentar salvar strings com caractere NUL (0x00).
-                // Precisamos remover os nulos antes de persistir no banco de dados.
-                rawContent = buffer.toString('utf-8').replace(/\0/g, '').substring(0, 500000); // limite de 500k chars
+                // Abre o arquivo e lê em um buffer menor em vez de colocar na memória (até 500k chars ~ 500KB)
+                const MAX_READ_BYTES = 500000;
+                const fd = fs.openSync(file.path, 'r');
+                const stat = fs.statSync(file.path);
+                const bytesToRead = Math.min(stat.size, MAX_READ_BYTES);
+
+                if (bytesToRead > 0) {
+                    const buffer = Buffer.alloc(bytesToRead);
+                    fs.readSync(fd, buffer, 0, bytesToRead, 0);
+                    // O PostgreSQL (e o Prisma) falham violentamente ao tentar salvar strings com caractere NUL (0x00).
+                    // Precisamos remover os nulos antes de persistir no banco de dados.
+                    rawContent = buffer.toString('utf-8').replace(/\0/g, '');
+                } else {
+                    rawContent = '';
+                }
+                fs.closeSync(fd);
             } catch (readErr) {
                 this.logger.error(`Falha ao ler arquivo local: ${readErr.message}`);
             }

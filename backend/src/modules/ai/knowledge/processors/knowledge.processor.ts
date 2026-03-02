@@ -74,32 +74,46 @@ export class KnowledgeProcessor extends WorkerHost {
             // Validação antecipada removida. Deletada pois a responsabilidade de falhar
             // caso a chave seja inválida ou ausente é do factory/provider no momento da criação/chamada.
 
-            // Gera embeddings e acumula dados para inserção em lote
-            const chunkData: { documentId: string; content: string; embedding?: any }[] = [];
+            // processamento em lotes para economizar memória (batch de 50 chunks)
+            const BATCH_SIZE = 50;
+            let processedCount = 0;
+            const chunkCount = chunks.length;
 
-            for (const content of chunks) {
-                let embedding: number[] | null = null;
-                try {
-                    embedding = await this.vectorStore.generateEmbedding(
-                        content, embeddingProvider, embeddingModel, embeddingApiKey, embeddingBaseUrl
-                    );
-                } catch (embErr) {
-                    throw new Error(
-                        `Falha ao gerar embedding com provider '${embeddingProvider}': ${embErr.message}. ` +
-                        `Verifique as configurações em Integrações ou IA & Modelos e tente reprocessar.`
-                    );
+            for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
+                const batchChunks = chunks.slice(i, i + BATCH_SIZE);
+                const chunkData: { documentId: string; content: string; embedding?: any }[] = [];
+
+                for (const content of batchChunks) {
+                    let embedding: number[] | null = null;
+                    try {
+                        embedding = await this.vectorStore.generateEmbedding(
+                            content, embeddingProvider, embeddingModel, embeddingApiKey, embeddingBaseUrl
+                        );
+                    } catch (embErr) {
+                        throw new Error(
+                            `Falha ao gerar embedding com provider '${embeddingProvider}': ${embErr.message}. ` +
+                            `Verifique as configurações em Integrações ou IA & Modelos e tente reprocessar.`
+                        );
+                    }
+
+                    chunkData.push({
+                        documentId,
+                        content,
+                        embedding: embedding && embedding.length > 0 ? (embedding as any) : undefined,
+                    });
                 }
 
-                chunkData.push({
-                    documentId,
-                    content,
-                    embedding: embedding && embedding.length > 0 ? (embedding as any) : undefined,
-                });
-            }
+                // Insere lote atual no banco
+                if (chunkData.length > 0) {
+                    await (this.prisma as any).documentChunk.createMany({ data: chunkData });
+                    processedCount += chunkData.length;
 
-            // Insere todos os chunks em uma única query (createMany)
-            await (this.prisma as any).documentChunk.createMany({ data: chunkData });
-            const chunkCount = chunkData.length;
+                    this.logger.log(`Documento ${documentId} - lote inserido: ${processedCount}/${chunkCount} chunks.`);
+
+                    // Pequeno respiro para o Event Loop / Garbage Collector
+                    await new Promise(resolve => setTimeout(resolve, 50));
+                }
+            }
 
             // 6. Finaliza documento
             await (this.prisma as any).document.update({
