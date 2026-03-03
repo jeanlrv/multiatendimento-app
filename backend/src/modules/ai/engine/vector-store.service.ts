@@ -118,14 +118,20 @@ export class VectorStoreService {
             return cachedRag.results;
         }
 
+        let queryEmbedding: number[] | null = null;
         try {
-            // 1. Gera embedding da query (com cache de 24h)
-            const queryEmbedding = await this.generateEmbedding(queryText, embeddingProvider, embeddingModel, apiKeyOverride, baseUrlOverride);
+            // 1. Tenta gerar embedding da query (fallback flexivo)
+            queryEmbedding = await this.generateEmbedding(queryText, embeddingProvider, embeddingModel, apiKeyOverride, baseUrlOverride);
+        } catch (err: any) {
+            this.logger.warn(`[VectorStore] Falha ao gerar embedding da query: ${err.message}. RAG usará apenas FTS.`);
+        }
 
+        try {
             // Sanitiza o idioma para evitar SQL injection (só letras minúsculas)
             const safeLang = /^[a-z]+$/.test(language) ? language : 'portuguese';
 
             // 2. Busca candidatos usando Full-Text Search (TSVector) — nativo do Postgres
+            // Funciona perfeitamente mesmo sem existir 'embedding' gerado (chunk.embedding IS NULL)
             let candidates: any[];
 
             if (knowledgeBaseId) {
@@ -145,7 +151,6 @@ export class VectorStoreService {
                       JOIN documents doc ON doc.id = chunk."documentId"
                       WHERE doc.status = 'READY'
                         AND doc."knowledgeBaseId" = ${knowledgeBaseId}
-                        AND chunk.embedding IS NOT NULL
                     )
                     SELECT * FROM fts_results 
                     WHERE text_score > 0
@@ -170,7 +175,6 @@ export class VectorStoreService {
                       JOIN knowledge_bases kb ON kb.id = doc."knowledgeBaseId"
                       WHERE doc.status = 'READY'
                         AND kb."companyId" = ${companyId}
-                        AND chunk.embedding IS NOT NULL
                     )
                     SELECT * FROM fts_results 
                     WHERE text_score > 0
@@ -179,9 +183,9 @@ export class VectorStoreService {
                 `;
             }
 
-            // 3. Fallback semântico: se FTS não devolver relevâncias válidas, varrer TODOS os chunks
-            // Como NodeJs tem limite de RAM, pegamos apenas os últimos 500 chunks para cosseno se a base for massiva
-            if (!candidates || candidates.length === 0) {
+            // 3. Fallback semântico: se FTS não devolver relevâncias válidas e existir queryEmbedding,
+            // varrer TODOS os chunks vetorizados (aqui exigimos que chunk.embedding NOT NULL)
+            if ((!candidates || candidates.length === 0) && queryEmbedding) {
                 this.logger.debug('[VectorStore] FTS sem resultados exatos (> 0) — usando fallback semântico.');
                 const rawChunks = await prisma.documentChunk.findMany({
                     where: {
@@ -192,7 +196,7 @@ export class VectorStoreService {
                         embedding: { not: null },
                     },
                     include: { document: { select: { title: true } } },
-                    // Sem orderBy arbitrário — a ordenação será pelo vectorScore abaixo
+                    take: 500, // Limite de varredura massiva
                 });
                 candidates = rawChunks.map((c: any) => ({
                     ...c,
@@ -201,24 +205,35 @@ export class VectorStoreService {
                 }));
             }
 
-            // 4. Calcula similaridade de cosseno em Node.js
-            const scored = candidates.map((c: any) => {
-                const chunkEmbedding = typeof c.embedding === 'string' ? JSON.parse(c.embedding) : c.embedding;
-                const vectorScore = cosineSimilarity(queryEmbedding, chunkEmbedding as number[]);
-                const hybridScore = (0.7 * vectorScore) + (0.3 * (c.text_score || 0));
+            // Se ainda não tiver resultados (FTS vazio e semântico pulado/vazio)
+            if (!candidates || candidates.length === 0) return [];
+
+            // 4. Calcula similaridade de cosseno combinada com FTS + Semântico
+            // Chunks vindos do FTS que não tiverem embedding ganharão vector_score = 0, priorizando o `text_score`.
+            const scoredChunks = candidates.map(chunk => {
+                let vectorScore = 0;
+                const chunkEmbedding = typeof chunk.embedding === 'string' ? JSON.parse(chunk.embedding) : chunk.embedding;
+                if (queryEmbedding && chunkEmbedding && Array.isArray(chunkEmbedding)) {
+                    vectorScore = cosineSimilarity(queryEmbedding, chunkEmbedding as number[]);
+                }
+
+                // Score = (FTS rank escalonado para peso 0.4) + (Cosine Similarity peso 0.6)
+                // Se o vector for 0 (por falta de embedding), o rankText se salva.
+                const finalScore = (chunk.text_score * 0.4) + (vectorScore * 0.6);
+
                 return {
-                    content: c.content as string,
-                    score: hybridScore,
-                    documentId: c.documentId as string,
-                    documentTitle: c.documentTitle as string | undefined,
+                    content: chunk.content as string,
+                    score: finalScore,
+                    documentId: chunk.documentId as string,
+                    documentTitle: chunk.documentTitle as string | undefined,
                 };
             });
 
             // 5. Ordena por score decrescente
-            scored.sort((a, b) => b.score - a.score);
+            scoredChunks.sort((a, b) => b.score - a.score);
 
             // 6. Filtra chunks abaixo do threshold de relevância
-            const relevant = scored.filter(r => r.score >= threshold);
+            const relevant = scoredChunks.filter(r => r.score >= threshold);
 
             // 7. Deduplicação: remove chunks semanticamente similares entre si (>0.92)
             const deduplicated: typeof relevant = [];
