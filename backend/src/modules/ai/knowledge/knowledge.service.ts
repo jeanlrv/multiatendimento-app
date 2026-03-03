@@ -341,7 +341,9 @@ export class KnowledgeService {
         });
 
         if (!doc) throw new NotFoundException('Documento não encontrado');
-        if (!doc.contentUrl) throw new BadRequestException('Documento não possui arquivo físico (ex: fonte de texto/URL)');
+        if (!doc.contentUrl && !doc.rawContent) {
+            throw new BadRequestException('Documento não possui arquivo físico ou texto extraído para download');
+        }
 
         return doc;
     }
@@ -350,12 +352,11 @@ export class KnowledgeService {
         const docs = await (this.prisma as any).document.findMany({
             where: {
                 id: { in: documentIds },
-                knowledgeBase: { companyId },
-                contentUrl: { not: null }
+                knowledgeBase: { companyId }
             }
         });
 
-        if (docs.length === 0) throw new BadRequestException('Nenhum documento com arquivo físico selecionado');
+        if (docs.length === 0) throw new BadRequestException('Nenhum documento encontrado');
 
         const JSZip = require('jszip');
         const zip = new JSZip();
@@ -364,18 +365,24 @@ export class KnowledgeService {
 
         for (const doc of docs) {
             try {
-                let fileData: Buffer;
-                if (doc.contentUrl.startsWith('http')) {
+                let fileData: Buffer | null = null;
+                let fileName = doc.title;
+
+                if (doc.contentUrl && doc.contentUrl.startsWith('http')) {
                     const response = await axios.get(doc.contentUrl, { responseType: 'arraybuffer' });
                     fileData = Buffer.from(response.data);
-                } else {
+                } else if (doc.contentUrl) {
                     if (fs.existsSync(doc.contentUrl)) {
                         fileData = fs.readFileSync(doc.contentUrl);
-                    } else {
-                        continue;
                     }
+                } else if (doc.rawContent) {
+                    fileData = Buffer.from(doc.rawContent, 'utf-8');
+                    fileName = `${doc.title}.txt`;
                 }
-                zip.file(doc.title, fileData);
+
+                if (fileData) {
+                    zip.file(fileName, fileData);
+                }
             } catch (error) {
                 this.logger.error(`Erro ao adicionar arquivo ${doc.title} ao ZIP: ${error.message}`);
             }

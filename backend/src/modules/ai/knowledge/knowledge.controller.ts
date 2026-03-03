@@ -99,17 +99,22 @@ export class KnowledgeController {
     async downloadDocument(@Req() req: any, @Param('id') id: string, @Res() res: any) {
         const doc = await this.knowledgeService.getDocumentFile(req.user.companyId, id);
 
-        if (doc.contentUrl.startsWith('http')) {
-            // Se for S3, redirecionar para a URL (ou poderíamos fazer stream se fosse privado, 
-            // mas aqui assume-se acessível ou o usuário quer a URL)
+        if (doc.contentUrl && doc.contentUrl.startsWith('http')) {
             return res.redirect(doc.contentUrl);
-        } else {
+        } else if (doc.contentUrl) {
             // Se for arquivo local
             const fs = require('fs');
             if (!fs.existsSync(doc.contentUrl)) {
                 return res.status(404).json({ message: 'Arquivo físico não encontrado no servidor' });
             }
             return res.download(doc.contentUrl, doc.title);
+        } else if (doc.rawContent) {
+            // Fallback para o texto extraído caso o arquivo tenha sido processado só em memória
+            res.setHeader('Content-Type', 'text/plain');
+            res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(doc.title)}.txt"`);
+            return res.send(doc.rawContent);
+        } else {
+            return res.status(404).json({ message: 'Documento não possui arquivo físico ou texto extraído para download.' });
         }
     }
 
