@@ -446,7 +446,9 @@ export class AIService {
                     kb?.language || 'portuguese',
                 );
                 context = chunks.map(c => c.content).join('\n---\n');
-                this.logger.debug(`[RAG] ${chunks.length} chunks retornados para contexto.`);
+                this.logger.log(`[RAG] ${chunks.length} chunks retornados para contexto na KB ${agent.knowledgeBaseId}.`);
+            } else {
+                this.logger.log(`[RAG] Ignorado. Agente ${agent.name} não possui knowledgeBaseId configurado.`);
             }
 
             // Overflow guard: trunca RAG se context window exceder limite do modelo
