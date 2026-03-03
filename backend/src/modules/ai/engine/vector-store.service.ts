@@ -130,50 +130,59 @@ export class VectorStoreService {
 
             if (knowledgeBaseId) {
                 candidates = await prisma.$queryRaw`
-                    SELECT
-                        chunk.id,
-                        chunk.content,
-                        chunk.embedding,
-                        chunk."documentId",
-                        doc.title as "documentTitle",
-                        ts_rank_cd(
-                            to_tsvector(${safeLang}::regconfig, chunk.content),
-                            plainto_tsquery(${safeLang}::regconfig, ${queryText})
-                        ) AS text_score
-                    FROM document_chunks chunk
-                    JOIN documents doc ON doc.id = chunk."documentId"
-                    WHERE doc.status = 'READY'
-                      AND doc."knowledgeBaseId" = ${knowledgeBaseId}
-                      AND chunk.embedding IS NOT NULL
+                    WITH fts_results AS (
+                      SELECT
+                          chunk.id,
+                          chunk.content,
+                          chunk.embedding,
+                          chunk."documentId",
+                          doc.title as "documentTitle",
+                          ts_rank_cd(
+                              to_tsvector(${safeLang}::regconfig, chunk.content),
+                              plainto_tsquery(${safeLang}::regconfig, ${queryText})
+                          ) AS text_score
+                      FROM document_chunks chunk
+                      JOIN documents doc ON doc.id = chunk."documentId"
+                      WHERE doc.status = 'READY'
+                        AND doc."knowledgeBaseId" = ${knowledgeBaseId}
+                        AND chunk.embedding IS NOT NULL
+                    )
+                    SELECT * FROM fts_results 
+                    WHERE text_score > 0
                     ORDER BY text_score DESC
                     LIMIT 100;
                 `;
             } else {
                 candidates = await prisma.$queryRaw`
-                    SELECT
-                        chunk.id,
-                        chunk.content,
-                        chunk.embedding,
-                        chunk."documentId",
-                        doc.title as "documentTitle",
-                        ts_rank_cd(
-                            to_tsvector(${safeLang}::regconfig, chunk.content),
-                            plainto_tsquery(${safeLang}::regconfig, ${queryText})
-                        ) AS text_score
-                    FROM document_chunks chunk
-                    JOIN documents doc ON doc.id = chunk."documentId"
-                    JOIN knowledge_bases kb ON kb.id = doc."knowledgeBaseId"
-                    WHERE doc.status = 'READY'
-                      AND kb."companyId" = ${companyId}
-                      AND chunk.embedding IS NOT NULL
+                    WITH fts_results AS (
+                      SELECT
+                          chunk.id,
+                          chunk.content,
+                          chunk.embedding,
+                          chunk."documentId",
+                          doc.title as "documentTitle",
+                          ts_rank_cd(
+                              to_tsvector(${safeLang}::regconfig, chunk.content),
+                              plainto_tsquery(${safeLang}::regconfig, ${queryText})
+                          ) AS text_score
+                      FROM document_chunks chunk
+                      JOIN documents doc ON doc.id = chunk."documentId"
+                      JOIN knowledge_bases kb ON kb.id = doc."knowledgeBaseId"
+                      WHERE doc.status = 'READY'
+                        AND kb."companyId" = ${companyId}
+                        AND chunk.embedding IS NOT NULL
+                    )
+                    SELECT * FROM fts_results 
+                    WHERE text_score > 0
                     ORDER BY text_score DESC
                     LIMIT 100;
                 `;
             }
 
-            // 3. Fallback semântico: se FTS retornar vazio, varrer TODOS os chunks por cosine similarity
+            // 3. Fallback semântico: se FTS não devolver relevâncias válidas, varrer TODOS os chunks
+            // Como NodeJs tem limite de RAM, pegamos apenas os últimos 500 chunks para cosseno se a base for massiva
             if (!candidates || candidates.length === 0) {
-                this.logger.debug('[VectorStore] FTS sem resultados — usando fallback semântico completo');
+                this.logger.debug('[VectorStore] FTS sem resultados exatos (> 0) — usando fallback semântico.');
                 const rawChunks = await prisma.documentChunk.findMany({
                     where: {
                         document: {

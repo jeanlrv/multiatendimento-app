@@ -263,4 +263,17 @@ export class AIController {
     getNotificationStats(@Req() req: any) {
         return this.notificationService.getNotificationStats(req.user.companyId);
     }
+
+    @Get('debug-knowledge')
+    @Public()
+    @ApiOperation({ summary: 'Endpoint provisório para depurar estado da Base de Conhecimento RAG' })
+    async debugDataTest() {
+        try {
+            const listAgents = await (this.aiService as any).prisma.aIAgent.findMany({ select: { id: true, name: true, knowledgeBaseId: true } });
+            return listAgents;
+        } catch (e) {
+            return { error: e.message };
+        }
+    }
 }
+
