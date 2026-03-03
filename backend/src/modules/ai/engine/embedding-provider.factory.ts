@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Embeddings } from '@langchain/core/embeddings';
 import { OpenAIEmbeddings } from '@langchain/openai';
+import { ChildProcess } from 'child_process';
 
 export interface EmbeddingModelConfig {
     id: string;
@@ -100,8 +101,6 @@ export const EMBEDDING_PROVIDERS: EmbeddingProviderConfig[] = [
     },
 ];
 
-// Cache singleton de pipelines nativos para evitar recarregamento a cada chamada
-const nativePipelineCache = new Map<string, Promise<any>>();
 
 @Injectable()
 export class EmbeddingProviderFactory implements OnModuleInit {
@@ -233,86 +232,119 @@ export class EmbeddingProviderFactory implements OnModuleInit {
         });
     }
 
-    private createNativeEmbeddings(model: string): Embeddings {
-        // Retorna um wrapper LangChain que reutiliza o pipeline em cache
-        const getExtractor = async (): Promise<any> => {
-            if (!nativePipelineCache.has(model)) {
-                const startTime = Date.now();
-                this.logger.log(`[NativeEmbed] Carregando pipeline '${model}' sob demanda...`);
-                try {
-                    const { pipeline, env } = await import('@xenova/transformers');
+    private nativeWorkerProcess: ChildProcess | null = null;
+    private nativeWorkerModel: string | null = null;
+    private pendingEmbedRequests = new Map<string, { resolve: (v: number[][]) => void; reject: (e: Error) => void }>();
 
-                    env.allowLocalModels = false;
-                    env.useBrowserCache = false;
-                    env.allowRemoteModels = true;
-                    (env as any).remoteHost = 'https://huggingface.co';
+    /**
+     * Retorna (ou cria) um processo filho dedicado ao embedding nativo.
+     * O processo é reutilizado entre chamadas para manter o modelo em cache.
+     * Se o processo morrer (OOM/crash), ele é recriado na próxima chamada.
+     */
+    private getNativeWorker(model: string): ChildProcess {
+        // Reutilizar worker existente se o modelo for o mesmo e o processo estiver vivo
+        if (this.nativeWorkerProcess && !this.nativeWorkerProcess.killed && this.nativeWorkerModel === model) {
+            return this.nativeWorkerProcess;
+        }
 
-                    // Otimização agressiva do runtime ONNX WASM para instâncias em Alpine Linux (Railway)
-                    // A biblioteca nativa C++ do ONNX WASM (Ort) crasha ('Ort::Exception') se threads ou SIMD
-                    // falham ao inicializar num container restrito. Garantimos fallback seguro.
-                    if (env.backends && env.backends.onnx) {
-                        // Desativar threads estritamente
-                        env.backends.onnx.wasm.numThreads = 1;
+        // Encerrar worker anterior se existir com modelo diferente
+        if (this.nativeWorkerProcess && !this.nativeWorkerProcess.killed) {
+            try { this.nativeWorkerProcess.send({ type: 'exit' }); } catch { /* ignore */ }
+            this.nativeWorkerProcess = null;
+        }
 
-                        // Estas flags evitam que o bind WebAssembly tente invocar instruções vetoriais não suportadas
-                        env.backends.onnx.wasm.simd = false;
-                        if ((env.backends.onnx.wasm as any).wasmFeatures) {
-                            (env.backends.onnx.wasm as any).wasmFeatures.simd = false;
-                        }
+        // Caminho do worker compilado em dist/ (copiado pelo nest-cli assets)
+        const workerPath = require('path').join(__dirname, 'embedding.worker.js');
+        this.logger.log(`[NativeEmbed] Criando processo filho de embedding: ${workerPath} (modelo: ${model})`);
 
-                        env.backends.onnx.wasm.proxy = false;
-                        env.backends.onnx.gpu = false;
+        const worker = require('child_process').fork(workerPath, [], {
+            silent: false, // herdar stdout/stderr para aparecer nos logs do Railway
+            execArgv: ['--max-old-space-size=512'], // limite de RAM do processo filho
+        }) as ChildProcess;
 
-                        // Se existe a flag executionProviders, forçamos 'wasm' plano
-                        (env.backends.onnx as any).executionProviders = ['wasm'];
+        worker.on('message', (msg: any) => {
+            if (!msg || !msg.type) return;
 
-                        (env.backends.onnx as any).logLevel = 'warning';
-                    }
-
-                    const p = pipeline('feature-extraction', model, {
-                        quantized: true,
-                    });
-
-                    nativePipelineCache.set(model, p);
-
-                    const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-                    this.logger.log(`[NativeEmbed] Pipeline '${model}' carregado com sucesso em ${duration}s`);
-                } catch (error) {
-                    this.logger.error(`[NativeEmbed] Falha fatal ao carregar pipeline nativo: ${error.message}`);
-                    nativePipelineCache.delete(model);
-                    throw new Error(`Modelo de embedding nativo indisponível: ${error.message}`);
-                }
+            if (msg.type === 'log') {
+                if (msg.level === 'info') this.logger.log(msg.message);
+                else if (msg.level === 'warn') this.logger.warn(msg.message);
+                else this.logger.error(msg.message);
+                return;
             }
-            return nativePipelineCache.get(model)!;
-        };
 
+            if (msg.type === 'ready') {
+                this.logger.log(`[NativeEmbed] Worker pronto (pid ${worker.pid})`);
+                return;
+            }
+
+            const pending = this.pendingEmbedRequests.get(msg.id);
+            if (!pending) return;
+            this.pendingEmbedRequests.delete(msg.id);
+
+            if (msg.type === 'result') {
+                pending.resolve(msg.embeddings);
+            } else if (msg.type === 'error') {
+                pending.reject(new Error(msg.message));
+            }
+        });
+
+        worker.on('exit', (code, signal) => {
+            this.logger.warn(`[NativeEmbed] Worker encerrado (code=${code}, signal=${signal})`);
+            // Rejeitar todas as requisições pendentes
+            for (const [id, pending] of this.pendingEmbedRequests) {
+                pending.reject(new Error('Worker de embedding encerrado inesperadamente'));
+                this.pendingEmbedRequests.delete(id);
+            }
+            // Limpar referência para que a próxima chamada crie um novo worker
+            if (this.nativeWorkerProcess === worker) this.nativeWorkerProcess = null;
+        });
+
+        worker.on('error', (err) => {
+            this.logger.error(`[NativeEmbed] Erro no worker: ${err.message}`);
+        });
+
+        this.nativeWorkerProcess = worker;
+        this.nativeWorkerModel = model;
+        return worker;
+    }
+
+    private createNativeEmbeddings(model: string): Embeddings {
         return {
             embedDocuments: async (docs: string[]): Promise<number[][]> => {
-                try {
-                    const extractor = await getExtractor();
-                    const embeddings: number[][] = [];
-                    for (const text of docs) {
-                        const output = await extractor(text, { pooling: 'mean', normalize: true });
-                        embeddings.push(Array.from(output.data as Float32Array));
-                    }
-                    return embeddings;
-                } catch (error) {
-                    this.logger.error(`[NativeEmbed] Erro ao gerar embeddings de documentos: ${error.message}`);
-                    throw error;
-                }
+                return this.runInNativeWorker(model, docs);
             },
             embedQuery: async (query: string): Promise<number[]> => {
-                try {
-                    const extractor = await getExtractor();
-                    const output = await extractor(query, { pooling: 'mean', normalize: true });
-                    return Array.from(output.data as Float32Array);
-                } catch (error) {
-                    this.logger.error(`[NativeEmbed] Erro ao gerar embedding de query: ${error.message}`);
-                    throw error;
-                }
-            }
+                const results = await this.runInNativeWorker(model, [query]);
+                return results[0];
+            },
         } as Embeddings;
     }
+
+    private runInNativeWorker(model: string, texts: string[]): Promise<number[][]> {
+        return new Promise((resolve, reject) => {
+            const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+            const worker = this.getNativeWorker(model);
+
+            const timeout = setTimeout(() => {
+                this.pendingEmbedRequests.delete(id);
+                reject(new Error(`Timeout (120s) ao gerar embeddings com modelo '${model}'`));
+            }, 120_000);
+
+            this.pendingEmbedRequests.set(id, {
+                resolve: (embeddings) => { clearTimeout(timeout); resolve(embeddings); },
+                reject: (err) => { clearTimeout(timeout); reject(err); },
+            });
+
+            try {
+                worker.send({ type: 'embed', id, model, texts });
+            } catch (err) {
+                this.pendingEmbedRequests.delete(id);
+                clearTimeout(timeout);
+                reject(new Error(`Falha ao enviar mensagem ao worker de embedding: ${err.message}`));
+            }
+        });
+    }
+
 
     /**
      * Retorna todos os providers disponíveis (com base nas env vars configuradas).
