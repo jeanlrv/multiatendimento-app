@@ -286,12 +286,19 @@ export class AIService {
     /**
      * Verifica limites de tokens da empresa (hora, dia, total).
      * Lança ForbiddenException se algum limite for atingido.
+     * 0 = Ilimitado.
      */
-    private async checkTokenLimits(companyId: string) {
-        const company = await (this.prisma as any).company.findUnique({
-            where: { id: companyId },
-            select: { limitTokens: true, limitTokensPerHour: true, limitTokensPerDay: true }
-        });
+    private async checkTokenLimits(companyId: string, agentId?: string) {
+        const [company, agent] = await Promise.all([
+            (this.prisma as any).company.findUnique({
+                where: { id: companyId },
+                select: { limitTokens: true, limitTokensPerHour: true, limitTokensPerDay: true }
+            }),
+            agentId ? (this.prisma as any).aIAgent.findUnique({
+                where: { id: agentId },
+                select: { limitTokensPerDay: true }
+            }) : null
+        ]);
 
         if (!company) return;
 
@@ -318,12 +325,23 @@ export class AIService {
         const dailyTokens = dailyUsage._sum.tokens || 0;
         const totalTokensUsed = totalTokens._sum.tokens || 0;
 
+        // Regra "0 = Ilimitado" em todos os campos
         if (company.limitTokensPerHour > 0 && hourlyTokens >= company.limitTokensPerHour) {
             throw new ForbiddenException(`Limite de tokens por hora atingido (${company.limitTokensPerHour}). Tente novamente mais tarde.`);
         }
-        if (company.limitTokensPerDay > 0 && dailyTokens >= company.limitTokensPerDay) {
-            throw new ForbiddenException(`Limite de tokens por dia atingido (${company.limitTokensPerDay}). Tente novamente amanhã.`);
+
+        // Verifica o limite diário (menor entre Agente e Empresa, se > 0)
+        let effectiveDayLimit = company.limitTokensPerDay;
+        if (agent && agent.limitTokensPerDay > 0) {
+            effectiveDayLimit = (effectiveDayLimit > 0)
+                ? Math.min(effectiveDayLimit, agent.limitTokensPerDay)
+                : agent.limitTokensPerDay;
         }
+
+        if (effectiveDayLimit > 0 && dailyTokens >= effectiveDayLimit) {
+            throw new ForbiddenException(`Limite de tokens por dia atingido (${effectiveDayLimit}). Tente novamente amanhã.`);
+        }
+
         if (company.limitTokens > 0 && totalTokensUsed >= company.limitTokens) {
             throw new ForbiddenException(`Limite total de tokens de IA atingido (${company.limitTokens}). Entre em contato com o suporte.`);
         }
@@ -348,7 +366,7 @@ export class AIService {
         }
 
         try {
-            await this.checkTokenLimits(companyId);
+            await this.checkTokenLimits(companyId, agentId);
             // Fase 5: Semantic Cache (Interceptação por Vector)
             let promptEmbedding: number[] = [];
             try {
@@ -534,7 +552,7 @@ export class AIService {
             throw new NotFoundException('Agente não encontrado ou inativo');
         }
 
-        await this.checkTokenLimits(companyId);
+        await this.checkTokenLimits(companyId, agentId);
 
         try {
             // Fase 5: Semantic Cache (Apenas aplicável se não houver imagens na rodada)
