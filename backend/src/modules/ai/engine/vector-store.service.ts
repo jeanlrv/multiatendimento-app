@@ -131,7 +131,17 @@ export class VectorStoreService {
             const safeLang = /^[a-z]+$/.test(language) ? language : 'portuguese';
 
             // 2. Busca candidatos usando Full-Text Search (TSVector) — nativo do Postgres
-            // Funciona perfeitamente mesmo sem existir 'embedding' gerado (chunk.embedding IS NULL)
+            // Transforma "onde lanço nf" -> "onde | lanço | nf" (OR relaxado, porque plainto_tsquery usa AND rígido)
+            const orQueryText = queryText
+                .replace(/[^\w\s\u00C0-\u00FF]/g, '')
+                .trim()
+                .split(/\s+/)
+                .filter(w => w.length > 2) // ignorar 'de', 'a', 'o', 'do'
+                .join(' | ');
+
+            // Fallback caso usuário digite só preposições (ex: 'de')
+            const finalTsQuery = orQueryText.length > 0 ? orQueryText : queryText.replace(/[^\w\s]/g, '');
+
             let candidates: any[];
 
             if (knowledgeBaseId) {
@@ -145,7 +155,7 @@ export class VectorStoreService {
                           doc.title as "documentTitle",
                           ts_rank_cd(
                               to_tsvector(${safeLang}::regconfig, chunk.content),
-                              plainto_tsquery(${safeLang}::regconfig, ${queryText})
+                              to_tsquery(${safeLang}::regconfig, ${finalTsQuery})
                           ) AS text_score
                       FROM document_chunks chunk
                       JOIN documents doc ON doc.id = chunk."documentId"
@@ -168,7 +178,7 @@ export class VectorStoreService {
                           doc.title as "documentTitle",
                           ts_rank_cd(
                               to_tsvector(${safeLang}::regconfig, chunk.content),
-                              plainto_tsquery(${safeLang}::regconfig, ${queryText})
+                              to_tsquery(${safeLang}::regconfig, ${finalTsQuery})
                           ) AS text_score
                       FROM document_chunks chunk
                       JOIN documents doc ON doc.id = chunk."documentId"
@@ -212,14 +222,26 @@ export class VectorStoreService {
             // Chunks vindos do FTS que não tiverem embedding ganharão vector_score = 0, priorizando o `text_score`.
             const scoredChunks = candidates.map(chunk => {
                 let vectorScore = 0;
+                let hasVector = false;
+
                 const chunkEmbedding = typeof chunk.embedding === 'string' ? JSON.parse(chunk.embedding) : chunk.embedding;
                 if (queryEmbedding && chunkEmbedding && Array.isArray(chunkEmbedding)) {
                     vectorScore = cosineSimilarity(queryEmbedding, chunkEmbedding as number[]);
+                    hasVector = true;
                 }
 
                 // Score = (FTS rank escalonado para peso 0.4) + (Cosine Similarity peso 0.6)
-                // Se o vector for 0 (por falta de embedding), o rankText se salva.
-                const finalScore = (chunk.text_score * 0.4) + (vectorScore * 0.6);
+                // Se o chunk não possui vetor (fallback do pipeline), o FTS Score assume 100% da nota
+                // para não ser injustamente reprovado no limiar (Threshold) de 0.2.
+                // Ajustamos text_score para garantir que passe do threshold se for um match razoável.
+                let finalScore = 0;
+                if (hasVector) {
+                    finalScore = (chunk.text_score * 0.4) + (vectorScore * 0.6);
+                } else {
+                    // O PostgreSQL rankeia o ts_rank_cd normalmente de 0.001 a 1.0. 
+                    // Se for maior que 0.05 já é um match viável textual, normalizamos para facilitar aprovação:
+                    finalScore = chunk.text_score > 0.01 ? Math.max(0.25, chunk.text_score) : chunk.text_score;
+                }
 
                 return {
                     content: chunk.content as string,
