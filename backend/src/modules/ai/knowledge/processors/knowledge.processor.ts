@@ -74,10 +74,11 @@ export class KnowledgeProcessor extends WorkerHost {
             // Validação antecipada removida. Deletada pois a responsabilidade de falhar
             // caso a chave seja inválida ou ausente é do factory/provider no momento da criação/chamada.
 
-            // processamento em lotes para economizar memória (batch de 50 chunks)
             const BATCH_SIZE = 50;
             let processedCount = 0;
             const chunkCount = chunks.length;
+            let embeddingFailed = false;
+            let embeddingFailReason = '';
 
             for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
                 const batchChunks = chunks.slice(i, i + BATCH_SIZE);
@@ -85,15 +86,23 @@ export class KnowledgeProcessor extends WorkerHost {
 
                 for (const content of batchChunks) {
                     let embedding: number[] | null = null;
-                    try {
-                        embedding = await this.vectorStore.generateEmbedding(
-                            content, embeddingProvider, embeddingModel, embeddingApiKey, embeddingBaseUrl
-                        );
-                    } catch (embErr) {
-                        throw new Error(
-                            `Falha ao gerar embedding com provider '${embeddingProvider}': ${embErr.message}. ` +
-                            `Verifique as configurações em Integrações ou IA & Modelos e tente reprocessar.`
-                        );
+
+                    if (!embeddingFailed) {
+                        try {
+                            embedding = await this.vectorStore.generateEmbedding(
+                                content, embeddingProvider, embeddingModel, embeddingApiKey, embeddingBaseUrl
+                            );
+                        } catch (embErr) {
+                            // Tolerância a falha: salva chunk sem embedding em vez de crashar o job.
+                            // O documento ficará READY e buscável via Full-Text Search (FTS).
+                            // O usuário pode reprocessar após configurar um provider externo.
+                            embeddingFailed = true;
+                            embeddingFailReason = embErr.message;
+                            this.logger.warn(
+                                `[Processor] Falha ao gerar embedding com provider '${embeddingProvider}'. ` +
+                                `Documento será salvo SEM vetorização (apenas FTS). Erro: ${embErr.message}`
+                            );
+                        }
                     }
 
                     chunkData.push({
@@ -107,10 +116,7 @@ export class KnowledgeProcessor extends WorkerHost {
                 if (chunkData.length > 0) {
                     await (this.prisma as any).documentChunk.createMany({ data: chunkData });
                     processedCount += chunkData.length;
-
                     this.logger.log(`Documento ${documentId} - lote inserido: ${processedCount}/${chunkCount} chunks.`);
-
-                    // Pequeno respiro para o Event Loop / Garbage Collector
                     await new Promise(resolve => setTimeout(resolve, 50));
                 }
             }
@@ -121,12 +127,16 @@ export class KnowledgeProcessor extends WorkerHost {
                 data: {
                     status: 'READY',
                     chunkCount,
-                    rawContent: text.substring(0, 100000), // limite de 100k chars para armazenamento
+                    rawContent: text.substring(0, 100000),
                 },
             });
 
-            this.logger.log(`Documento ${documentId} processado: ${chunkCount} chunks (provider: ${embeddingProvider}).`);
-            return { success: true, chunkCount };
+            if (embeddingFailed) {
+                this.logger.warn(`Documento ${documentId} salvo como READY sem embeddings (apenas FTS). Razão: ${embeddingFailReason}`);
+            } else {
+                this.logger.log(`Documento ${documentId} processado: ${chunkCount} chunks (provider: ${embeddingProvider}).`);
+            }
+            return { success: true, chunkCount, embeddingFailed };
 
         } catch (error) {
             this.logger.error(`Erro ao processar documento ${documentId}: ${error.message}`);
