@@ -8,6 +8,7 @@ import { LLMService } from './engine/llm.service';
 import { VectorStoreService } from './engine/vector-store.service';
 import { ProviderConfigService } from '../settings/provider-config.service';
 import { Observable } from 'rxjs';
+import { v4 as uuidv4 } from 'uuid';
 import axios from 'axios';
 import * as FormData from 'form-data';
 
@@ -43,7 +44,8 @@ export class AIService {
         return (this.prisma as any).aIAgent.create({
             data: {
                 ...data,
-                companyId
+                companyId,
+                embedId: uuidv4()
             }
         });
     }
@@ -66,9 +68,16 @@ export class AIService {
         if (!agent) throw new NotFoundException('Agente não encontrado');
 
         // Spread para plain object — evita problemas de class-transformer passando instância de classe para o Prisma
+        const updateData = { ...data };
+
+        // Se o agente não tiver um embedId ainda, gera um agora
+        if (!agent.embedId) {
+            (updateData as any).embedId = uuidv4();
+        }
+
         return (this.prisma as any).aIAgent.update({
             where: { id },
-            data: { ...data }
+            data: updateData
         });
     }
 
