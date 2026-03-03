@@ -128,56 +128,71 @@ export class KnowledgeService {
         });
         if (!base) throw new NotFoundException('Base de conhecimento não encontrada');
 
-        const fs = require('fs');
         const ext = file.originalname.split('.').pop()?.toLowerCase() || '';
         const sourceType = detectSourceType(ext);
-
-        // Determinar o content type para S3
         const contentType = getMimeType(ext);
 
-        // Tentar upload para S3
         let contentUrl: string | null = null;
         let rawContent: string | null = null;
+
+        // Tentar upload para S3 (usando buffer se disponível, senão path em disco)
         try {
-            contentUrl = await this.s3Service.uploadFile(file.path, file.originalname, contentType);
+            if (file.buffer && file.buffer.length > 0) {
+                // Multer memoryStorage: arquivo está no buffer em memória
+                contentUrl = await this.s3Service.uploadBuffer(file.buffer, file.originalname, contentType);
+            } else if (file.path) {
+                // Multer diskStorage: arquivo está no disco
+                contentUrl = await this.s3Service.uploadFile(file.path, file.originalname, contentType);
+            } else {
+                throw new Error('Arquivo sem conteúdo (buffer e path ambos ausentes)');
+            }
             this.logger.log(`Arquivo enviado ao S3: ${file.originalname}`);
         } catch (error) {
-            this.logger.warn(`Falha ao fazer upload para S3: ${error.message}. Lendo conteúdo para o banco.`);
-            // S3 indisponível: ler conteúdo do arquivo diretamente para rawContent
-            // Isso evita depender do /tmp/ efêmero em containers (Railway, Docker, etc.)
-            try {
-                // Abre o arquivo e lê em um buffer menor em vez de colocar na memória (até 500k chars ~ 500KB)
-                const MAX_READ_BYTES = 500000;
-                const fd = fs.openSync(file.path, 'r');
-                const stat = fs.statSync(file.path);
-                const bytesToRead = Math.min(stat.size, MAX_READ_BYTES);
+            this.logger.warn(`Falha ao fazer upload para S3: ${error.message}. Lendo conteúdo direto.`);
 
-                if (bytesToRead > 0) {
-                    const buffer = Buffer.alloc(bytesToRead);
-                    fs.readSync(fd, buffer, 0, bytesToRead, 0);
-                    // O PostgreSQL (e o Prisma) falham violentamente ao tentar salvar strings com caractere NUL (0x00).
-                    // Precisamos remover os nulos antes de persistir no banco de dados.
-                    rawContent = buffer.toString('utf-8').replace(/\0/g, '');
-                } else {
-                    rawContent = '';
+            // Usar buffer de memória diretamente (memoryStorage do Multer)
+            if (file.buffer && file.buffer.length > 0) {
+                rawContent = file.buffer.toString('utf-8').replace(/\0/g, '').substring(0, 500000);
+                this.logger.log(`Conteúdo lido do buffer em memória: ${file.originalname} (${file.buffer.length} bytes)`);
+            } else if (file.path) {
+                // Fallback: ler do disco (diskStorage com os.tmpdir())
+                const fs = require('fs');
+                try {
+                    const MAX_READ_BYTES = 500000;
+                    const fd = fs.openSync(file.path, 'r');
+                    const stat = fs.statSync(file.path);
+                    const bytesToRead = Math.min(stat.size, MAX_READ_BYTES);
+                    if (bytesToRead > 0) {
+                        const buffer = Buffer.alloc(bytesToRead);
+                        fs.readSync(fd, buffer, 0, bytesToRead, 0);
+                        rawContent = buffer.toString('utf-8').replace(/\0/g, '');
+                    } else {
+                        rawContent = '';
+                    }
+                    fs.closeSync(fd);
+                    this.logger.log(`Conteúdo lido do disco: ${file.path} (${file.size} bytes)`);
+                } catch (readErr) {
+                    this.logger.error(`Falha ao ler arquivo do disco: ${readErr.message}`);
                 }
-                fs.closeSync(fd);
-            } catch (readErr) {
-                this.logger.error(`Falha ao ler arquivo local: ${readErr.message}`);
+            } else {
+                this.logger.error('Arquivo não tem buffer nem path disponível - não foi possível extrair conteúdo');
             }
         }
 
-        // Limpar arquivo temporário sempre
-        try {
-            if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
-        } catch { /* ignore */ }
+        // Limpar arquivo temporário do disco se existir
+        if (file.path) {
+            try {
+                const fs = require('fs');
+                if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
+            } catch { /* ignore */ }
+        }
 
         const document = await (this.prisma as any).document.create({
             data: {
                 title: file.originalname,
                 sourceType,
-                contentUrl, // URL S3 ou null
-                rawContent, // Conteúdo lido do arquivo ou null
+                contentUrl,    // URL S3 ou null
+                rawContent,    // Conteúdo lido em memória ou do disco
                 knowledgeBaseId: baseId,
                 status: 'PENDING',
             },

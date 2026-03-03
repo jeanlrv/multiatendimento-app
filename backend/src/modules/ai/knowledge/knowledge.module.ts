@@ -7,8 +7,7 @@ import { AIEngineModule } from '../engine/ai-engine.module';
 import { DatabaseModule } from '../../../database/database.module';
 import { SettingsModule } from '../../settings/settings.module';
 import { MulterModule } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import * as path from 'path';
+import { memoryStorage } from 'multer';
 
 @Module({
     imports: [
@@ -16,13 +15,10 @@ import * as path from 'path';
         AIEngineModule,
         SettingsModule,
         MulterModule.register({
-            storage: diskStorage({
-                destination: './storage/uploads',
-                filename: (req, file, cb) => {
-                    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-                    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
-                },
-            }),
+            // Usa memoryStorage para evitar dependência de disco em containers (Railway, Docker)
+            // O controller usa seu próprio diskStorage com os.tmpdir() para suportar arquivos grandes
+            storage: memoryStorage(),
+            limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB
         }),
         BullModule.registerQueue({
             name: 'knowledge-processing',
