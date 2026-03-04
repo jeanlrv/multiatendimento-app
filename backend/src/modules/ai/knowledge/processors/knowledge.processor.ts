@@ -221,7 +221,12 @@ export class KnowledgeProcessor extends WorkerHost {
                 if (!contentUrl) throw new Error('PDF requer contentUrl');
                 const buffer = await this.getContentBuffer(contentUrl);
                 const pdf = require('pdf-parse');
-                const pdfData = await pdf(buffer);
+                // Lidar com diferentes formatos de exportação (especialmente em builds CJS/ESM mistos)
+                const parseFunc = typeof pdf === 'function' ? pdf : (pdf.PDFParse || pdf.default);
+                if (typeof parseFunc !== 'function') {
+                    throw new Error('Biblioteca pdf-parse não exporta uma função de processamento válida');
+                }
+                const pdfData = await parseFunc(buffer);
                 return pdfData.text;
             }
 
