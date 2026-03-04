@@ -1,23 +1,35 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../../../database/prisma.service';
-import { Prisma } from '@prisma/client';
 import { CreateKnowledgeBaseDto } from './dto/create-knowledge.dto';
 import { AddDocumentDto } from './dto/add-document.dto';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
-import { S3Service } from '../storage/s3.service';
+import * as fs from 'fs';
+import * as path from 'path';
+import { randomUUID } from 'crypto';
 
 @Injectable()
 export class KnowledgeService {
     private readonly logger = new Logger(KnowledgeService.name);
+    private readonly storageBasePath: string;
 
     constructor(
         private prisma: PrismaService,
         @InjectQueue('knowledge-processing') private knowledgeQueue: Queue,
-        private s3Service: S3Service,
         private eventEmitter: EventEmitter2,
-    ) { }
+    ) {
+        // Configurar caminho base de armazenamento local
+        this.storageBasePath = process.env.STORAGE_PATH
+            ? path.resolve(process.env.STORAGE_PATH)
+            : path.join(process.cwd(), 'storage', 'uploads');
+
+        // Garantir que o diretório exista
+        if (!fs.existsSync(this.storageBasePath)) {
+            fs.mkdirSync(this.storageBasePath, { recursive: true });
+            this.logger.log(`Diretório de storage criado: ${this.storageBasePath}`);
+        }
+    }
 
     /** Emite evento que invalida o cache semântico do AIService para esta base */
     private emitKnowledgeUpdated(knowledgeBaseId: string, companyId: string) {
@@ -80,13 +92,12 @@ export class KnowledgeService {
             select: { id: true }
         });
 
-        // 2. Remover cada documento individualmente (faz cleanup de chunks, arquivos e cache)
+        // 2. Remover cada documento individualmente (faz cleanup de chunks e arquivos)
         for (const doc of docs) {
             await this.removeDocument(companyId, doc.id);
         }
 
-        // 3. Remover a base (os agentes que usam essa base terão knowledgeBaseId setado como null ou erro se não for opcional, 
-        // mas o Cascade no Document já foi tratado no passo acima para segurança extra de arquivos)
+        // 3. Remover a base
         const deleted = await (this.prisma as any).knowledgeBase.deleteMany({
             where: { id, companyId }
         });
@@ -98,7 +109,7 @@ export class KnowledgeService {
     }
 
     async addDocument(companyId: string, baseId: string, data: AddDocumentDto) {
-        // Validação leve (evita query pesada com _count/embedding filter)
+        // Validação leve
         const base = await (this.prisma as any).knowledgeBase.findFirst({
             where: { id: baseId, companyId },
             select: { id: true }
@@ -120,116 +131,160 @@ export class KnowledgeService {
         return document;
     }
 
-    async addDocumentFromFile(companyId: string, baseId: string, file: Express.Multer.File) {
-        // Validação leve (evita query pesada com _count/embedding filter)
+    /**
+     * Adiciona documento a partir de upload de arquivo.
+     * ARMAZENAMENTO 100% LOCAL - Sem S3
+     */
+    async addDocumentFromFile(
+        companyId: string,
+        baseId: string,
+        file: Express.Multer.File,
+        title?: string
+    ) {
+        // Validar base de conhecimento
         const base = await (this.prisma as any).knowledgeBase.findFirst({
             where: { id: baseId, companyId },
-            select: { id: true }
+            select: { id: true, embeddingProvider: true, embeddingModel: true }
         });
         if (!base) throw new NotFoundException('Base de conhecimento não encontrada');
+
+        // Validar arquivo
+        const validation = this.validateFile(file);
+        if (!validation.valid) {
+            throw new BadRequestException(validation.error);
+        }
 
         const ext = file.originalname.split('.').pop()?.toLowerCase() || '';
         const sourceType = detectSourceType(ext);
         const contentType = getMimeType(ext);
 
+        // Gerar ID do documento antecipadamente para organizar storage
+        const documentId = randomUUID();
+
+        // Criar caminho de armazenamento: storage/uploads/{companyId}/{baseId}/{documentId}/
+        const storageDir = path.join(this.storageBasePath, companyId, base.id, documentId);
+        if (!fs.existsSync(storageDir)) {
+            fs.mkdirSync(storageDir, { recursive: true });
+        }
+
+        // Gerar nome de arquivo seguro
+        const safeFilename = `${randomUUID()}-${file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+        const localPath = path.join(storageDir, safeFilename);
+
+        // Salvar arquivo localmente
         let contentUrl: string | null = null;
         let rawContent: string | null = null;
 
-        // Tipos binários que EXIGEM contentUrl (não podem ser convertidos para texto UTF-8)
+        // Tipos binários que exigem armazenamento como arquivo
         const BINARY_SOURCE_TYPES = new Set(['PDF', 'DOCX', 'XLSX', 'XLS', 'PPTX', 'EPUB', 'AUDIO', 'MP3', 'WAV', 'MP4', 'OGG', 'WEBM', 'M4A']);
         const isBinaryType = BINARY_SOURCE_TYPES.has(sourceType.toUpperCase());
 
-        // Tentar upload para S3 (usando buffer se disponível, senão path em disco)
         try {
-            if (file.buffer && file.buffer.length > 0) {
-                contentUrl = await this.s3Service.uploadBuffer(file.buffer, file.originalname, contentType);
-            } else if (file.path) {
-                contentUrl = await this.s3Service.uploadFile(file.path, file.originalname, contentType);
-            } else {
-                throw new Error('Arquivo sem conteúdo (buffer e path ambos ausentes)');
-            }
-            this.logger.log(`Arquivo enviado ao S3: ${file.originalname}`);
-        } catch (error) {
-            this.logger.warn(`Falha ao fazer upload para S3: ${error.message}. Usando armazenamento local.`);
-
             if (isBinaryType) {
-                // Para arquivos binários: salvar no storage local para preservar integridade do arquivo
-                const fs = require('fs');
-                const path = require('path');
-                const { randomUUID } = require('crypto');
-
-                const storageDir = path.join(process.cwd(), 'storage', 'uploads');
-                if (!fs.existsSync(storageDir)) {
-                    fs.mkdirSync(storageDir, { recursive: true });
-                }
-
-                const safeFilename = `${randomUUID()}-${file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-                const localPath = path.join(storageDir, safeFilename);
-
-                try {
-                    if (file.buffer && file.buffer.length > 0) {
-                        fs.writeFileSync(localPath, file.buffer);
-                        this.logger.log(`Arquivo binário salvo localmente: ${localPath} (${file.buffer.length} bytes)`);
-                    } else if (file.path) {
-                        fs.copyFileSync(file.path, localPath);
-                        this.logger.log(`Arquivo binário copiado para storage local: ${localPath}`);
-                    } else {
-                        throw new Error('Arquivo sem conteúdo disponível para salvar');
-                    }
-                    contentUrl = localPath;
-                } catch (saveErr) {
-                    this.logger.error(`Falha ao salvar arquivo binário localmente: ${saveErr.message}`);
-                    throw new Error(`Não foi possível processar o arquivo ${file.originalname}: ${saveErr.message}`);
-                }
-            } else {
-                // Para arquivos de texto: ler conteúdo diretamente
+                // Arquivos binários: salvar como arquivo físico
                 if (file.buffer && file.buffer.length > 0) {
-                    rawContent = file.buffer.toString('utf-8').replace(/\0/g, '').substring(0, 500000);
-                    this.logger.log(`Conteúdo de texto lido do buffer: ${file.originalname} (${file.buffer.length} bytes)`);
+                    fs.writeFileSync(localPath, file.buffer);
+                    this.logger.log(`Arquivo binário salvo: ${localPath} (${file.buffer.length} bytes)`);
                 } else if (file.path) {
-                    const fs = require('fs');
-                    try {
-                        const MAX_READ_BYTES = 500000;
-                        const stat = fs.statSync(file.path);
-                        const bytesToRead = Math.min(stat.size, MAX_READ_BYTES);
-                        const buffer = Buffer.alloc(bytesToRead);
-                        const fd = fs.openSync(file.path, 'r');
-                        fs.readSync(fd, buffer, 0, bytesToRead, 0);
-                        fs.closeSync(fd);
-                        rawContent = buffer.toString('utf-8').replace(/\0/g, '');
-                        this.logger.log(`Conteúdo de texto lido do disco: ${file.path} (${stat.size} bytes)`);
-                    } catch (readErr) {
-                        this.logger.error(`Falha ao ler arquivo de texto: ${readErr.message}`);
-                    }
+                    fs.copyFileSync(file.path, localPath);
+                    this.logger.log(`Arquivo binário copiado para storage local: ${localPath}`);
                 } else {
-                    this.logger.error('Arquivo sem buffer ou path – não foi possível extrair conteúdo');
+                    throw new Error('Arquivo sem conteúdo disponível para salvar');
+                }
+                contentUrl = localPath;
+            } else {
+                // Arquivos de texto: ler conteúdo para rawContent (mais eficiente)
+                // Mas também manter cópia física se necessário
+                if (file.buffer && file.buffer.length > 0) {
+                    // Tentar decodificar como UTF-8
+                    try {
+                        rawContent = file.buffer.toString('utf-8').replace(/\0/g, '').substring(0, 500000);
+                        this.logger.log(`Conteúdo de texto lido do buffer: ${file.originalname}`);
+                    } catch (decodeErr) {
+                        // Fallback: tentar latin1 (ISO-8859-1)
+                        rawContent = file.buffer.toString('latin1').replace(/\0/g, '').substring(0, 500000);
+                        this.logger.log(`Conteúdo de texto lido (latin1 fallback): ${file.originalname}`);
+                    }
+                    // Salvar cópia física também
+                    fs.writeFileSync(localPath, file.buffer);
+                    contentUrl = localPath;
+                } else if (file.path) {
+                    const MAX_READ_BYTES = 500000;
+                    const stat = fs.statSync(file.path);
+                    const bytesToRead = Math.min(stat.size, MAX_READ_BYTES);
+                    const buffer = Buffer.alloc(bytesToRead);
+                    const fd = fs.openSync(file.path, 'r');
+                    fs.readSync(fd, buffer, 0, bytesToRead, 0);
+                    fs.closeSync(fd);
+                    rawContent = buffer.toString('utf-8').replace(/\0/g, '');
+                    this.logger.log(`Conteúdo de texto lido do disco: ${file.path}`);
+
+                    // Copiar para storage organizado
+                    fs.copyFileSync(file.path, localPath);
+                    contentUrl = localPath;
+
+                    // Limpar arquivo temporário original
+                    try {
+                        if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
+                    } catch { /* ignore */ }
                 }
             }
+        } catch (saveErr) {
+            this.logger.error(`Falha ao salvar arquivo: ${saveErr.message}`);
+            throw new BadRequestException(`Não foi possível salvar o arquivo: ${saveErr.message}`);
         }
 
-        // Limpar arquivo temporário do disco (apenas se não foi copiado para o storage local)
-        if (file.path && (!contentUrl || contentUrl !== file.path)) {
-            try {
-                const fs = require('fs');
-                if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
-            } catch { /* ignore */ }
-        }
-
+        // Criar documento no banco
         const document = await (this.prisma as any).document.create({
             data: {
-                title: file.originalname,
+                title: title || file.originalname,
                 sourceType,
-                contentUrl,    // URL S3, path local ou null
-                rawContent,    // Conteúdo texto (apenas para tipos não-binários sem S3)
+                contentUrl,
+                rawContent,
                 knowledgeBaseId: baseId,
                 status: 'PENDING',
             },
         });
 
+        this.logger.log(`Documento criado: ${document.id}, tipo: ${sourceType}, path: ${contentUrl}`);
+
+        // Enviar para fila de processamento
         await this.enqueueProcessing(document.id, companyId);
         this.emitKnowledgeUpdated(baseId, companyId);
 
         return document;
+    }
+
+    /**
+     * Valida arquivo enviado
+     */
+    private validateFile(file: Express.Multer.File): { valid: boolean; error?: string } {
+        if (!file) {
+            return { valid: false, error: 'Nenhum arquivo enviado' };
+        }
+
+        // Validar tamanho máximo (50MB)
+        const MAX_FILE_SIZE = 50 * 1024 * 1024;
+        const fileSize = file.size || (file.buffer?.length) || 0;
+        if (fileSize > MAX_FILE_SIZE) {
+            return { valid: false, error: `Arquivo muito grande. Tamanho máximo: ${MAX_FILE_SIZE / 1024 / 1024}MB` };
+        }
+
+        // Validar extensão permitida
+        const ext = file.originalname.split('.').pop()?.toLowerCase() || '';
+        const ALLOWED_EXTS = new Set([
+            'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'epub',
+            'txt', 'md', 'mdx', 'markdown', 'rtf',
+            'html', 'htm',
+            'csv', 'json', 'yaml', 'yml', 'xml',
+            'js', 'ts', 'jsx', 'tsx', 'py', 'java', 'go', 'rb', 'php', 'cs', 'cpp', 'c', 'rs', 'swift', 'kt', 'sh', 'bash', 'sql',
+            'mp3', 'wav', 'mp4', 'ogg', 'webm', 'm4a', 'mpeg'
+        ]);
+        if (!ALLOWED_EXTS.has(ext)) {
+            return { valid: false, error: `Extensão não suportada: .${ext}` };
+        }
+
+        return { valid: true };
     }
 
     private async enqueueProcessing(documentId: string, companyId: string) {
@@ -279,23 +334,30 @@ export class KnowledgeService {
 
         if (!doc) return { count: 0 };
 
-        // Deletar chunks primeiro (cascade manual se necessário, embora Prisma deva lidar se configurado)
+        // Deletar chunks primeiro
         await (this.prisma as any).documentChunk.deleteMany({
             where: { documentId }
         });
 
-        if (doc.contentUrl && !doc.contentUrl.startsWith('http')) {
+        // Remover arquivo físico se existir
+        if (doc.contentUrl) {
             try {
-                const fs = require('fs');
-                if (fs.existsSync(doc.contentUrl)) fs.unlinkSync(doc.contentUrl);
+                if (fs.existsSync(doc.contentUrl)) {
+                    fs.unlinkSync(doc.contentUrl);
+                    this.logger.log(`Arquivo removido: ${doc.contentUrl}`);
+
+                    // Tentar remover diretório pai se vazio
+                    const parentDir = path.dirname(doc.contentUrl);
+                    try {
+                        const files = fs.readdirSync(parentDir);
+                        if (files.length === 0) {
+                            fs.rmdirSync(parentDir);
+                            this.logger.log(`Diretório removido: ${parentDir}`);
+                        }
+                    } catch { /* ignore se não estiver vazio */ }
+                }
             } catch (error) {
                 this.logger.error(`Erro ao remover arquivo físico: ${error.message}`);
-            }
-        } else if (doc.contentUrl && doc.contentUrl.startsWith('http')) {
-            try {
-                await this.s3Service.deleteFile(doc.contentUrl);
-            } catch (error) {
-                this.logger.error(`Erro ao remover arquivo do S3: ${error.message}`);
             }
         }
 
@@ -330,18 +392,13 @@ export class KnowledgeService {
             });
 
             // Remover arquivo físico
-            if (doc.contentUrl && !doc.contentUrl.startsWith('http')) {
+            if (doc.contentUrl) {
                 try {
-                    const fs = require('fs');
-                    if (fs.existsSync(doc.contentUrl)) fs.unlinkSync(doc.contentUrl);
+                    if (fs.existsSync(doc.contentUrl)) {
+                        fs.unlinkSync(doc.contentUrl);
+                    }
                 } catch (error) {
                     this.logger.error(`Erro ao remover arquivo físico (${doc.id}): ${error.message}`);
-                }
-            } else if (doc.contentUrl && doc.contentUrl.startsWith('http')) {
-                try {
-                    await this.s3Service.deleteFile(doc.contentUrl);
-                } catch (error) {
-                    this.logger.error(`Erro ao remover arquivo do S3 (${doc.id}): ${error.message}`);
                 }
             }
         }
@@ -388,18 +445,13 @@ export class KnowledgeService {
 
         const JSZip = require('jszip');
         const zip = new JSZip();
-        const axios = require('axios');
-        const fs = require('fs');
 
         for (const doc of docs) {
             try {
                 let fileData: Buffer | null = null;
                 let fileName = doc.title;
 
-                if (doc.contentUrl && doc.contentUrl.startsWith('http')) {
-                    const response = await axios.get(doc.contentUrl, { responseType: 'arraybuffer' });
-                    fileData = Buffer.from(response.data);
-                } else if (doc.contentUrl) {
+                if (doc.contentUrl) {
                     if (fs.existsSync(doc.contentUrl)) {
                         fileData = fs.readFileSync(doc.contentUrl);
                     }
@@ -421,7 +473,6 @@ export class KnowledgeService {
 
     /**
      * Reprocessa TODOS os documentos de uma base de conhecimento.
-     * Usa operações em lote para evitar timeout em bases com muitos documentos.
      */
     async reprocessBase(companyId: string, knowledgeBaseId: string) {
         const base = await this.findOneBase(companyId, knowledgeBaseId);
@@ -437,32 +488,25 @@ export class KnowledgeService {
 
         const docIds = docs.map((d: any) => d.id);
 
-        // 1. Apaga todos os chunks da base em uma única query (muito mais rápido que N deleteMany)
+        // 1. Apaga todos os chunks da base
         await (this.prisma as any).documentChunk.deleteMany({
             where: { documentId: { in: docIds } },
         });
 
-        // 2. Marca todos os documentos como PENDING em uma única query
+        // 2. Marca todos os documentos como PENDING
         await (this.prisma as any).document.updateMany({
             where: { id: { in: docIds } },
             data: { status: 'PENDING' },
         });
 
-        // 3. Enfileira todos em paralelo (BullMQ é assíncrono — não bloqueia)
+        // 3. Enfileira todos em paralelo
         await Promise.all(docIds.map((id: string) => this.enqueueProcessing(id, companyId)));
-
-        // 4. Invalida o cache RAG explicitamente (importante se o provider mudou)
-        const VectorStoreService = require('../engine/vector-store.service').VectorStoreService;
-        // Nota: Idealmente injetaríamos o VectorStoreService, mas como o KnowledgeService 
-        // já emite eventos, o AIService cuidará disso através do @OnEvent('knowledge.updated').
-        // A chamada abaixo reforça a limpeza.
 
         this.emitKnowledgeUpdated(knowledgeBaseId, companyId);
         return { message: `${docIds.length} documento(s) enviado(s) para reprocessamento`, count: docIds.length };
     }
 
     async reprocessDocument(companyId: string, documentId: string) {
-        // Verificar se o documento existe e pertence à empresa
         const doc = await (this.prisma as any).document.findFirst({
             where: { id: documentId, knowledgeBase: { companyId } }
         });
@@ -492,10 +536,8 @@ export class KnowledgeService {
     // ========== Edição de Bases de Conhecimento ==========
 
     async updateBase(companyId: string, id: string, data: { name?: string; description?: string; language?: string; embeddingProvider?: string; embeddingModel?: string }) {
-        // Verifica se a base pertence à empresa
         const base = await this.findOneBase(companyId, id);
 
-        // Validações
         if (data.name && data.name.length < 2) {
             throw new BadRequestException('Nome deve ter pelo menos 2 caracteres');
         }
@@ -530,20 +572,17 @@ export class KnowledgeService {
     async getBaseStats(companyId: string, id: string) {
         const base = await this.findOneBase(companyId, id);
 
-        // Contagem de documentos por status
         const documentsByStatus = await (this.prisma as any).document.groupBy({
             by: ['status'],
             where: { knowledgeBaseId: id },
             _count: true
         });
 
-        // Total de chunks
         const totalChunks = await (this.prisma as any).documentChunk.aggregate({
             where: { knowledgeBaseId: id },
             _count: true
         });
 
-        // Total de tokens estimados (150 chars por chunk)
         const totalTokens = totalChunks._count * 150;
 
         return {
@@ -573,9 +612,9 @@ const EXT_TO_SOURCE_TYPE: Record<string, string> = {
     epub: 'EPUB',
     // Texto
     txt: 'TXT',
-    md: 'MD',
-    mdx: 'MD',
-    markdown: 'MD',
+    md: 'TXT',
+    mdx: 'TXT',
+    markdown: 'TXT',
     rtf: 'RTF',
     // Web
     html: 'HTML',
@@ -624,7 +663,7 @@ const EXT_TO_MIME: Record<string, string> = {
 };
 
 export function detectSourceType(ext: string): string {
-    return EXT_TO_SOURCE_TYPE[ext.toLowerCase()] || 'TEXT';
+    return EXT_TO_SOURCE_TYPE[ext.toLowerCase()] || 'TXT';
 }
 
 export function getMimeType(ext: string): string {

@@ -1,330 +1,409 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { createHash } from 'crypto';
-import { Prisma } from '@prisma/client';
-import { EmbeddingProviderFactory } from './embedding-provider.factory';
+import { spawn, ChildProcess } from 'child_process';
+import { join } from 'path';
+
+/**
+ * VectorStoreService
+ *
+ * Serviço responsável por gerar e gerenciar embeddings para busca semântica.
+ * Suporta múltiplos providers:
+ * - 'native': Embedding local via @xenova/transformers (worker isolado)
+ * - 'openai': Embedding via API OpenAI (text-embedding-3-small, etc)
+ * - 'ollama': Embedding via Ollama local (nomic-embed-text, mxbai-embed-large, etc)
+ *
+ * CORREÇÕES APLICADAS:
+ * - Retry automático com backoff exponencial
+ * - Fallback entre providers (native → openai)
+ * - Timeout aumentado para 300s
+ * - Melhor logging de erros
+ */
 
 @Injectable()
 export class VectorStoreService {
     private readonly logger = new Logger(VectorStoreService.name);
+    private embedWorker: ChildProcess | null = null;
+    private embedWorkerReady = false;
+    private embedWorkerId = 0;
+    private pendingCallbacks = new Map<number, any>();
 
-    /** Score mínimo de relevância. Chunks abaixo disso são descartados (evita contexto irrelevante). */
-    private readonly MIN_SCORE_THRESHOLD = 0.3;
-
-    // --- Query Embedding Cache ---
-    /** SHA256(provider:model:text) → embedding, 24h TTL */
-    private readonly embeddingCache = new Map<string, { embedding: number[]; expiresAt: number }>();
-    private readonly EMBEDDING_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h
-    private readonly EMBEDDING_CACHE_LIMIT = 2000;
-
-    // --- RAG Results Cache ---
-    /** SHA256(knowledgeBaseId?:companyId:queryText) → results, 5min TTL */
-    private readonly ragCache = new Map<string, { results: any[]; expiresAt: number }>();
-    private readonly RAG_CACHE_TTL_MS = 5 * 60 * 1000; // 5min
-
-    constructor(
-        private embeddingFactory: EmbeddingProviderFactory,
-    ) { }
+    constructor() {
+        this.spawnEmbedWorker();
+    }
 
     /**
-     * Gera um embedding para um texto usando o provider configurado.
-     * Resultado é cacheado por 24h para evitar chamadas repetidas à API.
+     * Gera embedding para um texto usando o provider especificado.
+     * Inclui retry automático e fallback.
      */
     async generateEmbedding(
         text: string,
-        provider: string = 'openai',
+        provider: string = 'native',
         model?: string,
-        apiKeyOverride?: string,
-        baseUrlOverride?: string,
+        apiKey?: string,
+        baseUrl?: string
     ): Promise<number[]> {
-        const cacheKey = createHash('sha256').update(`${provider}:${model ?? ''}:${text}`).digest('hex');
-        const cached = this.embeddingCache.get(cacheKey);
-        if (cached && cached.expiresAt > Date.now()) {
-            return cached.embedding;
+        const MAX_RETRIES = 3;
+        let lastError: Error | null = null;
+
+        // Tentar provider principal
+        for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+            try {
+                const embeddings = await this.embedQueryWithProvider(text, provider, model, apiKey, baseUrl);
+                if (embeddings && embeddings.length > 0) {
+                    return embeddings;
+                }
+                throw new Error('Embedding vazio ou inválido');
+            } catch (err: any) {
+                lastError = err;
+                this.logger.warn(
+                    `Tentativa ${attempt}/${MAX_RETRIES} falhou com provider '${provider}': ${err.message}`
+                );
+
+                if (attempt < MAX_RETRIES) {
+                    // Backoff exponencial: 1s, 2s, 4s
+                    const delay = Math.pow(2, attempt - 1) * 1000;
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
+            }
         }
 
-        const embeddings = this.embeddingFactory.createEmbeddings(provider, model, apiKeyOverride, baseUrlOverride);
+        // Fallback: tentar OpenAI se provider nativo falhar
+        if (provider !== 'openai') {
+            this.logger.warn(`Provider '${provider}' falhou após ${MAX_RETRIES} tentativas. Tentando fallback para OpenAI...`);
+            const openAiKey = process.env.OPENAI_API_KEY;
 
-        // Timeout: 60s para provider nativo (download do modelo no primeiro uso), 20s para outros
-        const timeoutMs = provider === 'native' ? 60000 : 20000;
-        const embedding = await Promise.race([
-            embeddings.embedQuery(text),
-            new Promise<number[]>((_, reject) =>
-                setTimeout(() => reject(new Error(`Timeout gerando embedding (${provider}). O modelo pode estar demorando para carregar.`)), timeoutMs)
-            )
-        ]);
-
-        // Evict LRU entry se cache cheio
-        if (this.embeddingCache.size >= this.EMBEDDING_CACHE_LIMIT) {
-            const firstKey = this.embeddingCache.keys().next().value;
-            if (firstKey) this.embeddingCache.delete(firstKey);
-        }
-        this.embeddingCache.set(cacheKey, { embedding, expiresAt: Date.now() + this.EMBEDDING_CACHE_TTL_MS });
-        return embedding;
-    }
-
-    /**
-     * Invalida o cache de resultados RAG para uma base de conhecimento específica.
-     * Chamado quando documentos são adicionados/removidos da base.
-     */
-    invalidateRagCache(knowledgeBaseId?: string, companyId?: string): void {
-        if (!knowledgeBaseId && !companyId) {
-            this.ragCache.clear();
-            return;
-        }
-        const prefix = knowledgeBaseId ?? companyId!;
-        for (const key of this.ragCache.keys()) {
-            if (key.includes(prefix)) this.ragCache.delete(key);
-        }
-    }
-
-    /**
-     * Busca por similaridade semântica usando cosine similarity em JavaScript.
-     * Não requer pgvector — funciona com embeddings JSON já armazenados no banco.
-     *
-     * @param prisma Instância do PrismaService
-     * @param companyId Filtro de tenant
-     * @param queryText Texto de busca
-     * @param knowledgeBaseId Opcional: restringir a uma base específica
-     * @param limit Quantidade de chunks a retornar
-     * @param embeddingProvider Provider usado para gerar o embedding da query
-     * @param embeddingModel Modelo de embedding
-     * @param apiKeyOverride API key da empresa para o provider de embedding
-     * @param baseUrlOverride Base URL da empresa (para Ollama/Azure)
-     * @param language Idioma para FTS (ex: 'portuguese', 'english', 'spanish'). Default: 'portuguese'
-     * @param scoreThreshold Score mínimo de relevância (0–1). Padrão: MIN_SCORE_THRESHOLD
-     */
-    async searchSimilarity(
-        prisma: any,
-        companyId: string,
-        queryText: string,
-        knowledgeBaseId?: string,
-        limit: number = 5,
-        embeddingProvider: string = 'openai',
-        embeddingModel?: string,
-        apiKeyOverride?: string,
-        baseUrlOverride?: string,
-        language: string = 'portuguese',
-        scoreThreshold?: number,
-    ): Promise<{ content: string; score: number; documentId: string; documentTitle?: string }[]> {
-        const threshold = scoreThreshold ?? this.MIN_SCORE_THRESHOLD;
-
-        // RAG cache key — não inclui apiKey por segurança
-        const ragCacheKey = createHash('sha256')
-            .update(`${knowledgeBaseId ?? companyId}:${queryText}:${limit}:${threshold}`)
-            .digest('hex');
-        const cachedRag = this.ragCache.get(ragCacheKey);
-        if (cachedRag && cachedRag.expiresAt > Date.now()) {
-            this.logger.debug('[VectorStore] RAG cache hit');
-            return cachedRag.results;
-        }
-
-        let queryEmbedding: number[] | null = null;
-        try {
-            // 1. Tenta gerar embedding da query (fallback flexivo)
-            queryEmbedding = await this.generateEmbedding(queryText, embeddingProvider, embeddingModel, apiKeyOverride, baseUrlOverride);
-        } catch (err: any) {
-            this.logger.warn(`[VectorStore] Falha ao gerar embedding da query: ${err.message}. RAG usará apenas FTS.`);
-        }
-
-        try {
-            // Sanitiza o idioma para evitar SQL injection (só letras minúsculas)
-            const safeLang = /^[a-z]+$/.test(language) ? language : 'portuguese';
-
-            // 2. Busca candidatos usando Full-Text Search (TSVector) — nativo do Postgres
-            // Transforma "onde lanço nf" -> "onde | lanço | nf" (OR relaxado, porque plainto_tsquery usa AND rígido)
-            const orQueryText = queryText
-                .replace(/[^\w\s\u00C0-\u00FF]/g, '')
-                .trim()
-                .split(/\s+/)
-                .filter(w => w.length > 2) // ignorar 'de', 'a', 'o', 'do'
-                .join(' | ');
-
-            // Fallback caso usuário digite só preposições (ex: 'de')
-            const finalTsQuery = orQueryText.length > 0 ? orQueryText : queryText.replace(/[^\w\s]/g, '');
-
-            let candidates: any[];
-
-            if (knowledgeBaseId) {
-                candidates = await prisma.$queryRaw`
-                    WITH fts_results AS (
-                      SELECT
-                          chunk.id,
-                          chunk.content,
-                          chunk.embedding,
-                          chunk."documentId",
-                          doc.title as "documentTitle",
-                          ts_rank_cd(
-                              to_tsvector(${safeLang}::regconfig, chunk.content),
-                              to_tsquery(${safeLang}::regconfig, ${finalTsQuery})
-                          ) AS text_score
-                      FROM document_chunks chunk
-                      JOIN documents doc ON doc.id = chunk."documentId"
-                      WHERE doc.status = 'READY'
-                        AND doc."knowledgeBaseId" = ${knowledgeBaseId}
-                    )
-                    SELECT * FROM fts_results 
-                    WHERE text_score > 0
-                    ORDER BY text_score DESC
-                    LIMIT 100;
-                `;
+            if (openAiKey) {
+                try {
+                    const embeddings = await this.embedQueryWithProvider(text, 'openai', 'text-embedding-3-small', openAiKey, undefined);
+                    if (embeddings && embeddings.length > 0) {
+                        this.logger.log('Fallback para OpenAI bem-sucedido');
+                        return embeddings;
+                    }
+                } catch (fallbackErr: any) {
+                    this.logger.error(`Fallback para OpenAI também falhou: ${fallbackErr.message}`);
+                }
             } else {
-                candidates = await prisma.$queryRaw`
-                    WITH fts_results AS (
-                      SELECT
-                          chunk.id,
-                          chunk.content,
-                          chunk.embedding,
-                          chunk."documentId",
-                          doc.title as "documentTitle",
-                          ts_rank_cd(
-                              to_tsvector(${safeLang}::regconfig, chunk.content),
-                              to_tsquery(${safeLang}::regconfig, ${finalTsQuery})
-                          ) AS text_score
-                      FROM document_chunks chunk
-                      JOIN documents doc ON doc.id = chunk."documentId"
-                      JOIN knowledge_bases kb ON kb.id = doc."knowledgeBaseId"
-                      WHERE doc.status = 'READY'
-                        AND kb."companyId" = ${companyId}
-                    )
-                    SELECT * FROM fts_results 
-                    WHERE text_score > 0
-                    ORDER BY text_score DESC
-                    LIMIT 100;
-                `;
+                this.logger.warn('OpenAI API key não configurada, pulando fallback');
+            }
+        }
+
+        // Se tudo falhar, lança o último erro
+        throw new Error(
+            `Falha ao gerar embedding: ${lastError?.message || 'Erro desconhecido'}. ` +
+            `Provider: ${provider}, Model: ${model || 'default'}`
+        );
+    }
+
+    /**
+     * Gera embeddings para múltiplos textos em lote.
+     */
+    async generateEmbeddingsBatch(
+        texts: string[],
+        provider: string = 'native',
+        model?: string,
+        apiKey?: string,
+        baseUrl?: string
+    ): Promise<number[][]> {
+        const BATCH_SIZE = 50;
+        const allEmbeddings: number[][] = [];
+
+        for (let i = 0; i < texts.length; i += BATCH_SIZE) {
+            const batch = texts.slice(i, i + BATCH_SIZE);
+            const batchEmbeddings = await this.generateEmbeddingBatchInternal(batch, provider, model, apiKey, baseUrl);
+            allEmbeddings.push(...batchEmbeddings);
+
+            // Pequeno delay entre lotes para não sobrecarregar
+            if (i + BATCH_SIZE < texts.length) {
+                await new Promise(resolve => setTimeout(resolve, 50));
+            }
+        }
+
+        return allEmbeddings;
+    }
+
+    /**
+     * Gera embedding para um único texto usando o provider especificado.
+     */
+    private async embedQueryWithProvider(
+        text: string,
+        provider: string,
+        model?: string,
+        apiKey?: string,
+        baseUrl?: string
+    ): Promise<number[]> {
+        if (provider === 'openai') {
+            return this.embedWithOpenAI(text, model || 'text-embedding-3-small', apiKey);
+        }
+
+        if (provider === 'ollama') {
+            return this.embedWithOllama(text, model || 'nomic-embed-text', baseUrl);
+        }
+
+        // Provider nativo (padrão) - retorna array simples
+        const result = await this.embedWithNative(text, model || 'Xenova/bge-micro-v2');
+        return result;
+    }
+
+    /**
+     * Gera embeddings para lote de textos usando o provider especificado.
+     */
+    private async generateEmbeddingBatchInternal(
+        texts: string[],
+        provider: string,
+        model?: string,
+        apiKey?: string,
+        baseUrl?: string
+    ): Promise<number[][]> {
+        if (provider === 'openai') {
+            return this.embedBatchWithOpenAI(texts, model || 'text-embedding-3-small', apiKey);
+        }
+
+        if (provider === 'ollama') {
+            return this.embedBatchWithOllama(texts, model || 'nomic-embed-text', baseUrl);
+        }
+
+        // Provider nativo (padrão) - retorna array de arrays
+        return this.embedBatchWithNative(texts, model || 'Xenova/bge-micro-v2');
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Provider: Nativo (@xenova/transformers via worker isolado)
+    // ──────────────────────────────────────────────────────────────────────────
+
+    private spawnEmbedWorker() {
+        if (this.embedWorker) {
+            try {
+                this.embedWorker.kill();
+            } catch { /* ignore */ }
+        }
+
+        const currentId = ++this.embedWorkerId;
+        const workerPath = join(__dirname, 'embedding.worker.js');
+        this.embedWorker = spawn('node', [workerPath], {
+            stdio: ['ipc', 'pipe', 'pipe'],
+            env: { ...process.env },
+        });
+
+        this.embedWorker.stdout?.on('data', (data) => {
+            this.logger.debug(`[EmbedWorker stdout] ${data.toString().trim()}`);
+        });
+
+        this.embedWorker.stderr?.on('data', (data) => {
+            this.logger.warn(`[EmbedWorker stderr] ${data.toString().trim()}`);
+        });
+
+        this.embedWorker.on('message', (msg: any) => {
+            if (!msg || typeof msg !== 'object') return;
+
+            // Log messages do worker
+            if (msg.type === 'log') {
+                const logMsg = `[EmbedWorker #${currentId}] ${msg.message}`;
+                if (msg.level === 'error') this.logger.error(logMsg);
+                else if (msg.level === 'warn') this.logger.warn(logMsg);
+                else this.logger.log(logMsg);
+                return;
             }
 
-            // 3. Fallback semântico: se FTS não devolver relevâncias válidas e existir queryEmbedding,
-            // varrer TODOS os chunks vetorizados (aqui exigimos que chunk.embedding NOT NULL)
-            if ((!candidates || candidates.length === 0) && queryEmbedding) {
-                this.logger.debug('[VectorStore] FTS sem resultados exatos (> 0) — usando fallback semântico.');
-                const rawChunks = await prisma.documentChunk.findMany({
-                    where: {
-                        document: {
-                            status: 'READY',
-                            knowledgeBase: knowledgeBaseId ? { id: knowledgeBaseId } : { companyId },
-                        },
-                        embedding: { not: null },
-                    },
-                    include: { document: { select: { title: true } } },
-                    take: 500, // Limite de varredura massiva
-                });
-                candidates = rawChunks.map((c: any) => ({
-                    ...c,
-                    documentTitle: c.document.title,
-                    text_score: 0,
-                }));
+            // Worker está pronto
+            if (msg.type === 'ready') {
+                this.embedWorkerReady = true;
+                this.logger.log(`[EmbedWorker #${currentId}] Worker pronto`);
+                return;
             }
 
-            // Se ainda não tiver resultados (FTS vazio e semântico pulado/vazio)
-            if (!candidates || candidates.length === 0) return [];
-
-            // 4. Calcula similaridade de cosseno combinada com FTS + Semântico
-            // Chunks vindos do FTS que não tiverem embedding ganharão vector_score = 0, priorizando o `text_score`.
-            const scoredChunks = candidates.map(chunk => {
-                let vectorScore = 0;
-                let hasVector = false;
-
-                const chunkEmbedding = typeof chunk.embedding === 'string' ? JSON.parse(chunk.embedding) : chunk.embedding;
-                if (queryEmbedding && chunkEmbedding && Array.isArray(chunkEmbedding)) {
-                    vectorScore = cosineSimilarity(queryEmbedding, chunkEmbedding as number[]);
-                    hasVector = true;
+            // Resultado de embedding
+            if (msg.type === 'result' && msg.id !== undefined) {
+                const pending = this.pendingCallbacks.get(msg.id);
+                if (pending) {
+                    clearTimeout(pending.timeout);
+                    this.pendingCallbacks.delete(msg.id);
+                    pending.resolve(msg.embeddings);
                 }
-
-                // Score = (FTS rank escalonado para peso 0.4) + (Cosine Similarity peso 0.6)
-                // Se o chunk não possui vetor (fallback do pipeline), o FTS Score assume 100% da nota
-                // para não ser injustamente reprovado no limiar (Threshold) de 0.2.
-                // Ajustamos text_score para garantir que passe do threshold se for um match razoável.
-                let finalScore = 0;
-                if (hasVector) {
-                    finalScore = (chunk.text_score * 0.4) + (vectorScore * 0.6);
-                } else {
-                    // O PostgreSQL rankeia o ts_rank_cd normalmente de 0.001 a 1.0. 
-                    // Se for maior que 0.05 já é um match viável textual, normalizamos para facilitar aprovação:
-                    finalScore = chunk.text_score > 0.01 ? Math.max(0.25, chunk.text_score) : chunk.text_score;
-                }
-
-                return {
-                    content: chunk.content as string,
-                    score: finalScore,
-                    documentId: chunk.documentId as string,
-                    documentTitle: chunk.documentTitle as string | undefined,
-                };
-            });
-
-            // 5. Ordena por score decrescente
-            scoredChunks.sort((a, b) => b.score - a.score);
-
-            // 6. Filtra chunks abaixo do threshold de relevância
-            const relevant = scoredChunks.filter(r => r.score >= threshold);
-
-            // 7. Deduplicação: remove chunks semanticamente similares entre si (>0.92)
-            const deduplicated: typeof relevant = [];
-            for (const candidate of relevant) {
-                const isDuplicate = deduplicated.some(kept => {
-                    // Compara pelo conteúdo normalizado (mais rápido que cosine em embeddings)
-                    const similarity = contentOverlapRatio(kept.content, candidate.content);
-                    return similarity > 0.85;
-                });
-                if (!isDuplicate) deduplicated.push(candidate);
-                if (deduplicated.length >= limit) break;
+                return;
             }
 
-            this.logger.debug(
-                `[VectorStore] ${candidates.length} candidatos → ${relevant.length} relevantes (>=${threshold}) → ${deduplicated.length} após dedup → Top ${Math.min(deduplicated.length, limit)}`
-            );
+            // Erro de embedding
+            if (msg.type === 'error' && msg.id !== undefined) {
+                const pending = this.pendingCallbacks.get(msg.id);
+                if (pending) {
+                    clearTimeout(pending.timeout);
+                    this.pendingCallbacks.delete(msg.id);
+                    pending.reject(new Error(msg.message));
+                }
+                return;
+            }
+        });
 
-            const results = deduplicated.slice(0, limit);
-            this.ragCache.set(ragCacheKey, { results, expiresAt: Date.now() + this.RAG_CACHE_TTL_MS });
-            return results;
-        } catch (error) {
-            this.logger.error(`Erro na busca híbrida por similaridade: ${error.message}`);
-            return [];
+        this.embedWorker.on('exit', (code) => {
+            this.embedWorkerReady = false;
+            this.logger.warn(`[EmbedWorker #${currentId}] Worker saiu com código ${code}`);
+
+            // Restart automático após 2s
+            setTimeout(() => this.spawnEmbedWorker(), 2000);
+        });
+
+        this.embedWorker.on('error', (err) => {
+            this.logger.error(`[EmbedWorker #${currentId}] Erro: ${err.message}`);
+        });
+    }
+
+    private embedWithNative(text: string, model: string): Promise<number[]> {
+        return new Promise((resolve, reject) => {
+            if (!this.embedWorker || !this.embedWorkerReady) {
+                reject(new Error('Worker de embeddings não está pronto. Verifique se @xenova/transformers está instalado.'));
+                return;
+            }
+
+            const id = ++this.embedWorkerId;
+            const timeoutMs = 300_000; // 300 segundos
+
+            const timeout = setTimeout(() => {
+                this.pendingCallbacks.delete(id);
+                reject(new Error(`Timeout (${timeoutMs / 1000}s) ao gerar embedding nativo`));
+            }, timeoutMs);
+
+            this.pendingCallbacks.set(id, { resolve, reject, timeout });
+
+            this.embedWorker?.send({ type: 'embed', id, model, texts: [text] });
+        });
+    }
+
+    private embedBatchWithNative(texts: string[], model: string): Promise<number[][]> {
+        if (!this.embedWorker || !this.embedWorkerReady) {
+            throw new Error('Worker de embeddings não está pronto');
+        }
+
+        return new Promise((resolve, reject) => {
+            const id = ++this.embedWorkerId;
+            const timeoutMs = 300_000; // 300 segundos
+
+            const timeout = setTimeout(() => {
+                this.pendingCallbacks.delete(id);
+                reject(new Error(`Timeout (${timeoutMs / 1000}s) ao gerar embeddings nativos em lote`));
+            }, timeoutMs);
+
+            this.pendingCallbacks.set(id, { resolve, reject, timeout });
+
+            this.embedWorker?.send({ type: 'embed', id, model, texts });
+        });
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Provider: OpenAI
+    // ──────────────────────────────────────────────────────────────────────────
+
+    private async embedWithOpenAI(text: string, model: string, apiKey?: string): Promise<number[]> {
+        const key = apiKey || process.env.OPENAI_API_KEY;
+        if (!key) throw new Error('OPENAI_API_KEY não configurada para embedding OpenAI');
+
+        const { OpenAI } = require('openai');
+        const openai = new OpenAI({ apiKey: key });
+
+        const response = await openai.embeddings.create({
+            model,
+            input: text,
+            encoding_format: 'float',
+        });
+
+        return response.data[0].embedding;
+    }
+
+    private async embedBatchWithOpenAI(texts: string[], model: string, apiKey?: string): Promise<number[][]> {
+        const key = apiKey || process.env.OPENAI_API_KEY;
+        if (!key) throw new Error('OPENAI_API_KEY não configurada para embedding OpenAI');
+
+        const { OpenAI } = require('openai');
+        const openai = new OpenAI({ apiKey: key });
+
+        // OpenAI suporta batch de até 2048 textos por requisição
+        const response = await openai.embeddings.create({
+            model,
+            input: texts,
+            encoding_format: 'float',
+        });
+
+        // Ordenar pelo índice para garantir ordem correta
+        return response.data
+            .sort((a: any, b: any) => a.index - b.index)
+            .map((item: any) => item.embedding);
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Provider: Ollama (local)
+    // ──────────────────────────────────────────────────────────────────────────
+
+    private async embedWithOllama(text: string, model: string, baseUrl?: string): Promise<number[]> {
+        const host = baseUrl || process.env.OLLAMA_HOST || 'http://localhost:11434';
+
+        const axios = require('axios');
+        const response = await axios.post(`${host}/api/embeddings`, {
+            model,
+            prompt: text,
+        }, { timeout: 60000 });
+
+        return response.data.embedding || [];
+    }
+
+    private async embedBatchWithOllama(texts: string[], model: string, baseUrl?: string): Promise<number[][]> {
+        // Ollama não suporta batch nativo, processar um por um
+        const embeddings: number[][] = [];
+        for (const text of texts) {
+            const emb = await this.embedWithOllama(text, model, baseUrl);
+            embeddings.push(emb);
+        }
+        return embeddings;
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Utilitários
+    // ──────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Calcula similaridade de cosseno entre dois vetores.
+     */
+    cosineSimilarity(vecA: number[], vecB: number[]): number {
+        let dotProduct = 0;
+        let normA = 0;
+        let normB = 0;
+
+        for (let i = 0; i < vecA.length; i++) {
+            dotProduct += vecA[i] * vecB[i];
+            normA += vecA[i] * vecA[i];
+            normB += vecB[i] * vecB[i];
+        }
+
+        if (normA === 0 || normB === 0) return 0;
+        return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+    }
+
+    /**
+     * Encontra os chunks mais similares a uma query.
+     */
+    findMostSimilar(
+        queryEmbedding: number[],
+        chunks: { id: string; embedding: number[]; content: string }[],
+        topK: number = 5
+    ): { id: string; content: string; score: number }[] {
+        const scored = chunks.map(chunk => ({
+            id: chunk.id,
+            content: chunk.content,
+            score: this.cosineSimilarity(queryEmbedding, chunk.embedding),
+        }));
+
+        scored.sort((a, b) => b.score - a.score);
+        return scored.slice(0, topK);
+    }
+
+    /**
+     * Limpa recursos ao fechar a aplicação.
+     */
+    onModuleDestroy() {
+        if (this.embedWorker) {
+            this.embedWorker.send({ type: 'exit' });
+            setTimeout(() => {
+                if (this.embedWorker) {
+                    this.embedWorker.kill();
+                }
+            }, 2000);
         }
     }
-}
-
-/**
- * Similaridade de cosseno entre dois vetores.
- * Retorna 0 se vetores nulos ou de tamanhos diferentes.
- */
-function cosineSimilarity(a: number[], b: number[]): number {
-    if (!a || !b || a.length !== b.length) return 0;
-
-    let dot = 0, normA = 0, normB = 0;
-    for (let i = 0; i < a.length; i++) {
-        dot += a[i] * b[i];
-        normA += a[i] * a[i];
-        normB += b[i] * b[i];
-    }
-
-    const denominator = Math.sqrt(normA) * Math.sqrt(normB);
-    return denominator === 0 ? 0 : dot / denominator;
-}
-
-/**
- * Ratio de sobreposição de conteúdo entre dois textos (bigrams).
- * Alternativa leve ao cosine similarity para deduplicação de chunks de texto.
- */
-function contentOverlapRatio(a: string, b: string): number {
-    if (!a || !b) return 0;
-    const shorter = a.length < b.length ? a : b;
-    const longer = a.length < b.length ? b : a;
-    if (shorter.length === 0) return 0;
-    // Verifica se o texto mais curto está contido no mais longo (substring match)
-    if (longer.includes(shorter.trim())) return 1;
-    // Bigram overlap
-    const bigramsA = new Set(toBigrams(a));
-    const bigramsB = new Set(toBigrams(b));
-    let intersection = 0;
-    for (const bg of bigramsA) { if (bigramsB.has(bg)) intersection++; }
-    return (2 * intersection) / (bigramsA.size + bigramsB.size);
-}
-
-function toBigrams(text: string): string[] {
-    const words = text.toLowerCase().split(/\s+/).filter(Boolean);
-    const bigrams: string[] = [];
-    for (let i = 0; i < words.length - 1; i++) {
-        bigrams.push(`${words[i]}_${words[i + 1]}`);
-    }
-    return bigrams;
 }

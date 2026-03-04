@@ -5,7 +5,6 @@ import { PrismaService } from '../../../../database/prisma.service';
 import { VectorStoreService } from '../../engine/vector-store.service';
 import { ProviderConfigService } from '../../../settings/provider-config.service';
 import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters';
-import axios from 'axios';
 import * as fs from 'fs';
 
 @Processor('knowledge-processing', { concurrency: 1 })
@@ -22,10 +21,10 @@ export class KnowledgeProcessor extends WorkerHost {
 
     async process(job: Job<any, any, string>): Promise<any> {
         const { documentId, companyId } = job.data;
-        this.logger.log(`Iniciando processamento do documento: ${documentId}`);
+        this.logger.log(`[Processador] Iniciando processamento do documento: ${documentId}`);
 
         try {
-            // 1. Busca o documento e a base de conhecimento (para pegar embedding provider)
+            // 1. Busca o documento e a base de conhecimento
             const document = await (this.prisma as any).document.findUnique({
                 where: { id: documentId },
                 include: { knowledgeBase: true },
@@ -40,22 +39,26 @@ export class KnowledgeProcessor extends WorkerHost {
             });
 
             // 3. Extrai o conteúdo baseado no sourceType
+            this.logger.log(`[Processador] Extraindo texto do documento ${documentId} (tipo: ${document.sourceType})`);
             const text = await this.extractText(document);
 
             if (!text || text.trim().length === 0) {
                 throw new Error('Falha ao extrair texto do documento ou documento vazio');
             }
 
+            this.logger.log(`[Processador] Texto extraído com sucesso: ${text.length} caracteres`);
+
             // 4. Chunking
             const splitter = new RecursiveCharacterTextSplitter({
-                chunkSize: 1500, // Aumentado de 1000 para 1500
-                chunkOverlap: 300, // Aumentado de 200 para 300
+                chunkSize: 1500,
+                chunkOverlap: 300,
             });
             const chunks = await splitter.splitText(text);
+            this.logger.log(`[Processador] Documento ${documentId} dividido em ${chunks.length} chunks`);
 
             // 5. Gera embeddings usando o provider da base de conhecimento
-            let embeddingProvider = document.knowledgeBase?.embeddingProvider || 'openai';
-            let embeddingModel = document.knowledgeBase?.embeddingModel || undefined;
+            let embeddingProvider = document.knowledgeBase?.embeddingProvider || 'native';
+            let embeddingModel = document.knowledgeBase?.embeddingModel || 'Xenova/bge-micro-v2';
 
             // Busca API key da empresa para o provider de embedding configurado
             let embeddingApiKey: string | undefined;
@@ -66,13 +69,10 @@ export class KnowledgeProcessor extends WorkerHost {
                 embeddingApiKey = providerConfig?.apiKey ?? undefined;
                 embeddingBaseUrl = providerConfig?.baseUrl ?? undefined;
             } catch (cfgErr) {
-                this.logger.warn(`Não foi possível carregar configs do provider ${embeddingProvider}: ${cfgErr.message}`);
+                this.logger.warn(`[Processador] Não foi possível carregar configs do provider ${embeddingProvider}: ${cfgErr.message}`);
             }
 
-            this.logger.log(`[Processor] Documento ${documentId} — provider: ${embeddingProvider}, model: ${embeddingModel ?? 'default'}, apiKey: ${embeddingApiKey ? 'configurada' : 'não encontrada (usará env var)'}`);
-
-            // Validação antecipada removida. Deletada pois a responsabilidade de falhar
-            // caso a chave seja inválida ou ausente é do factory/provider no momento da criação/chamada.
+            this.logger.log(`[Processador] Documento ${documentId} — provider: ${embeddingProvider}, model: ${embeddingModel ?? 'default'}, apiKey: ${embeddingApiKey ? 'configurada' : 'não encontrada'}`);
 
             const BATCH_SIZE = 50;
             let processedCount = 0;
@@ -92,14 +92,12 @@ export class KnowledgeProcessor extends WorkerHost {
                             embedding = await this.vectorStore.generateEmbedding(
                                 content, embeddingProvider, embeddingModel, embeddingApiKey, embeddingBaseUrl
                             );
-                        } catch (embErr) {
-                            // Tolerância a falha: salva chunk sem embedding em vez de crashar o job.
-                            // O documento ficará READY e buscável via Full-Text Search (FTS).
-                            // O usuário pode reprocessar após configurar um provider externo.
+                        } catch (embErr: any) {
+                            // Tolerância a falha: salva chunk sem embedding
                             embeddingFailed = true;
                             embeddingFailReason = embErr.message;
                             this.logger.warn(
-                                `[Processor] Falha ao gerar embedding com provider '${embeddingProvider}'. ` +
+                                `[Processador] Falha ao gerar embedding com provider '${embeddingProvider}'. ` +
                                 `Documento será salvo SEM vetorização (apenas FTS). Erro: ${embErr.message}`
                             );
                         }
@@ -138,11 +136,14 @@ export class KnowledgeProcessor extends WorkerHost {
             }
             return { success: true, chunkCount, embeddingFailed };
 
-        } catch (error) {
-            this.logger.error(`Erro ao processar documento ${documentId}: ${error.message}`);
+        } catch (error: any) {
+            this.logger.error(`[Processador] Erro ao processar documento ${documentId}: ${error.message}`, error.stack);
             await (this.prisma as any).document.update({
                 where: { id: documentId },
-                data: { status: 'ERROR' },
+                data: {
+                    status: 'ERROR',
+                    rawContent: error.message?.substring(0, 1000) || 'Erro desconhecido'
+                },
             });
             throw error;
         }
@@ -150,10 +151,13 @@ export class KnowledgeProcessor extends WorkerHost {
 
     /**
      * Extrai texto de um documento baseado no seu sourceType.
+     * ARMAZENAMENTO 100% LOCAL - Sem S3
      */
     private async extractText(document: any): Promise<string> {
         const { sourceType, contentUrl, rawContent } = document;
         const type = sourceType?.toUpperCase();
+
+        this.logger.log(`[ExtractText] Tipo: ${type}, contentUrl: ${contentUrl}, rawContent length: ${rawContent?.length || 0}`);
 
         switch (type) {
             // ── Texto puro ──────────────────────────────────────────────────────
@@ -205,70 +209,158 @@ export class KnowledgeProcessor extends WorkerHost {
                 return src
                     .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
                     .replace(/<[^>]+>/g, ' ')
-                    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'")
+                    .replace(/&/g, '&').replace(/</g, '<').replace(/>/g, '>').replace(/"/g, '"').replace(/'/g, "'")
                     .replace(/\s+/g, ' ').trim();
             }
 
             case 'CSV': {
                 const src = rawContent || (contentUrl ? (await this.getContentBuffer(contentUrl)).toString('utf-8') : '');
-                // Converte CSV para texto legível
                 const lines = src.split('\n').filter(l => l.trim());
                 return lines.join('\n');
             }
 
             // ── Documentos Office ────────────────────────────────────────────────
             case 'PDF': {
-                if (!contentUrl) throw new Error('PDF requer contentUrl');
-                const buffer = await this.getContentBuffer(contentUrl);
-                const pdf = require('pdf-parse');
-                // Lidar com diferentes formatos de exportação (especialmente em builds CJS/ESM mistos)
-                const parseFunc = typeof pdf === 'function' ? pdf : (pdf.PDFParse || pdf.default);
-                if (typeof parseFunc !== 'function') {
-                    throw new Error('Biblioteca pdf-parse não exporta uma função de processamento válida');
+                if (!contentUrl) throw new Error('PDF requer contentUrl (arquivo local)');
+
+                // Verificar se arquivo existe
+                if (!fs.existsSync(contentUrl)) {
+                    throw new Error(`Arquivo PDF não encontrado: ${contentUrl}`);
                 }
-                const pdfData = await parseFunc(buffer);
-                return pdfData.text;
+
+                const buffer = await this.getContentBuffer(contentUrl);
+
+                // Importação robusta do pdf-parse
+                const pdfParse = require('pdf-parse');
+                const parseFunc = typeof pdfParse === 'function'
+                    ? pdfParse
+                    : (typeof pdfParse.default === 'function' ? pdfParse.default : pdfParse.PDFParse);
+
+                if (typeof parseFunc !== 'function') {
+                    throw new Error('pdf-parse: função de parse não encontrada. Verifique a instalação do pacote.');
+                }
+
+                try {
+                    const pdfData = await parseFunc(buffer);
+
+                    if (!pdfData.text || pdfData.text.trim().length === 0) {
+                        throw new Error('PDF parece ser escaneado (sem texto). Use OCR para extrair conteúdo.');
+                    }
+
+                    this.logger.log(`[PDF] Texto extraído: ${pdfData.text.length} caracteres, ${pdfData.numpages || '?'} páginas`);
+                    return pdfData.text;
+                } catch (parseErr: any) {
+                    if (parseErr.message.includes('password') || parseErr.message.includes('encrypted') || parseErr.message.includes('crypt')) {
+                        throw new Error('PDF está protegido por senha. Remova a proteção antes de enviar.');
+                    }
+                    throw parseErr;
+                }
             }
 
             case 'DOCX': {
                 if (!contentUrl) throw new Error('DOCX requer contentUrl');
+
+                // Verificar se arquivo existe
+                if (!fs.existsSync(contentUrl)) {
+                    throw new Error(`Arquivo DOCX não encontrado: ${contentUrl}`);
+                }
+
                 const buffer = await this.getContentBuffer(contentUrl);
                 const mammoth = require('mammoth');
-                const result = await mammoth.extractRawText({ buffer });
-                return result.value;
+
+                try {
+                    const result = await mammoth.extractRawText({ buffer });
+                    if (!result.value || result.value.trim().length === 0) {
+                        this.logger.warn('[DOCX] Arquivo parece estar vazio ou conter apenas imagens');
+                    }
+                    return result.value || '';
+                } catch (extractErr: any) {
+                    throw new Error(`Falha ao extrair texto do DOCX: ${extractErr.message}`);
+                }
             }
 
             case 'XLSX':
             case 'XLS': {
                 if (!contentUrl) throw new Error('XLSX/XLS requer contentUrl');
+
+                // Verificar se arquivo existe
+                if (!fs.existsSync(contentUrl)) {
+                    throw new Error(`Arquivo ${type} não encontrado: ${contentUrl}`);
+                }
+
                 const buffer = await this.getContentBuffer(contentUrl);
                 const XLSX = require('xlsx');
-                const workbook = XLSX.read(buffer, { type: 'buffer' });
-                const parts: string[] = [];
-                for (const sheetName of workbook.SheetNames) {
-                    const sheet = workbook.Sheets[sheetName];
-                    const csv = XLSX.utils.sheet_to_csv(sheet);
-                    parts.push(`=== Planilha: ${sheetName} ===\n${csv}`);
+
+                try {
+                    const workbook = XLSX.read(buffer, { type: 'buffer' });
+                    const parts: string[] = [];
+
+                    for (const sheetName of workbook.SheetNames) {
+                        const sheet = workbook.Sheets[sheetName];
+                        const csv = XLSX.utils.sheet_to_csv(sheet);
+                        parts.push(`=== Planilha: ${sheetName} ===\n${csv}`);
+                    }
+
+                    if (parts.length === 0) {
+                        this.logger.warn('[XLSX] Arquivo não contém planilhas');
+                    }
+
+                    return parts.join('\n\n');
+                } catch (readErr: any) {
+                    throw new Error(`Falha ao ler planilha: ${readErr.message}`);
                 }
-                return parts.join('\n\n');
             }
 
             case 'PPTX': {
                 if (!contentUrl) throw new Error('PPTX requer contentUrl');
+
+                // Verificar se arquivo existe
+                if (!fs.existsSync(contentUrl)) {
+                    throw new Error(`Arquivo PPTX não encontrado: ${contentUrl}`);
+                }
+
                 const buffer = await this.getContentBuffer(contentUrl);
-                return await this.extractPptxText(buffer);
+
+                try {
+                    const text = await this.extractPptxText(buffer);
+                    if (!text || text.trim().length === 0) {
+                        this.logger.warn('[PPTX] Arquivo parece conter apenas imagens');
+                        return '[PPTX sem texto extraível]';
+                    }
+                    return text;
+                } catch (extractErr: any) {
+                    throw new Error(`Falha ao extrair texto do PPTX: ${extractErr.message}`);
+                }
             }
 
             case 'EPUB': {
                 if (!contentUrl) throw new Error('EPUB requer contentUrl');
+
+                // Verificar se arquivo existe
+                if (!fs.existsSync(contentUrl)) {
+                    throw new Error(`Arquivo EPUB não encontrado: ${contentUrl}`);
+                }
+
                 const buffer = await this.getContentBuffer(contentUrl);
-                return await this.extractEpubText(buffer);
+
+                try {
+                    const text = await this.extractEpubText(buffer);
+                    if (!text || text.trim().length === 0) {
+                        throw new Error('EPUB parece estar vazio ou protegido por DRM');
+                    }
+                    return text;
+                } catch (extractErr: any) {
+                    if (extractErr.message.includes('DRM')) {
+                        throw new Error('EPUB está protegido por DRM. Remova a proteção antes de enviar.');
+                    }
+                    throw extractErr;
+                }
             }
 
             // ── HTML / Web ───────────────────────────────────────────────────────
             case 'HTML':
             case 'HTM': {
-                const src = rawContent || (contentUrl ? (await axios.get(contentUrl)).data : '');
+                const src = rawContent || (contentUrl ? (await this.getContentBuffer(contentUrl)).toString('utf-8') : '');
                 return this.extractHtmlText(src);
             }
 
@@ -280,6 +372,7 @@ export class KnowledgeProcessor extends WorkerHost {
                 if (isYouTube) return await this.extractYouTubeTranscript(contentUrl);
                 if (isGitHub) return await this.extractGitHubContent(contentUrl);
 
+                const axios = require('axios');
                 const response = await axios.get(contentUrl, { timeout: 30000 });
                 return this.extractHtmlText(response.data);
             }
@@ -305,6 +398,12 @@ export class KnowledgeProcessor extends WorkerHost {
             case 'WEBM':
             case 'M4A': {
                 if (!contentUrl) throw new Error('AUDIO requer contentUrl');
+
+                // Verificar se arquivo existe
+                if (!fs.existsSync(contentUrl)) {
+                    throw new Error(`Arquivo de áudio não encontrado: ${contentUrl}`);
+                }
+
                 return await this.transcribeAudio(contentUrl);
             }
 
@@ -372,7 +471,10 @@ export class KnowledgeProcessor extends WorkerHost {
             if (text) slideTexts.push(`[Slide ${slideTexts.length + 1}] ${text}`);
         }
 
-        if (slideTexts.length === 0) throw new Error('Nenhum texto encontrado no PPTX');
+        if (slideTexts.length === 0) {
+            this.logger.warn('[PPTX] Nenhum texto encontrado nos slides');
+        }
+
         return slideTexts.join('\n\n');
     }
 
@@ -395,7 +497,10 @@ export class KnowledgeProcessor extends WorkerHost {
             if (text.trim()) texts.push(text);
         }
 
-        if (texts.length === 0) throw new Error('Nenhum texto encontrado no EPUB');
+        if (texts.length === 0) {
+            throw new Error('Nenhum texto encontrado no EPUB (pode estar protegido por DRM)');
+        }
+
         return texts.join('\n\n---\n\n');
     }
 
@@ -448,7 +553,7 @@ export class KnowledgeProcessor extends WorkerHost {
         const videoId = match[1];
 
         const { YoutubeTranscript } = require('youtube-transcript');
-        let transcriptItems: any[];
+        let transcriptItems: any[] = [];
 
         // Tentar idiomas em ordem de preferência
         const langPriority = ['pt', 'pt-BR', 'en'];
@@ -457,7 +562,7 @@ export class KnowledgeProcessor extends WorkerHost {
         for (const lang of langPriority) {
             try {
                 transcriptItems = await YoutubeTranscript.fetchTranscript(videoId, { lang });
-                if (transcriptItems?.length) break; // Achou transcrição
+                if (transcriptItems?.length) break;
             } catch (err) {
                 lastError = err;
             }
@@ -506,7 +611,18 @@ export class KnowledgeProcessor extends WorkerHost {
 
         // Buscar a árvore de arquivos
         const treePath = cleanPath ? `${branch}:${cleanPath}` : branch;
-        const treeResp = await axios.get(`${apiBase}/git/trees/${treePath}?recursive=1`, { headers, timeout: 15000 });
+        const axios = require('axios');
+
+        let treeResp: any;
+        try {
+            treeResp = await axios.get(`${apiBase}/git/trees/${treePath}?recursive=1`, { headers, timeout: 15000 });
+        } catch (treeErr: any) {
+            if (treeErr.response?.status === 403) {
+                throw new Error('Rate limit do GitHub atingido. Configure GITHUB_TOKEN para aumentar o limite.');
+            }
+            throw treeErr;
+        }
+
         const tree: any[] = treeResp.data.tree || [];
 
         const textFiles = tree
@@ -530,16 +646,29 @@ export class KnowledgeProcessor extends WorkerHost {
     }
 
     /**
-     * Obtém buffer de conteúdo a partir de URL ou path local.
+     * Obtém buffer de conteúdo a partir de path local.
+     * ARMAZENAMENTO 100% LOCAL - Sem S3
      */
     private async getContentBuffer(contentUrl: string): Promise<Buffer> {
+        // Verificar se é path local
+        if (fs.existsSync(contentUrl)) {
+            try {
+                const stats = fs.statSync(contentUrl);
+                this.logger.log(`[getContentBuffer] Lendo arquivo local: ${contentUrl} (${stats.size} bytes)`);
+                return fs.readFileSync(contentUrl);
+            } catch (readErr: any) {
+                this.logger.error(`[getContentBuffer] Erro ao ler arquivo: ${readErr.message}`);
+                throw new Error(`Falha ao ler arquivo local: ${readErr.message}`);
+            }
+        }
+
+        // Fallback para URL HTTP (não recomendado, mas mantido para compatibilidade)
         if (contentUrl.startsWith('http')) {
+            const axios = require('axios');
             const response = await axios.get(contentUrl, { responseType: 'arraybuffer', timeout: 60000 });
             return Buffer.from(response.data);
         }
-        if (fs.existsSync(contentUrl)) {
-            return fs.readFileSync(contentUrl);
-        }
+
         throw new Error(`Arquivo não encontrado: ${contentUrl}`);
     }
 }
