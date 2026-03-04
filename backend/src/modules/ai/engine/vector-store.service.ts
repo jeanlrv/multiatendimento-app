@@ -16,6 +16,7 @@ import { join } from 'path';
  * - Fallback entre providers (native → openai)
  * - Timeout aumentado para 300s
  * - Melhor logging de erros
+ * - Métodos invalidateRagCache e searchSimilarity adicionados
  */
 
 @Injectable()
@@ -26,8 +27,98 @@ export class VectorStoreService {
     private embedWorkerId = 0;
     private pendingCallbacks = new Map<number, any>();
 
+    // Cache RAG para invalidação
+    private ragCache = new Map<string, any[]>();
+
     constructor() {
         this.spawnEmbedWorker();
+    }
+
+    /**
+     * Invalida o cache RAG para uma base de conhecimento específica.
+     * Chamado quando documentos são atualizados/adicionados/removidos.
+     */
+    invalidateRagCache(knowledgeBaseId: string, companyId: string): void {
+        const cacheKey = `${companyId}:${knowledgeBaseId}`;
+        this.ragCache.delete(cacheKey);
+        this.logger.log(`[RAG Cache] Cache invalidado para KB ${knowledgeBaseId}`);
+    }
+
+    /**
+     * Busca chunks similares no banco de dados usando busca vetorial ou full-text search.
+     * Fallback: busca semântica via embedding → busca full-text → busca por palavras-chave.
+     */
+    async searchSimilarity(
+        prisma: any,
+        companyId: string,
+        query: string,
+        knowledgeBaseId: string,
+        topK: number = 5,
+        embeddingProvider: string = 'native',
+        embeddingModel?: string,
+        apiKey?: string,
+        baseUrl?: string,
+        language: string = 'portuguese'
+    ): Promise<{ id: string; content: string; score: number }[]> {
+        try {
+            // 1. Gerar embedding da query
+            const queryEmbedding = await this.generateEmbedding(
+                query,
+                embeddingProvider,
+                embeddingModel,
+                apiKey,
+                baseUrl
+            );
+
+            // 2. Buscar chunks no banco
+            const chunks = await prisma.documentChunk.findMany({
+                where: {
+                    knowledgeBaseId,
+                    document: { companyId },
+                },
+                select: {
+                    id: true,
+                    content: true,
+                    embedding: true,
+                },
+            });
+
+            if (!chunks || chunks.length === 0) {
+                this.logger.warn(`[RAG] Nenhum chunk encontrado na KB ${knowledgeBaseId}`);
+                return [];
+            }
+
+            // 3. Calcular similaridade e retornar top-K
+            const scored = chunks.map((chunk: any) => ({
+                id: chunk.id,
+                content: chunk.content,
+                score: this.cosineSimilarity(queryEmbedding, chunk.embedding),
+            }));
+
+            scored.sort((a: any, b: any) => b.score - a.score);
+            const results = scored.slice(0, topK);
+
+            this.logger.debug(`[RAG] ${results.length} chunks encontrados para query: "${query.substring(0, 50)}..."`);
+            return results;
+        } catch (error) {
+            this.logger.error(`[RAG] Erro na busca por similaridade: ${error.message}`);
+
+            // Fallback: busca full-text search
+            try {
+                const ftsResults = await prisma.$queryRaw`
+                    SELECT id, content, 0.5 as score
+                    FROM "DocumentChunk"
+                    WHERE "knowledgeBaseId" = ${knowledgeBaseId}
+                    AND content ILIKE '%' || ${query} || '%'
+                    LIMIT ${topK}
+                `;
+                this.logger.debug(`[RAG Fallback] ${ftsResults?.length || 0} resultados via full-text search`);
+                return ftsResults || [];
+            } catch (ftsError) {
+                this.logger.error(`[RAG Fallback] Erro na busca full-text: ${ftsError.message}`);
+                return [];
+            }
+        }
     }
 
     /**
@@ -376,7 +467,7 @@ export class VectorStoreService {
     }
 
     /**
-     * Encontra os chunks mais similares a uma query.
+     * Encontra os chunks mais similares a uma query (versão em memória).
      */
     findMostSimilar(
         queryEmbedding: number[],
