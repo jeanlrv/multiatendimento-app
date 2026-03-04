@@ -50,7 +50,11 @@ export class EmbedController {
             return res.status(404).send('console.error("[KSZap] Agent not found or disabled.");');
         }
 
-        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+        const frontendUrl = process.env.FRONTEND_URL;
+        if (!frontendUrl) {
+            return res.status(500).send('console.error("[KSZap] FRONTEND_URL não configurado no servidor. Contate o administrador.");');
+        }
+
         const positionProp = config.position === 'bottom-left' ? 'left: 20px;' : 'right: 20px;';
 
         // Escape values safe for JS string injection

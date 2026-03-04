@@ -259,16 +259,16 @@ export class AIService {
         return grouped;
     }
 
-    /** FASE 4 - Determina o número máximo de chunks RAG com base na complexidade da mensagem */
     private allocateTokenBudget(message: string): { chunkLimit: number } {
         const charCount = message.length;
+        // Aumentado o budget para garantir mais contexto mesmo em perguntas curtas
         if (charCount > 200 || message.split(' ').length > 40) {
-            return { chunkLimit: 10 };
+            return { chunkLimit: 15 }; // Aumentado de 10 para 15
         }
         if (charCount > 50) {
-            return { chunkLimit: 5 };
+            return { chunkLimit: 8 }; // Aumentado de 5 para 8
         }
-        return { chunkLimit: 2 };
+        return { chunkLimit: 5 }; // Aumentado de 2 para 5
     }
 
     /** Guarda contra overflow de context window: trunca o contexto RAG se necessário */
@@ -482,9 +482,16 @@ export class AIService {
             context = this.guardContextOverflow(agent.prompt || '', context, history, message, finalModelId);
 
             // Injeta resumo da conversa no system prompt (se houver)
-            const systemPrompt = conversationSummary
+            let systemPrompt = conversationSummary
                 ? `${agent.prompt || 'Você é um assistente virtual prestativo.'}\n\n[Resumo da conversa até agora]: ${conversationSummary}`
                 : (agent.prompt || 'Você é um assistente virtual prestativo.');
+
+            // Adiciona instrução de grounding (RAG) se houver contexto
+            if (context) {
+                systemPrompt += `\n\n[INSTRUÇÃO IMPORTANTE]: Use APENAS as informações do CONTEXTO abaixo para responder à pergunta do usuário. Se a informação não estiver no contexto, diga que não sabe ou peça mais detalhes. Não invente informações fora do contexto fornecido.\n\n[CONTEXTO DA BASE DE CONHECIMENTO]:\n${context}`;
+                // Limpa o contexto da variável enviada diretamente ao llmService para evitar duplicação ou desordem
+                context = '';
+            }
 
             const response = await this.llmService.generateResponse(
                 finalModelId,

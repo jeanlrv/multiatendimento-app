@@ -48,8 +48,8 @@ export class KnowledgeProcessor extends WorkerHost {
 
             // 4. Chunking
             const splitter = new RecursiveCharacterTextSplitter({
-                chunkSize: 1000,
-                chunkOverlap: 200,
+                chunkSize: 1500, // Aumentado de 1000 para 1500
+                chunkOverlap: 300, // Aumentado de 200 para 300
             });
             const chunks = await splitter.splitText(text);
 
@@ -439,21 +439,38 @@ export class KnowledgeProcessor extends WorkerHost {
 
         // Extrair videoId da URL
         const match = url.match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
-        if (!match) throw new Error('URL do YouTube inválida');
+        if (!match) throw new Error('URL do YouTube inválida. Use formato: https://youtube.com/watch?v=ID ou https://youtu.be/ID');
         const videoId = match[1];
 
         const { YoutubeTranscript } = require('youtube-transcript');
         let transcriptItems: any[];
 
-        try {
-            transcriptItems = await YoutubeTranscript.fetchTranscript(videoId, { lang: 'pt' });
-        } catch {
-            // Tentar sem preferência de idioma
-            transcriptItems = await YoutubeTranscript.fetchTranscript(videoId);
+        // Tentar idiomas em ordem de preferência
+        const langPriority = ['pt', 'pt-BR', 'en'];
+        let lastError: Error | null = null;
+
+        for (const lang of langPriority) {
+            try {
+                transcriptItems = await YoutubeTranscript.fetchTranscript(videoId, { lang });
+                if (transcriptItems?.length) break; // Achou transcrição
+            } catch (err) {
+                lastError = err;
+            }
+        }
+
+        // Fallback sem preferência de idioma
+        if (!transcriptItems?.length) {
+            try {
+                transcriptItems = await YoutubeTranscript.fetchTranscript(videoId);
+            } catch (err) {
+                lastError = err;
+            }
         }
 
         if (!transcriptItems?.length) {
-            throw new Error('Este vídeo do YouTube não possui transcrição disponível');
+            const baseMsg = 'Este vídeo do YouTube não possui transcrição/legenda disponível';
+            const hint = lastError?.message ? ` (${lastError.message})` : '';
+            throw new Error(`${baseMsg}${hint}. Certifique-se de que o vídeo tem legendas automáticas ou manuais ativadas.`);
         }
 
         const text = transcriptItems.map((item: any) => item.text).join(' ');

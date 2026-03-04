@@ -95,7 +95,7 @@ export class EmbedService implements OnModuleDestroy {
             throw new NotFoundException('Agente de IA não encontrado ou inativo.');
         }
 
-        if (origin && !this.validateDomain(origin, agent.embedAllowedDomains)) {
+        if (origin && agent.embedAllowedDomains?.length > 0 && !this.validateDomain(origin, agent.embedAllowedDomains)) {
             throw new HttpException('Domínio não autorizado.', HttpStatus.FORBIDDEN);
         }
 
@@ -124,7 +124,7 @@ export class EmbedService implements OnModuleDestroy {
             throw new NotFoundException('Agente de IA indisponível.');
         }
 
-        if (origin && !this.validateDomain(origin, agent.embedAllowedDomains)) {
+        if (origin && agent.embedAllowedDomains?.length > 0 && !this.validateDomain(origin, agent.embedAllowedDomains)) {
             throw new HttpException('Domínio não autorizado.', HttpStatus.FORBIDDEN);
         }
 
@@ -191,7 +191,7 @@ export class EmbedService implements OnModuleDestroy {
             throw new NotFoundException('Agente de IA indisponível.');
         }
 
-        if (origin && !this.validateDomain(origin, agent.embedAllowedDomains)) {
+        if (origin && agent.embedAllowedDomains?.length > 0 && !this.validateDomain(origin, agent.embedAllowedDomains)) {
             throw new HttpException('Domínio não autorizado.', HttpStatus.FORBIDDEN);
         }
 

@@ -32,6 +32,18 @@ const nextConfig = {
         workerThreads: false,
     },
 
+    async headers() {
+        return [
+            {
+                source: "/embed/:path*",
+                headers: [
+                    { key: "X-Frame-Options", value: "ALLOWALL" },
+                    { key: "Content-Security-Policy", value: "frame-ancestors *" }
+                ]
+            }
+        ];
+    },
+
     async rewrites() {
         // Railway: comunicação interna é HTTP. BACKEND_INTERNAL_URL tem prioridade.
         const BACKEND_URL = process.env.BACKEND_INTERNAL_URL || process.env.BACKEND_URL || 'http://localhost:3002';

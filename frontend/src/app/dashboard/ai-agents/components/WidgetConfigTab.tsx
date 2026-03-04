@@ -19,11 +19,11 @@ export default function WidgetConfigTab({ agent, onChange }: WidgetConfigTabProp
     const [logoError, setLogoError] = useState(false)
 
     const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002/api'
-    const frontendUrl = typeof window !== 'undefined' ? window.location.origin : ''
+    const scriptBaseUrl = backendUrl.replace('/api', '') // Ex: https://backend.railway.app
     const isAgentSaved = !!agent.id && !!agent.embedId
 
     const embedScript = isAgentSaved
-        ? `<script src="${backendUrl}/embed/${agent.embedId}/script.js" defer></script>`
+        ? `<script src="${scriptBaseUrl}/api/embed/${agent.embedId}/script.js" defer></script>`
         : ''
 
     const brandColor = agent.embedBrandColor || '#4F46E5'

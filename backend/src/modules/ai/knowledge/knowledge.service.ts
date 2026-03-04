@@ -135,52 +135,80 @@ export class KnowledgeService {
         let contentUrl: string | null = null;
         let rawContent: string | null = null;
 
+        // Tipos binários que EXIGEM contentUrl (não podem ser convertidos para texto UTF-8)
+        const BINARY_SOURCE_TYPES = new Set(['PDF', 'DOCX', 'XLSX', 'XLS', 'PPTX', 'EPUB', 'AUDIO', 'MP3', 'WAV', 'MP4', 'OGG', 'WEBM', 'M4A']);
+        const isBinaryType = BINARY_SOURCE_TYPES.has(sourceType.toUpperCase());
+
         // Tentar upload para S3 (usando buffer se disponível, senão path em disco)
         try {
             if (file.buffer && file.buffer.length > 0) {
-                // Multer memoryStorage: arquivo está no buffer em memória
                 contentUrl = await this.s3Service.uploadBuffer(file.buffer, file.originalname, contentType);
             } else if (file.path) {
-                // Multer diskStorage: arquivo está no disco
                 contentUrl = await this.s3Service.uploadFile(file.path, file.originalname, contentType);
             } else {
                 throw new Error('Arquivo sem conteúdo (buffer e path ambos ausentes)');
             }
             this.logger.log(`Arquivo enviado ao S3: ${file.originalname}`);
         } catch (error) {
-            this.logger.warn(`Falha ao fazer upload para S3: ${error.message}. Lendo conteúdo direto.`);
+            this.logger.warn(`Falha ao fazer upload para S3: ${error.message}. Usando armazenamento local.`);
 
-            // Usar buffer de memória diretamente (memoryStorage do Multer)
-            if (file.buffer && file.buffer.length > 0) {
-                rawContent = file.buffer.toString('utf-8').replace(/\0/g, '').substring(0, 500000);
-                this.logger.log(`Conteúdo lido do buffer em memória: ${file.originalname} (${file.buffer.length} bytes)`);
-            } else if (file.path) {
-                // Fallback: ler do disco (diskStorage com os.tmpdir())
+            if (isBinaryType) {
+                // Para arquivos binários: salvar no storage local para preservar integridade do arquivo
                 const fs = require('fs');
+                const path = require('path');
+                const { randomUUID } = require('crypto');
+
+                const storageDir = path.join(process.cwd(), 'storage', 'uploads');
+                if (!fs.existsSync(storageDir)) {
+                    fs.mkdirSync(storageDir, { recursive: true });
+                }
+
+                const safeFilename = `${randomUUID()}-${file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+                const localPath = path.join(storageDir, safeFilename);
+
                 try {
-                    const MAX_READ_BYTES = 500000;
-                    const fd = fs.openSync(file.path, 'r');
-                    const stat = fs.statSync(file.path);
-                    const bytesToRead = Math.min(stat.size, MAX_READ_BYTES);
-                    if (bytesToRead > 0) {
-                        const buffer = Buffer.alloc(bytesToRead);
-                        fs.readSync(fd, buffer, 0, bytesToRead, 0);
-                        rawContent = buffer.toString('utf-8').replace(/\0/g, '');
+                    if (file.buffer && file.buffer.length > 0) {
+                        fs.writeFileSync(localPath, file.buffer);
+                        this.logger.log(`Arquivo binário salvo localmente: ${localPath} (${file.buffer.length} bytes)`);
+                    } else if (file.path) {
+                        fs.copyFileSync(file.path, localPath);
+                        this.logger.log(`Arquivo binário copiado para storage local: ${localPath}`);
                     } else {
-                        rawContent = '';
+                        throw new Error('Arquivo sem conteúdo disponível para salvar');
                     }
-                    fs.closeSync(fd);
-                    this.logger.log(`Conteúdo lido do disco: ${file.path} (${file.size} bytes)`);
-                } catch (readErr) {
-                    this.logger.error(`Falha ao ler arquivo do disco: ${readErr.message}`);
+                    contentUrl = localPath;
+                } catch (saveErr) {
+                    this.logger.error(`Falha ao salvar arquivo binário localmente: ${saveErr.message}`);
+                    throw new Error(`Não foi possível processar o arquivo ${file.originalname}: ${saveErr.message}`);
                 }
             } else {
-                this.logger.error('Arquivo não tem buffer nem path disponível - não foi possível extrair conteúdo');
+                // Para arquivos de texto: ler conteúdo diretamente
+                if (file.buffer && file.buffer.length > 0) {
+                    rawContent = file.buffer.toString('utf-8').replace(/\0/g, '').substring(0, 500000);
+                    this.logger.log(`Conteúdo de texto lido do buffer: ${file.originalname} (${file.buffer.length} bytes)`);
+                } else if (file.path) {
+                    const fs = require('fs');
+                    try {
+                        const MAX_READ_BYTES = 500000;
+                        const stat = fs.statSync(file.path);
+                        const bytesToRead = Math.min(stat.size, MAX_READ_BYTES);
+                        const buffer = Buffer.alloc(bytesToRead);
+                        const fd = fs.openSync(file.path, 'r');
+                        fs.readSync(fd, buffer, 0, bytesToRead, 0);
+                        fs.closeSync(fd);
+                        rawContent = buffer.toString('utf-8').replace(/\0/g, '');
+                        this.logger.log(`Conteúdo de texto lido do disco: ${file.path} (${stat.size} bytes)`);
+                    } catch (readErr) {
+                        this.logger.error(`Falha ao ler arquivo de texto: ${readErr.message}`);
+                    }
+                } else {
+                    this.logger.error('Arquivo sem buffer ou path – não foi possível extrair conteúdo');
+                }
             }
         }
 
-        // Limpar arquivo temporário do disco se existir
-        if (file.path) {
+        // Limpar arquivo temporário do disco (apenas se não foi copiado para o storage local)
+        if (file.path && (!contentUrl || contentUrl !== file.path)) {
             try {
                 const fs = require('fs');
                 if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
@@ -191,8 +219,8 @@ export class KnowledgeService {
             data: {
                 title: file.originalname,
                 sourceType,
-                contentUrl,    // URL S3 ou null
-                rawContent,    // Conteúdo lido em memória ou do disco
+                contentUrl,    // URL S3, path local ou null
+                rawContent,    // Conteúdo texto (apenas para tipos não-binários sem S3)
                 knowledgeBaseId: baseId,
                 status: 'PENDING',
             },
