@@ -17,7 +17,8 @@ COPY prisma ./prisma
 COPY . .
 
 # Instalar sentence-transformers via pip
-RUN pip install --no-cache-dir sentence-transformers
+# --break-system-packages para Alpine Linux (PEP 668)
+RUN pip install --no-cache-dir --break-system-packages sentence-transformers
 
 # Gerar Prisma Client (forçando versão 6)
 RUN npx prisma@6 generate
@@ -35,7 +36,8 @@ ENV NODE_OPTIONS="--max-old-space-size=6144"
 RUN apk add --no-cache openssl libc6-compat curl netcat-openbsd python3 py3-pip
 
 # Instalar sentence-transformers via pip (anteriormente no builder para cache)
-RUN pip install --no-cache-dir sentence-transformers
+# --break-system-packages para Alpine Linux (PEP 668)
+RUN pip install --no-cache-dir --break-system-packages sentence-transformers
 
 WORKDIR /app
 
