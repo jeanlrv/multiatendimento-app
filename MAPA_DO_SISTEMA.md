@@ -45,6 +45,22 @@ Este documento fornece uma visão técnica e funcional completa de todos os mód
 *   **Conversation History**: Persistência de chats do Playground IA.
 *   **Scheduling**: Sistema de filas para tarefas agendadas no futuro.
 
+### [Embedding Providers - RAG Core]
+O sistema suporta 4 providers de embedding com fallback automático:
+
+| Provider | Caminho | Modelo Padrão | Dimensões | Custo |
+|----------|---------|---------------|-----------|-------|
+| **Python Embed** | `backend/embedding.py` (subprocesso) | `paraphrase-MiniLM-L6-v2` | 384 | 🆓 Free |
+| **Native (ONNX)** | `@xenova/transformers` worker | `Xenova/bge-micro-v2` | 384 | 🆓 Free |
+| **OpenAI** | API `text-embedding-3-small` | `text-embedding-3-small` | 1536 | ~$0.0001/1K |
+| **Ollama** | Local `http://localhost:11434` | `nomic-embed-text` | 768 | 🆓 Free |
+
+**Arquitetura do Provider Python:**
+- Script rodando no mesmo container Docker (sem serviço extra)
+- Carregamento do modelo na primeira execução (cache em memória)
+-Falha rápida com fallback automático para outros providers
+- Timeout: 60s por embedding
+
 ### [Frontend]
 *   **Automações (`/dashboard/workflows`)**: Builder visual de fluxos.
 *   **AI Hub (`/dashboard/ai-hub`)**: Gestão de Bases de Conhecimento, Agentes e Métricas de uso.

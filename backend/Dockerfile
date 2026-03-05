@@ -1,8 +1,8 @@
 # Stage 1 - Build
 FROM node:20-alpine AS builder
 
-# Instalar dependências necessárias para o Prisma
-RUN apk add --no-cache openssl libc6-compat
+# Instalar dependências necessárias para o Prisma e Python
+RUN apk add --no-cache openssl libc6-compat python3 py3-pip py3-setuptools
 
 WORKDIR /app
 
@@ -16,6 +16,9 @@ RUN npm install --legacy-peer-deps
 COPY prisma ./prisma
 COPY . .
 
+# Instalar sentence-transformers via pip
+RUN pip install --no-cache-dir sentence-transformers
+
 # Gerar Prisma Client (forçando versão 6)
 RUN npx prisma@6 generate
 
@@ -28,8 +31,11 @@ FROM node:20-alpine
 # Definir limite de memória elevado (6GB) para o plano Hobby do Railway
 ENV NODE_OPTIONS="--max-old-space-size=6144"
 
-# Instalar dependências de runtime
-RUN apk add --no-cache openssl libc6-compat curl netcat-openbsd
+# Instalar dependências de runtime (Python + pip para embed.py)
+RUN apk add --no-cache openssl libc6-compat curl netcat-openbsd python3 py3-pip
+
+# Instalar sentence-transformers via pip (anteriormente no builder para cache)
+RUN pip install --no-cache-dir sentence-transformers
 
 WORKDIR /app
 

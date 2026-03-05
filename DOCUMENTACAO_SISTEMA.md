@@ -28,12 +28,56 @@ Interface "Pixel Perfect" projetada para alta produtividade dos atendentes.
 
 ## 🤖 3. IA Hub Nativo (LangChain)
 O centro de inteligência do KSZap, operando de forma integrada e multimodal.
-- **RAG Avançado**: Agentes de IA que respondem com base em documentos (PDF, DOCX, TXT) e URLs, com armazenamento híbrido (Local/S3).
-- **Vision (Multimodal)**: Análise e descrição de imagens enviadas no chat (GPT-4o/Gemini).
-- **Transcrição de Áudio**: Conversão automática de mensagens de voz recebidas em texto (Speech-to-Text).
-- **Playground de IA**: Ambiente de teste para agentes com histórico de conversas persistente.
-- **Sentiment & Transcription**: Análise de sentimento em tempo real e score automático por interação.
-- **Copilot de Atendimento**: Sugestões de respostas inteligentes baseadas no contexto da base de conhecimento.
+
+### 3.1 RAG Avançado com Embeddings Multi-Provider
+Agentes de IA que respondem com base em documentos (PDF, DOCX, TXT) e URLs, com armazenamento híbrido (Local/S3).
+
+**Providers de Embedding Suportados:**
+
+| Provider | Abordagem | Custo | Uso Recomendado |
+|----------|-----------|-------|-----------------|
+| **Python Embed** (padrão) | Script Python com sentence-transformers | 🆓 Free | Railway, Docker self-hosted |
+| **Native (ONNX)** | Worker isolado com @xenova/transformers | 🆓 Free | Ambientes WASM compatíveis |
+| **OpenAI** | API text-embedding-3-small | 💰 Baixo |Produção com alta performance |
+| **Ollama** | Embedding local via Ollama | 🆓 Free | Development/local |
+
+**Fallback Automático:**
+1. Provider configured in database
+2. Fallback para provider alternativo se falhar
+3. OpenAI (se API key configurada)
+4. Documento salvo sem vetorização (apenas busca full-text)
+
+**Exemplo de Configuração:**
+```typescript
+// No VectorStoreService
+const embeddings = await this.generateEmbeddingBatch(
+    chunkedTexts,
+    'python-embed',  // ou 'native', 'openai', 'ollama'
+    'paraphrase-MiniLM-L6-v2'
+);
+```
+
+**Embedding via Python (backend/embedding.py):**
+```python
+# Script rodando no mesmo container Docker
+python3 embedding.py "texto do chunk"
+# Output: {"success": true, "embedding": [384 floats]}
+```
+
+### 3.2 Vision (Multimodal)
+Análise e descrição de imagens enviadas no chat (GPT-4o/Gemini).
+
+### 3.3 Transcrição de Áudio
+Conversão automática de mensagens de voz recebidas em texto (Speech-to-Text).
+
+### 3.4 Playground de IA
+Ambiente de teste para agentes com histórico de conversas persistente.
+
+### 3.5 Sentiment & Transcription
+Análise de sentimento em tempo real e score automático por interação.
+
+### 3.6 Copilot de Atendimento
+Sugestões de respostas inteligentes baseadas no contexto da base de conhecimento.
 
 ---
 

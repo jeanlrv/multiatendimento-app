@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { spawn, ChildProcess } from 'child_process';
+import { spawn, ChildProcess, execFile } from 'child_process';
 import { join } from 'path';
+import { promises as fs } from 'fs';
 
 /**
  * VectorStoreService
@@ -8,12 +9,13 @@ import { join } from 'path';
  * Serviço responsável por gerar e gerenciar embeddings para busca semântica.
  * Suporta múltiplos providers:
  * - 'native': Embedding local via @xenova/transformers (worker isolado)
+ * - 'python-embed': Embedding via Python com sentence-transformers (alternativa ao ONNX)
  * - 'openai': Embedding via API OpenAI (text-embedding-3-small, etc)
  * - 'ollama': Embedding via Ollama local (nomic-embed-text, mxbai-embed-large, etc)
  *
  * CORREÇÕES APLICADAS:
  * - Retry automático com backoff exponencial
- * - Fallback entre providers (native → openai)
+ * - Fallback entre providers (native → python-embed → openai)
  * - Timeout aumentado para 300s
  * - Melhor logging de erros
  * - Métodos invalidateRagCache e searchSimilarity adicionados
@@ -274,6 +276,10 @@ export class VectorStoreService {
             return this.embedWithOllama(text, model || 'nomic-embed-text', baseUrl);
         }
 
+        if (provider === 'python-embed') {
+            return this.embedWithPython(text, model || 'paraphrase-MiniLM-L6-v2');
+        }
+
         // Provider nativo (padrão) - retorna array simples
         const result = await this.embedWithNative(text, model || 'Xenova/bge-micro-v2');
         return result;
@@ -295,6 +301,10 @@ export class VectorStoreService {
 
         if (provider === 'ollama') {
             return this.embedBatchWithOllama(texts, model || 'nomic-embed-text', baseUrl);
+        }
+
+        if (provider === 'python-embed') {
+            return this.embedBatchWithPython(texts, model || 'paraphrase-MiniLM-L6-v2');
         }
 
         // Provider nativo (padrão) - retorna array de arrays
@@ -373,6 +383,19 @@ export class VectorStoreService {
             this.embedWorkerReady = false;
             this.logger.warn(`[EmbedWorker #${currentId}] Worker saiu com código ${code}`);
 
+            // Rejeitar IMEDIATAMENTE todas as callbacks pendentes
+            // Sem isso, o job de processamento fica travado até o timeout (300s)
+            if (this.pendingCallbacks.size > 0) {
+                this.logger.warn(`[EmbedWorker #${currentId}] Rejeitando ${this.pendingCallbacks.size} callback(s) pendente(s) após crash do worker`);
+                const errorMsg = `Worker de embedding finalizou inesperadamente (código: ${code}). ` +
+                    'O documento será salvo sem vetorização (apenas busca por texto).';
+                for (const [id, pending] of this.pendingCallbacks.entries()) {
+                    clearTimeout(pending.timeout);
+                    pending.reject(new Error(errorMsg));
+                    this.pendingCallbacks.delete(id);
+                }
+            }
+
             // Restart automático após 2s
             setTimeout(() => this.spawnEmbedWorker(), 2000);
         });
@@ -390,7 +413,7 @@ export class VectorStoreService {
             }
 
             const id = ++this.embedWorkerId;
-            const timeoutMs = 300_000; // 300 segundos
+            const timeoutMs = 60_000; // 60 segundos — falha rápida se o worker travar
 
             const timeout = setTimeout(() => {
                 this.pendingCallbacks.delete(id);
@@ -410,7 +433,7 @@ export class VectorStoreService {
 
         return new Promise((resolve, reject) => {
             const id = ++this.embedWorkerId;
-            const timeoutMs = 300_000; // 300 segundos
+            const timeoutMs = 60_000; // 60 segundos — falha rápida se o worker travar
 
             const timeout = setTimeout(() => {
                 this.pendingCallbacks.delete(id);
@@ -487,6 +510,73 @@ export class VectorStoreService {
             embeddings.push(emb);
         }
         return embeddings;
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Provider: Python (sentence-transformers via subprocesso)
+    // ──────────────────────────────────────────────────────────────────────────
+
+    private async embedWithPython(text: string, model: string): Promise<number[]> {
+        const pythonPath = process.env.PYTHON_PATH || 'python3';
+        const scriptPath = join(process.cwd(), 'backend', 'embedding.py');
+
+        return new Promise((resolve, reject) => {
+            // Verificar se o script existe
+            fs.access(scriptPath, fs.constants.R_OK).then(() => {
+                // Executar o script Python com o texto como argumento
+                execFile(pythonPath, [scriptPath, text], {
+                    timeout: 60000, // 60 segundos
+                    maxBuffer: 1024 * 1024 * 10, // 10MB buffer
+                }, (error, stdout, stderr) => {
+                    if (error) {
+                        this.logger.warn(`[Python Embed] Erro ao executar embedding: ${error.message}`);
+                        // Se falhar, tentar Onnx como fallback
+                        if (stdout) {
+                            this.logger.debug(`[Python Embed] stdout: ${stdout}`);
+                        }
+                        if (stderr) {
+                            this.logger.debug(`[Python Embed] stderr: ${stderr}`);
+                        }
+                        return reject(new Error(`Falha ao gerar embedding via Python: ${error.message}`));
+                    }
+
+                    try {
+                        const result = JSON.parse(stdout);
+                        if (result.success && result.embedding) {
+                            resolve(result.embedding);
+                        } else {
+                            reject(new Error(`Python embedding falhou: ${result.error || 'Resposta inválida'}`));
+                        }
+                    } catch (parseError) {
+                        this.logger.error(`[Python Embed] Erro ao parsear resposta JSON: ${parseError.message}`);
+                        reject(new Error(`Falha ao parsear resposta do embedding Python: ${parseError.message}`));
+                    }
+                });
+            }).catch(() => {
+                this.logger.warn(`[Python Embed] Script não encontrado: ${scriptPath}. Tentando ONNX.`);
+                reject(new Error(`Python embedding script não encontrado. Verifique se Python e sentence-transformers estão instalados.`));
+            });
+        });
+    }
+
+    private async embedBatchWithPython(texts: string[], model: string): Promise<number[][]> {
+        const BATCH_SIZE = 10; // Python é mais lento, processar em lotes menores
+        const allEmbeddings: number[][] = [];
+
+        for (let i = 0; i < texts.length; i += BATCH_SIZE) {
+            const batch = texts.slice(i, i + BATCH_SIZE);
+            const batchEmbeddings = await Promise.all(
+                batch.map(text => this.embedWithPython(text, model))
+            );
+            allEmbeddings.push(...batchEmbeddings);
+
+            // Pequeno delay entre lotes para não sobrecarregar
+            if (i + BATCH_SIZE < texts.length) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+        }
+
+        return allEmbeddings;
     }
 
     // ──────────────────────────────────────────────────────────────────────────

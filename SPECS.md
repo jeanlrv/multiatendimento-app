@@ -46,9 +46,42 @@ O sistema implementa múltiplas camadas de proteção:
 
 Diferente de sistemas baseados em APIs externas, o KSZap implementa um Hub nativo:
 1. **LLM Factory**: Troca dinâmica de modelos (ex: GPT-4o para Vision, Groq para velocidade).
-2. **Embedding Cache**: Sistema que evita re-processar chunks idênticos, reduzindo custos.
+2. **Embedding Providers Múltiplos**: Suporte para Python, ONNX, OpenAI e Ollama com fallback automático.
 3. **Async Processing**: Uploads de arquivos entram na fila BullMQ; o status é notificado via WebSocket quando concluído.
 4. **Multimodal**: Processamento de `IMAGE` e `TEXT` integrado no mesmo pipeline de chat.
+
+### 4.1 Providers de Embedding
+
+O sistema suporta 4 providers de embedding com fallback automático:
+
+| Provider | Caminho | Modelo Padrão | Dimensões | Custo |
+|----------|---------|---------------|-----------|-------|
+| **Python Embed** | `backend/embedding.py` | `paraphrase-MiniLM-L6-v2` | 384 | 🆓 Free |
+| **Native** | `@xenova/transformers` via worker | `Xenova/bge-micro-v2` | 384 | 🆓 Free |
+| **OpenAI** | API `text-embedding-3-small` | `text-embedding-3-small` | 1536 | ~$0.0001/1K |
+| **Ollama** | Local `http://localhost:11434` | `nomic-embed-text` | 768 | 🆓 Free |
+
+**Fallback Automático:**
+1. Provider primário configurado no banco (via UI)
+2. Se falhar, tenta fallback pré-configurado
+3. Se OpenAI API key estiver configurada, usa fallback para OpenAI
+4. Documento salvo sem vetorização (apenas FTS - Full Text Search)
+
+**Integração com VectorStoreService:**
+```typescript
+// Exemplo de uso no VectorStoreService
+const embeddings = await this.generateEmbeddingBatch(
+    texts,
+    'python-embed',  // ou 'native', 'openai', 'ollama'
+    'paraphrase-MiniLM-L6-v2'
+);
+```
+
+**Embeddings do Backend Embedding.py:**
+- Script Python chamado via `child_process.execFile`
+- Carrega modelo na primeira execução (cache em memória)
+- Output: JSON `{ success: boolean, embedding: number[] }`
+- Timeout: 60s por embedding
 
 ---
 

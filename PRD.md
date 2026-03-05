@@ -67,6 +67,33 @@ O sistema evoluiu para um hub nativo de IA (LangChain), eliminando dependências
 - **Dashboards de IA**: Monitoramento de tokens consumidos por empresa, agente e modelo em tempo real.
 - **AI Rate Limiting**: Limites de segurança (tokens/hora, tokens/dia) configuráveis por tenant.
 
+### 6.1 Embeddings (RAG)
+
+O sistema suporta múltiplos providers de embedding, com fallback automático para garantir alta disponibilidade:
+
+| Provider | Descrição | Custo | Uso Recomendado |
+|----------|-----------|-------|-----------------|
+| **Python Embed** | Embedding local via Python + sentence-transformers (paraphrase-MiniLM-L6-v2) | 🆓 Free |.defaults, Railway, Docker self-hosted |
+| **Native (ONNX)** | Embedding via @xenova/transformers (Xenova/bge-micro-v2) | 🆓 Free | Ambientes com suporte a WASM |
+| **OpenAI** | Embedding via API OpenAI (text-embedding-3-small, 3 dimensions) | 💰 Baixo | Produção com alta performance |
+| **Ollama** | Embedding local via Ollama (nomic-embed-text) | 🆓 Free | Development/local |
+
+**Configuração por Base de Conhecimento ou Agente:**
+- `embeddingProvider`: `'python-embed'` | `'native'` | `'openai'` | `'ollama'`
+- `embeddingModel`: Modelo específico do provider (ex: `paraphrase-MiniLM-L6-v2`)
+
+**Fallback Automático (ordem):**
+1. Provider primário configurado
+2. Fallback para provider alternativo (ex: native → python-embed)
+3. Fallback para OpenAI (se API key configurada)
+4. Documento salvo sem vetorização (apenas busca full-text)
+
+**Embeddings por Provider:**
+- `python-embed`: 384 dimensões (paraphrase-MiniLM-L6-v2)
+- `native`: 384 dimensões (Xenova/bge-micro-v2)
+- `openai`: 1536 dimensões (text-embedding-3-small)
+- `ollama`: variável (nomic-embed-text: 768)
+
 ---
 
 ## 7. Roadmap de Evolução

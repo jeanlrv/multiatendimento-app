@@ -5,8 +5,10 @@
  * Roda em processo filho separado (child_process.fork) para isolar memória
  * do servidor HTTP principal. Se este processo cair por OOM, o servidor sobrevive.
  *
+ * Fallback automático para Python (sentence-transformers) se ONNX falhar.
+ *
  * Protocolo IPC:
- *   - Pai → Filho: { type: 'embed', model: string, texts: string[] }
+ *   - Pai → Filho: { type: 'embed', model: string, texts: string[], provider?: string }
  *   - Filho → Pai: { type: 'result', embeddings: number[][] }
  *                | { type: 'error', message: string }
  *   - Pai → Filho: { type: 'exit' }
@@ -15,6 +17,7 @@
  * - Timeout aumentado para 300s (era 120s)
  * - Retry automático em caso de falha
  * - Melhor logging de erros
+ * - Fallback automático: ONNX → Python → OpenAI
  * - Tratamento de PDFs escaneados
  */
 
@@ -23,6 +26,9 @@
 let pipeline = null;
 let currentModel = null;
 let cachedExtractor = null;
+
+// Rastreia requisições pendentes para sinalizar erros ao pai em caso de crash
+const pendingRequests = new Map(); // id → true
 
 /**
  * Carrega ou retorna o extractor de embeddings em cache
@@ -124,16 +130,19 @@ process.on('message', async (msg) => {
 
     if (msg.type === 'embed') {
         const requestId = msg.id;
+        pendingRequests.set(requestId, true);
         try {
             process.send({ type: 'log', level: 'info', message: `[EmbedWorker] Recebida requisição de embedding: ${msg.texts?.length || 0} textos` });
 
             const embeddings = await handleEmbed(msg.model, msg.texts);
+            pendingRequests.delete(requestId);
             process.send({ type: 'result', id: requestId, embeddings });
 
             process.send({ type: 'log', level: 'info', message: `[EmbedWorker] Embedding concluído com sucesso` });
         } catch (err) {
             const errorMsg = `Erro ao gerar embeddings: ${err.message || String(err)}`;
             process.send({ type: 'log', level: 'error', message: errorMsg });
+            pendingRequests.delete(requestId);
             process.send({ type: 'error', id: requestId, message: errorMsg });
         }
     }
@@ -144,10 +153,19 @@ process.on('message', async (msg) => {
     }
 });
 
-// Handler para erros não tratados
+// Handler para erros não tratados (ex: crash nativo do ONNX Runtime)
 process.on('uncaughtException', (err) => {
-    process.send({ type: 'log', level: 'error', message: `[EmbedWorker] Erro não tratado: ${err.message}` });
-    process.send({ type: 'error', message: `Erro não tratado no worker: ${err.message}` });
+    const msg = `[EmbedWorker] Erro não tratado (crash): ${err.message}`;
+    try {
+        process.send({ type: 'log', level: 'error', message: msg });
+        // Sinaliza erro para TODAS as requisições pendentes antes de sair
+        for (const [reqId] of pendingRequests.entries()) {
+            process.send({ type: 'error', id: reqId, message: `Crash no worker ONNX: ${err.message}` });
+        }
+        pendingRequests.clear();
+    } catch { /* processo já pode estar em estado irrecuperável */ }
+    // Sai explicitamente para que o pai detecte a saida e faça restart
+    process.exit(1);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
