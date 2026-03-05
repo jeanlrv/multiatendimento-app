@@ -646,7 +646,7 @@ export class VectorStoreService {
         if (!key) throw new Error('QWEN_API_KEY não configurada para embedding Qwen');
 
         const { OpenAI } = require('openai');
-        const qwen = new OpenAI({ apiKey: key, baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1' });
+        const qwen = new OpenAI({ apiKey: key, baseURL: 'https://coding-intl.dashscope.aliyuncs.com/v1' });
 
         const response = await qwen.embeddings.create({
             model,
@@ -662,7 +662,7 @@ export class VectorStoreService {
         if (!key) throw new Error('QWEN_API_KEY não configurada para embedding Qwen');
 
         const { OpenAI } = require('openai');
-        const qwen = new OpenAI({ apiKey: key, baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1' });
+        const qwen = new OpenAI({ apiKey: key, baseURL: 'https://coding-intl.dashscope.aliyuncs.com/v1' });
 
         const response = await qwen.embeddings.create({
             model,
