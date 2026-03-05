@@ -18,7 +18,8 @@ COPY . .
 
 # Instalar sentence-transformers via pip
 # --break-system-packages para Alpine Linux (PEP 668)
-RUN pip install --no-cache-dir --break-system-packages sentence-transformers
+# Versão 2.7.0 compatível com Python 3.9 e sem conflitos de dependências
+RUN pip install --no-cache-dir --break-system-packages sentence-transformers==2.7.0
 
 # Gerar Prisma Client (forçando versão 6)
 RUN npx prisma@6 generate
@@ -37,7 +38,8 @@ RUN apk add --no-cache openssl libc6-compat curl netcat-openbsd python3 py3-pip
 
 # Instalar sentence-transformers via pip (anteriormente no builder para cache)
 # --break-system-packages para Alpine Linux (PEP 668)
-RUN pip install --no-cache-dir --break-system-packages sentence-transformers
+# Versão 2.7.0 compatível com Python 3.9 e sem conflitos de dependências
+RUN pip install --no-cache-dir --break-system-packages sentence-transformers==2.7.0
 
 WORKDIR /app
 
