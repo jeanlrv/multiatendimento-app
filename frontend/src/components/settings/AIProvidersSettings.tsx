@@ -244,13 +244,13 @@ function ProviderCard({ meta, config, onSave, onDelete }: ProviderCardProps) {
                                             />
                                         ) : (
                                             <select
-                                                value={customModel} // Usamos o customModel para armazenar a escolha no mesmo extraConfig.model
+                                                value={customModel || ''} // Usamos o customModel para armazenar a escolha no mesmo extraConfig.model
                                                 onChange={e => setCustomModel(e.target.value)}
                                                 className="w-full pl-9 pr-8 py-2.5 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 text-sm font-semibold outline-none transition-all text-slate-900 dark:text-white appearance-none focus:ring-4 focus:ring-primary/10"
                                             >
                                                 <option value="" className="text-slate-400 bg-white dark:bg-slate-900">Selecionar Modelo (Obrigatório)...</option>
                                                 {predefinedModels.map((m: any) => (
-                                                    <option key={m.id} value={m.name} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+                                                    <option key={m.id} value={m.id} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
                                                         {m.name}
                                                     </option>
                                                 ))}
