@@ -610,30 +610,58 @@ const EXT_TO_SOURCE_TYPE: Record<string, string> = {
     ppt: 'PPTX',
     pptx: 'PPTX',
     epub: 'EPUB',
+    
     // Texto
     txt: 'TXT',
     md: 'TXT',
     mdx: 'TXT',
     markdown: 'TXT',
     rtf: 'RTF',
+    
     // Web
     html: 'HTML',
     htm: 'HTML',
+    
     // Dados
     csv: 'CSV',
     json: 'JSON',
     yaml: 'YAML',
     yml: 'YAML',
     xml: 'XML',
+    
     // Código
-    js: 'CODE', ts: 'CODE', jsx: 'CODE', tsx: 'CODE',
-    py: 'CODE', java: 'CODE', go: 'CODE', rb: 'CODE',
-    php: 'CODE', cs: 'CODE', cpp: 'CODE', c: 'CODE',
-    rs: 'CODE', swift: 'CODE', kt: 'CODE', sh: 'CODE',
-    bash: 'CODE', sql: 'CODE',
-    // Áudio
-    mp3: 'AUDIO', wav: 'AUDIO', mp4: 'AUDIO',
-    ogg: 'AUDIO', webm: 'AUDIO', m4a: 'AUDIO', mpeg: 'AUDIO',
+    js: 'CODE',
+    ts: 'CODE',
+    jsx: 'CODE',
+    tsx: 'CODE',
+    py: 'CODE',
+    java: 'CODE',
+    go: 'CODE',
+    rb: 'CODE',
+    php: 'CODE',
+    cs: 'CODE',
+    cpp: 'CODE',
+    c: 'CODE',
+    rs: 'CODE',
+    swift: 'CODE',
+    kt: 'CODE',
+    sh: 'CODE',
+    bash: 'CODE',
+    sql: 'CODE',
+    
+    // Áudio/Vídeo
+    mp3: 'AUDIO',
+    wav: 'AUDIO',
+    mp4: 'AUDIO',
+    ogg: 'AUDIO',
+    webm: 'AUDIO',
+    m4a: 'AUDIO',
+    mpeg: 'AUDIO',
+    mov: 'AUDIO',
+    flac: 'AUDIO',
+    aac: 'AUDIO',
+    wma: 'AUDIO',
+    alac: 'AUDIO'
 };
 
 const EXT_TO_MIME: Record<string, string> = {

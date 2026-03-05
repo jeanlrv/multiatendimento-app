@@ -261,14 +261,15 @@ export class AIService {
 
     private allocateTokenBudget(message: string): { chunkLimit: number } {
         const charCount = message.length;
-        // Aumentado o budget para garantir mais contexto mesmo em perguntas curtas
-        if (charCount > 200 || message.split(' ').length > 40) {
-            return { chunkLimit: 15 }; // Aumentado de 10 para 15
+        const wordCount = message.trim().split(/\s+/).length;
+        // Budget maior para queries mais longas ou complexas
+        if (charCount > 300 || wordCount > 50) {
+            return { chunkLimit: 20 }; // Query longa/complexa: mais contexto
         }
-        if (charCount > 50) {
-            return { chunkLimit: 8 }; // Aumentado de 5 para 8
+        if (charCount > 100 || wordCount > 15) {
+            return { chunkLimit: 15 }; // Query média
         }
-        return { chunkLimit: 5 }; // Aumentado de 2 para 5
+        return { chunkLimit: 10 };    // Query curta: ainda assim contexto razoável
     }
 
     /** Guarda contra overflow de context window: trunca o contexto RAG se necessário */
@@ -276,7 +277,7 @@ export class AIService {
         const maxChars = this.MODEL_CONTEXT_CHARS[modelId] ?? this.DEFAULT_MAX_CONTEXT_CHARS;
         const fixedChars = systemPrompt.length + message.length +
             history.reduce((s, h) => s + (h.content?.length || 0), 0);
-        const budgetForContext = maxChars * 0.4 - fixedChars; // máx 40% do contexto para RAG
+        const budgetForContext = maxChars * 0.5 - fixedChars; // máx 50% do contexto para RAG
         if (budgetForContext <= 0) return '';
         if (context.length > budgetForContext) {
             this.logger.warn(`[ContextOverflow] Contexto RAG truncado de ${context.length} para ${budgetForContext} chars (modelo: ${modelId})`);
@@ -488,8 +489,23 @@ export class AIService {
 
             // Adiciona instrução de grounding (RAG) se houver contexto
             if (context) {
-                systemPrompt += `\n\n[INSTRUÇÃO IMPORTANTE]: Use APENAS as informações do CONTEXTO abaixo para responder à pergunta do usuário. Se a informação não estiver no contexto, diga que não sabe ou peça mais detalhes. Não invente informações fora do contexto fornecido.\n\n[CONTEXTO DA BASE DE CONHECIMENTO]:\n${context}`;
-                // Limpa o contexto da variável enviada diretamente ao llmService para evitar duplicação ou desordem
+                systemPrompt += [
+                    '',
+                    '---',
+                    '[BASE DE CONHECIMENTO]',
+                    'As informações abaixo foram extraídas da base de conhecimento configurada para este agente.',
+                    'REGRAS OBRIGATÓRIAS:',
+                    '1. Use PREFERENCIALMENTE as informações do contexto abaixo para fundamentar sua resposta.',
+                    '2. Se a resposta estiver parcialmente no contexto, use-a e complemente com seu conhecimento geral, deixando claro o que é cada um.',
+                    '3. Se a informação NÃO estiver no contexto, informe isso claramente e ofereça ajuda alternativa.',
+                    '4. NÃO invente dados, números, URLs ou fatos que não estejam no contexto.',
+                    '5. Cite termos e trechos do contexto quando relevante para demonstrar embasamento.',
+                    '',
+                    '[CONTEXTO RECUPERADO]:',
+                    context,
+                    '---',
+                ].join('\n');
+                // Limpa o contexto da variável enviada diretamente ao llmService para evitar duplicação
                 context = '';
             }
 
@@ -642,6 +658,100 @@ export class AIService {
             throw new ServiceUnavailableException(
                 `Falha ao processar resposta multimodal: ${msg}. Verifique se o modelo suporta imagens e a API Key está correta.`
             );
+        }
+    }
+
+    /**
+     * Consulta a base de conhecimento e gera resposta usando contexto recuperado
+     */
+    async queryKnowledgeBase(
+        companyId: string,
+        agentId: string,
+        query: string,
+        knowledgeBaseId: string,
+        options?: {
+            maxChunks?: number;
+            minScore?: number;
+            temperature?: number;
+        }
+    ): Promise<{ response: string; sources: any[]; usage?: any }> {
+        const agent = await this.prisma.aIAgent.findFirst({
+            where: { id: agentId, companyId }
+        });
+
+        if (!agent) {
+            throw new NotFoundException('Agente não encontrado');
+        }
+
+        // Buscar chunks relevantes na base de conhecimento
+        const relevantChunks = await this.vectorStore.searchSimilarity(
+            this.prisma,
+            companyId,
+            query,
+            knowledgeBaseId,
+            options?.maxChunks || 5,
+            agent.embeddingProvider || 'native',
+            agent.embeddingModel || 'Xenova/all-MiniLM-L6-v2',
+            undefined, // apiKey será buscada automaticamente
+            undefined, // baseUrl será buscado automaticamente
+            'portuguese'
+        );
+
+        // Filtrar chunks por score mínimo se especificado
+        const filteredChunks = options?.minScore
+            ? relevantChunks.filter(chunk => chunk.score >= (options.minScore || 0.3))
+            : relevantChunks;
+
+        if (filteredChunks.length === 0) {
+            // Caso não encontre conteúdo relevante, responder com informação padrão
+            return {
+                response: "Não encontrei informações relevantes na base de conhecimento para responder a essa pergunta.",
+                sources: [],
+                usage: { inputTokens: query.length, outputTokens: 0 }
+            };
+        }
+
+        // Construir contexto a partir dos chunks recuperados
+        const context = filteredChunks.map((chunk, index) =>
+            `Fonte ${index + 1} (Similaridade: ${(chunk.score * 100).toFixed(1)}%):\n${chunk.content}`
+        ).join('\n\n---\n\n');
+
+        // Criar prompt otimizado para uso do contexto
+        const enhancedPrompt = `Você é um assistente especializado que responde perguntas com base na base de conhecimento fornecida.
+
+Instruções:
+- Use APENAS as informações contidas no contexto abaixo para responder
+- Se a resposta não estiver no contexto, diga que não encontrou informações suficientes
+- Cite as fontes quando possível
+- Seja conciso e direto, mas forneça detalhes relevantes
+
+Contexto da base de conhecimento:
+${context}
+
+Pergunta: ${query}
+
+Resposta:`;
+
+        try {
+            const response = await this.chat(
+                companyId,
+                agentId,
+                enhancedPrompt,
+                { temperature: options?.temperature || agent.temperature || 0.3 } // Temperatura mais baixa para precisão
+            );
+
+            return {
+                response,
+                sources: filteredChunks,
+                usage: {
+                    inputTokens: enhancedPrompt.length,
+                    outputTokens: response.length,
+                    contextChunks: filteredChunks.length
+                }
+            };
+        } catch (error) {
+            this.logger.error(`Erro ao consultar base de conhecimento: ${error.message}`);
+            throw error;
         }
     }
 

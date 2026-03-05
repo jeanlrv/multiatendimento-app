@@ -40,21 +40,24 @@ export class KnowledgeProcessor extends WorkerHost {
 
             // 3. Extrai o conteúdo baseado no sourceType
             this.logger.log(`[Processador] Extraindo texto do documento ${documentId} (tipo: ${document.sourceType})`);
-            const text = await this.extractText(document);
+            const extractResult = await this.extractTextWithMetadata(document);
+
+            const { text, pageCount } = extractResult;
 
             if (!text || text.trim().length === 0) {
                 throw new Error('Falha ao extrair texto do documento ou documento vazio');
             }
 
-            this.logger.log(`[Processador] Texto extraído com sucesso: ${text.length} caracteres`);
+            this.logger.log(`[Processador] Texto extraído com sucesso: ${text.length} caracteres${pageCount ? `, ${pageCount} páginas` : ''}`);
 
-            // 4. Chunking
+            // 4. Chunking adaptativo — documentos longos usam chunks maiores
+            const isLongDoc = text.length > 50000;
             const splitter = new RecursiveCharacterTextSplitter({
-                chunkSize: 1500,
-                chunkOverlap: 300,
+                chunkSize: isLongDoc ? 2000 : 1500,
+                chunkOverlap: 400,   // Aumentado de 300 → 400 para melhor coerência semântica
             });
             const chunks = await splitter.splitText(text);
-            this.logger.log(`[Processador] Documento ${documentId} dividido em ${chunks.length} chunks`);
+            this.logger.log(`[Processador] Documento ${documentId} dividido em ${chunks.length} chunks (tamanho: ${isLongDoc ? 2000 : 1500}, overlap: 400)`);
 
             // 5. Gera embeddings usando o provider da base de conhecimento
             let embeddingProvider = document.knowledgeBase?.embeddingProvider || 'native';
@@ -82,9 +85,10 @@ export class KnowledgeProcessor extends WorkerHost {
 
             for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
                 const batchChunks = chunks.slice(i, i + BATCH_SIZE);
-                const chunkData: { documentId: string; content: string; embedding?: any }[] = [];
+                const chunkData: { documentId: string; content: string; embedding?: any; metadata?: any }[] = [];
 
-                for (const content of batchChunks) {
+                for (let j = 0; j < batchChunks.length; j++) {
+                    const content = batchChunks[j];
                     let embedding: number[] | null = null;
 
                     if (!embeddingFailed) {
@@ -103,10 +107,21 @@ export class KnowledgeProcessor extends WorkerHost {
                         }
                     }
 
+                    // Metadata do chunk: índice global e, se disponível, info de página
+                    const chunkIndex = i + j;
+                    const metadata: any = { chunkIndex };
+                    if (pageCount && pageCount > 0) {
+                        // Estima página baseada no índice relativo do chunk
+                        const estimatedPage = Math.ceil(((chunkIndex + 1) / chunkCount) * pageCount);
+                        metadata.estimatedPage = estimatedPage;
+                        metadata.totalPages = pageCount;
+                    }
+
                     chunkData.push({
                         documentId,
                         content,
                         embedding: embedding && embedding.length > 0 ? (embedding as any) : undefined,
+                        metadata,
                     });
                 }
 
@@ -132,7 +147,7 @@ export class KnowledgeProcessor extends WorkerHost {
             if (embeddingFailed) {
                 this.logger.warn(`Documento ${documentId} salvo como READY sem embeddings (apenas FTS). Razão: ${embeddingFailReason}`);
             } else {
-                this.logger.log(`Documento ${documentId} processado: ${chunkCount} chunks (provider: ${embeddingProvider}).`);
+                this.logger.log(`Documento ${documentId} processado com sucesso: ${chunkCount} chunks (provider: ${embeddingProvider}).`);
             }
             return { success: true, chunkCount, embeddingFailed };
 
@@ -142,7 +157,7 @@ export class KnowledgeProcessor extends WorkerHost {
                 where: { id: documentId },
                 data: {
                     status: 'ERROR',
-                    rawContent: error.message?.substring(0, 1000) || 'Erro desconhecido'
+                    rawContent: `ERRO: ${error.message?.substring(0, 900) || 'Erro desconhecido'}\n\nVerifique o tipo do arquivo e se ele está corrompido.`
                 },
             });
             throw error;
@@ -150,10 +165,11 @@ export class KnowledgeProcessor extends WorkerHost {
     }
 
     /**
-     * Extrai texto de um documento baseado no seu sourceType.
+     * Extrai texto de um documento baseado no sourceType.
+     * Retorna texto + metadados (ex: número de páginas para PDF).
      * ARMAZENAMENTO 100% LOCAL - Sem S3
      */
-    private async extractText(document: any): Promise<string> {
+    private async extractTextWithMetadata(document: any): Promise<{ text: string; pageCount?: number }> {
         const { sourceType, contentUrl, rawContent } = document;
         const type = sourceType?.toUpperCase();
 
@@ -167,29 +183,29 @@ export class KnowledgeProcessor extends WorkerHost {
             case 'MARKDOWN':
             case 'CODE':
             case 'RTF':
-                if (rawContent) return rawContent;
+                if (rawContent) return { text: rawContent };
                 if (contentUrl) {
                     const buf = await this.getContentBuffer(contentUrl);
                     let text = buf.toString('utf-8');
                     // Para RTF: remover control codes
                     if (type === 'RTF') text = text.replace(/\\[a-z]+\d*\s?|[{}]|[^a-zA-Z0-9\s\.,;:!?'"()\-]/g, ' ').replace(/\s+/g, ' ').trim();
-                    return text;
+                    return { text };
                 }
-                return '';
+                return { text: '' };
 
             // ── Dados estruturados ───────────────────────────────────────────────
             case 'JSON':
-                if (rawContent) return rawContent;
+                if (rawContent) return { text: rawContent };
                 if (contentUrl) {
                     const buf = await this.getContentBuffer(contentUrl);
                     try {
                         const parsed = JSON.parse(buf.toString('utf-8'));
-                        return JSON.stringify(parsed, null, 2);
+                        return { text: JSON.stringify(parsed, null, 2) };
                     } catch {
-                        return buf.toString('utf-8');
+                        return { text: buf.toString('utf-8') };
                     }
                 }
-                return '';
+                return { text: '' };
 
             case 'YAML':
             case 'YML': {
@@ -197,58 +213,74 @@ export class KnowledgeProcessor extends WorkerHost {
                 try {
                     const yaml = require('yaml');
                     const parsed = yaml.parse(src);
-                    return JSON.stringify(parsed, null, 2);
+                    return { text: JSON.stringify(parsed, null, 2) };
                 } catch {
-                    return src;
+                    return { text: src };
                 }
             }
 
             case 'XML': {
                 const src = rawContent || (contentUrl ? (await this.getContentBuffer(contentUrl)).toString('utf-8') : '');
                 // Strip XML tags, preservar conteúdo de texto
-                return src
+                const text = src
                     .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
                     .replace(/<[^>]+>/g, ' ')
-                    .replace(/&/g, '&').replace(/</g, '<').replace(/>/g, '>').replace(/"/g, '"').replace(/'/g, "'")
+                    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'")
                     .replace(/\s+/g, ' ').trim();
+                return { text };
             }
 
             case 'CSV': {
                 const src = rawContent || (contentUrl ? (await this.getContentBuffer(contentUrl)).toString('utf-8') : '');
                 const lines = src.split('\n').filter(l => l.trim());
-                return lines.join('\n');
+                return { text: lines.join('\n') };
             }
 
-            // ── Documentos Office ────────────────────────────────────────────────
+            // ── PDF ───────────────────────────────────────────────────────────────
             case 'PDF': {
                 if (!contentUrl) throw new Error('PDF requer contentUrl (arquivo local)');
 
-                // Verificar se arquivo existe
                 if (!fs.existsSync(contentUrl)) {
                     throw new Error(`Arquivo PDF não encontrado: ${contentUrl}`);
                 }
 
                 const buffer = await this.getContentBuffer(contentUrl);
 
-                // Importação robusta do pdf-parse
-                const pdfParse = require('pdf-parse');
-                const parseFunc = typeof pdfParse === 'function'
-                    ? pdfParse
-                    : (typeof pdfParse.default === 'function' ? pdfParse.default : pdfParse.PDFParse);
-
-                if (typeof parseFunc !== 'function') {
-                    throw new Error('pdf-parse: função de parse não encontrada. Verifique a instalação do pacote.');
+                // pdf-parse@1.1.1: exporta diretamente uma função async (buffer, options) => data
+                let pdfParse: Function;
+                try {
+                    pdfParse = require('pdf-parse');
+                    // Garante que é uma função (compatibilidade com eventuais ambientes)
+                    if (typeof pdfParse !== 'function') {
+                        // Tenta o .default para bundlers que empacotam ESM
+                        if (typeof (pdfParse as any).default === 'function') {
+                            pdfParse = (pdfParse as any).default;
+                        } else {
+                            throw new Error('pdf-parse não exportou uma função. Verifique se a versão 1.1.1 está instalada (npm install pdf-parse@1.1.1).');
+                        }
+                    }
+                } catch (loadErr: any) {
+                    throw new Error(`Falha ao carregar pdf-parse: ${loadErr.message}`);
                 }
 
                 try {
-                    const pdfData = await parseFunc(buffer);
+                    const pdfData = await pdfParse(buffer, {
+                        // Opções para melhorar extração
+                        normalizeWhitespace: true,
+                    });
 
                     if (!pdfData.text || pdfData.text.trim().length === 0) {
-                        throw new Error('PDF parece ser escaneado (sem texto). Use OCR para extrair conteúdo.');
+                        throw new Error(
+                            'PDF parece ser escaneado (sem camada de texto). ' +
+                            'Para PDFs escaneados, converta para texto usando OCR antes de enviar.'
+                        );
                     }
 
-                    this.logger.log(`[PDF] Texto extraído: ${pdfData.text.length} caracteres, ${pdfData.numpages || '?'} páginas`);
-                    return pdfData.text;
+                    // Limpeza pós-extração do PDF
+                    const cleanedText = this.cleanPdfText(pdfData.text);
+
+                    this.logger.log(`[PDF] Texto extraído: ${cleanedText.length} caracteres, ${pdfData.numpages || '?'} páginas`);
+                    return { text: cleanedText, pageCount: pdfData.numpages };
                 } catch (parseErr: any) {
                     if (parseErr.message.includes('password') || parseErr.message.includes('encrypted') || parseErr.message.includes('crypt')) {
                         throw new Error('PDF está protegido por senha. Remova a proteção antes de enviar.');
@@ -257,10 +289,10 @@ export class KnowledgeProcessor extends WorkerHost {
                 }
             }
 
+            // ── DOCX ─────────────────────────────────────────────────────────────
             case 'DOCX': {
                 if (!contentUrl) throw new Error('DOCX requer contentUrl');
 
-                // Verificar se arquivo existe
                 if (!fs.existsSync(contentUrl)) {
                     throw new Error(`Arquivo DOCX não encontrado: ${contentUrl}`);
                 }
@@ -273,17 +305,22 @@ export class KnowledgeProcessor extends WorkerHost {
                     if (!result.value || result.value.trim().length === 0) {
                         this.logger.warn('[DOCX] Arquivo parece estar vazio ou conter apenas imagens');
                     }
-                    return result.value || '';
+                    // Normaliza parágrafos: garante linhas em branco entre parágrafos
+                    const cleanText = (result.value || '')
+                        .replace(/\r\n/g, '\n')
+                        .replace(/\n{3,}/g, '\n\n')
+                        .trim();
+                    return { text: cleanText };
                 } catch (extractErr: any) {
                     throw new Error(`Falha ao extrair texto do DOCX: ${extractErr.message}`);
                 }
             }
 
+            // ── XLSX / XLS ────────────────────────────────────────────────────────
             case 'XLSX':
             case 'XLS': {
                 if (!contentUrl) throw new Error('XLSX/XLS requer contentUrl');
 
-                // Verificar se arquivo existe
                 if (!fs.existsSync(contentUrl)) {
                     throw new Error(`Arquivo ${type} não encontrado: ${contentUrl}`);
                 }
@@ -297,24 +334,41 @@ export class KnowledgeProcessor extends WorkerHost {
 
                     for (const sheetName of workbook.SheetNames) {
                         const sheet = workbook.Sheets[sheetName];
-                        const csv = XLSX.utils.sheet_to_csv(sheet);
-                        parts.push(`=== Planilha: ${sheetName} ===\n${csv}`);
+                        // Obtém dados como array de arrays para ter acesso ao cabeçalho
+                        const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+
+                        if (!rows || rows.length === 0) continue;
+
+                        const header = rows[0] as string[];
+                        const dataRows = rows.slice(1).filter((row: any[]) => row.some((cell: any) => cell !== ''));
+
+                        // Formatar cada linha como "Coluna: Valor, Coluna: Valor" para dar contexto ao LLM
+                        const formattedRows = dataRows.map((row: any[]) =>
+                            header.map((h: any, idx: number) => {
+                                const val = row[idx] !== undefined && row[idx] !== '' ? String(row[idx]) : '-';
+                                return `${h || `Col${idx + 1}`}: ${val}`;
+                            }).join(' | ')
+                        );
+
+                        parts.push(`=== Planilha: ${sheetName} (${dataRows.length} linhas) ===`);
+                        parts.push(`Colunas: ${header.join(', ')}`);
+                        parts.push(formattedRows.join('\n'));
                     }
 
                     if (parts.length === 0) {
-                        this.logger.warn('[XLSX] Arquivo não contém planilhas');
+                        this.logger.warn('[XLSX] Arquivo não contém dados nas planilhas');
                     }
 
-                    return parts.join('\n\n');
+                    return { text: parts.join('\n\n') };
                 } catch (readErr: any) {
                     throw new Error(`Falha ao ler planilha: ${readErr.message}`);
                 }
             }
 
+            // ── PPTX ─────────────────────────────────────────────────────────────
             case 'PPTX': {
                 if (!contentUrl) throw new Error('PPTX requer contentUrl');
 
-                // Verificar se arquivo existe
                 if (!fs.existsSync(contentUrl)) {
                     throw new Error(`Arquivo PPTX não encontrado: ${contentUrl}`);
                 }
@@ -325,18 +379,18 @@ export class KnowledgeProcessor extends WorkerHost {
                     const text = await this.extractPptxText(buffer);
                     if (!text || text.trim().length === 0) {
                         this.logger.warn('[PPTX] Arquivo parece conter apenas imagens');
-                        return '[PPTX sem texto extraível]';
+                        return { text: '[PPTX sem texto extraível]' };
                     }
-                    return text;
+                    return { text };
                 } catch (extractErr: any) {
                     throw new Error(`Falha ao extrair texto do PPTX: ${extractErr.message}`);
                 }
             }
 
+            // ── EPUB ─────────────────────────────────────────────────────────────
             case 'EPUB': {
                 if (!contentUrl) throw new Error('EPUB requer contentUrl');
 
-                // Verificar se arquivo existe
                 if (!fs.existsSync(contentUrl)) {
                     throw new Error(`Arquivo EPUB não encontrado: ${contentUrl}`);
                 }
@@ -348,7 +402,7 @@ export class KnowledgeProcessor extends WorkerHost {
                     if (!text || text.trim().length === 0) {
                         throw new Error('EPUB parece estar vazio ou protegido por DRM');
                     }
-                    return text;
+                    return { text };
                 } catch (extractErr: any) {
                     if (extractErr.message.includes('DRM')) {
                         throw new Error('EPUB está protegido por DRM. Remova a proteção antes de enviar.');
@@ -361,7 +415,7 @@ export class KnowledgeProcessor extends WorkerHost {
             case 'HTML':
             case 'HTM': {
                 const src = rawContent || (contentUrl ? (await this.getContentBuffer(contentUrl)).toString('utf-8') : '');
-                return this.extractHtmlText(src);
+                return { text: this.extractHtmlText(src) };
             }
 
             case 'URL': {
@@ -369,24 +423,24 @@ export class KnowledgeProcessor extends WorkerHost {
                 const isYouTube = /youtube\.com\/watch|youtu\.be\//.test(contentUrl);
                 const isGitHub = /github\.com\//.test(contentUrl);
 
-                if (isYouTube) return await this.extractYouTubeTranscript(contentUrl);
-                if (isGitHub) return await this.extractGitHubContent(contentUrl);
+                if (isYouTube) return { text: await this.extractYouTubeTranscript(contentUrl) };
+                if (isGitHub) return { text: await this.extractGitHubContent(contentUrl) };
 
                 const axios = require('axios');
                 const response = await axios.get(contentUrl, { timeout: 30000 });
-                return this.extractHtmlText(response.data);
+                return { text: this.extractHtmlText(response.data) };
             }
 
             case 'YOUTUBE': {
                 const url = contentUrl || rawContent;
                 if (!url) throw new Error('YOUTUBE requer URL no contentUrl');
-                return await this.extractYouTubeTranscript(url);
+                return { text: await this.extractYouTubeTranscript(url) };
             }
 
             case 'GITHUB': {
                 const url = contentUrl || rawContent;
                 if (!url) throw new Error('GITHUB requer URL do repositório no contentUrl');
-                return await this.extractGitHubContent(url);
+                return { text: await this.extractGitHubContent(url) };
             }
 
             // ── Áudio (Whisper) ──────────────────────────────────────────────────
@@ -399,20 +453,19 @@ export class KnowledgeProcessor extends WorkerHost {
             case 'M4A': {
                 if (!contentUrl) throw new Error('AUDIO requer contentUrl');
 
-                // Verificar se arquivo existe
                 if (!fs.existsSync(contentUrl)) {
                     throw new Error(`Arquivo de áudio não encontrado: ${contentUrl}`);
                 }
 
-                return await this.transcribeAudio(contentUrl);
+                return { text: await this.transcribeAudio(contentUrl) };
             }
 
             default:
                 // Tentativa genérica de ler como texto
-                if (rawContent) return rawContent;
+                if (rawContent) return { text: rawContent };
                 if (contentUrl) {
                     const buf = await this.getContentBuffer(contentUrl);
-                    return buf.toString('utf-8');
+                    return { text: buf.toString('utf-8') };
                 }
                 throw new Error(`Tipo de documento não suportado: ${sourceType}`);
         }
@@ -421,6 +474,27 @@ export class KnowledgeProcessor extends WorkerHost {
     // ──────────────────────────────────────────────────────────────────────────
     // Helpers de extração
     // ──────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Limpa texto extraído de PDFs:
+     * - Remove hifenizações indevidas no final de linha (ex: "infor-\nmação" → "informação")
+     * - Normaliza espaços em branco excessivos
+     * - Remove caracteres de controle indesejados
+     */
+    private cleanPdfText(text: string): string {
+        return text
+            // Juntar palavras hifenizadas no final de linha
+            .replace(/(\w+)-\n(\w+)/g, '$1$2')
+            // Normalizar quebras de linha: múltiplas linhas vazias → uma linha vazia
+            .replace(/\n{3,}/g, '\n\n')
+            // Remover espaços redundantes no início/fim de linhas
+            .split('\n').map((line: string) => line.trimEnd()).join('\n')
+            // Normalizar espaços múltiplos (exceto quebras de linha)
+            .replace(/[ \t]{2,}/g, ' ')
+            // Remover caracteres de controle (exceto \n e \t)
+            .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+            .trim();
+    }
 
     /**
      * Extrai texto limpo de HTML usando cheerio.

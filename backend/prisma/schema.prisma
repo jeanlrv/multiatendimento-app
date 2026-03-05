@@ -498,10 +498,11 @@ model DocumentChunk {
   id         String @id @default(uuid())
   documentId String
   content    String @db.Text
-  pageNumber Int?
-  metadata   Json?
+  pageNumber Int?    // Número da página (para PDFs)
+  metadata   Json?   // Metadados adicionais como título do documento, etc.
+  section    String? // Seção do documento (por exemplo, cabeçalho, corpo, rodapé)
 
-  // Fallback: Embedding via Json (PgVector não disponível na infra de destino)
+  // Embedding via Json (armazenamento vetorial)
   embedding Json?
 
   document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)

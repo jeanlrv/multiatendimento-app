@@ -53,13 +53,14 @@ export class VectorStoreService {
         companyId: string,
         query: string,
         knowledgeBaseId: string,
-        topK: number = 5,
+        topK: number = 10,
         embeddingProvider: string = 'native',
         embeddingModel?: string,
         apiKey?: string,
         baseUrl?: string,
-        language: string = 'portuguese'
-    ): Promise<{ id: string; content: string; score: number }[]> {
+        language: string = 'portuguese',
+        minScore: number = 0.15
+    ): Promise<{ id: string; content: string; score: number; metadata?: any }[]> {
         try {
             // 1. Gerar embedding da query
             const queryEmbedding = await this.generateEmbedding(
@@ -70,16 +71,22 @@ export class VectorStoreService {
                 baseUrl
             );
 
-            // 2. Buscar chunks no banco
+            // 2. Buscar chunks no banco com metadados
             const chunks = await prisma.documentChunk.findMany({
                 where: {
                     knowledgeBaseId,
-                    document: { companyId },
+                    document: {
+                        companyId,
+                        status: 'READY' // Apenas documentos processados com sucesso
+                    },
                 },
                 select: {
                     id: true,
                     content: true,
                     embedding: true,
+                    metadata: true,
+                    pageNumber: true,
+                    section: true
                 },
             });
 
@@ -88,32 +95,70 @@ export class VectorStoreService {
                 return [];
             }
 
-            // 3. Calcular similaridade e retornar top-K
-            const scored = chunks.map((chunk: any) => ({
-                id: chunk.id,
-                content: chunk.content,
-                score: this.cosineSimilarity(queryEmbedding, chunk.embedding),
-            }));
+            // 3. Calcular similaridade, filtrar por score mínimo e retornar top-K sem duplicatas
+            const scored = chunks
+                .map((chunk: any) => ({
+                    id: chunk.id,
+                    content: chunk.content,
+                    metadata: chunk.metadata,
+                    pageNumber: chunk.pageNumber,
+                    section: chunk.section,
+                    score: this.cosineSimilarity(queryEmbedding, chunk.embedding),
+                }))
+                // Filtrar chunks com conteúdo significativo
+                .filter(item => item.content && item.content.trim().length > 10)
+                // Filtrar por score mínimo para eliminar chunks irrelevantes
+                .filter(item => item.score >= minScore)
+                // Ordenar por score
+                .sort((a: any, b: any) => b.score - a.score);
 
-            scored.sort((a: any, b: any) => b.score - a.score);
-            const results = scored.slice(0, topK);
+            // Deduplicação: remover chunks com conteúdo muito similar entre si (>0.92)
+            const deduplicated: typeof scored = [];
+            for (const candidate of scored) {
+                const isDuplicate = deduplicated.some(existing => {
+                    // Comparação rápida por texto (evita recalcular embeddings)
+                    const overlap = this.jaccardSimilarity(candidate.content, existing.content);
+                    return overlap > 0.7;
+                });
+                if (!isDuplicate) {
+                    deduplicated.push(candidate);
+                }
+                if (deduplicated.length >= topK) break;
+            }
 
-            this.logger.debug(`[RAG] ${results.length} chunks encontrados para query: "${query.substring(0, 50)}..."`);
-            return results;
+            this.logger.debug(`[RAG] ${deduplicated.length} chunks encontrados (score>=${minScore}) para query: "${query.substring(0, 50)}..."`);
+            return deduplicated;
         } catch (error) {
             this.logger.error(`[RAG] Erro na busca por similaridade: ${error.message}`);
 
-            // Fallback: busca full-text search
+            // Fallback: busca full-text search com peso adicional
             try {
                 const ftsResults = await prisma.$queryRaw`
-                    SELECT id, content, 0.5 as score
-                    FROM "DocumentChunk"
-                    WHERE "knowledgeBaseId" = ${knowledgeBaseId}
-                    AND content ILIKE '%' || ${query} || '%'
+                    SELECT id, content, metadata, page_number as "pageNumber", section, 0.5 as score
+                    FROM "DocumentChunk" dc
+                    JOIN "Document" d ON dc."documentId" = d.id
+                    WHERE dc."knowledgeBaseId" = ${knowledgeBaseId}
+                    AND d."companyId" = ${companyId}
+                    AND d.status = 'READY'
+                    AND (
+                        dc.content ILIKE '%' || ${query} || '%'
+                        OR dc.content ILIKE '%' || LOWER(${query}) || '%'
+                    )
+                    ORDER BY LENGTH(dc.content) DESC
                     LIMIT ${topK}
                 `;
+
                 this.logger.debug(`[RAG Fallback] ${ftsResults?.length || 0} resultados via full-text search`);
-                return ftsResults || [];
+
+                // Converter resultados para o formato esperado
+                return (ftsResults || []).map((result: any) => ({
+                    id: result.id,
+                    content: result.content,
+                    score: result.score || 0.5,
+                    metadata: result.metadata,
+                    pageNumber: result.pageNumber,
+                    section: result.section
+                }));
             } catch (ftsError) {
                 this.logger.error(`[RAG Fallback] Erro na busca full-text: ${ftsError.message}`);
                 return [];
@@ -464,6 +509,25 @@ export class VectorStoreService {
 
         if (normA === 0 || normB === 0) return 0;
         return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+    }
+
+    /**
+     * Calcula similaridade de Jaccard entre dois textos (por tokens).
+     * Usada para deduplicação de chunks com conteúdo repetido.
+     */
+    private jaccardSimilarity(textA: string, textB: string): number {
+        // Tokeniza por palavras simples (sem stopwords para manter simples e rápido)
+        const tokenize = (t: string) => new Set(t.toLowerCase().split(/\W+/).filter(w => w.length > 2));
+        const setA = tokenize(textA);
+        const setB = tokenize(textB);
+        if (setA.size === 0 && setB.size === 0) return 1;
+        if (setA.size === 0 || setB.size === 0) return 0;
+        let intersection = 0;
+        for (const token of setA) {
+            if (setB.has(token)) intersection++;
+        }
+        const union = setA.size + setB.size - intersection;
+        return intersection / union;
     }
 
     /**
