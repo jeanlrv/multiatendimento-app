@@ -280,6 +280,10 @@ export class VectorStoreService {
             return this.embedWithPython(text, model || 'all-MiniLM-L6-v2');
         }
 
+        if (provider === 'qwen') {
+            return this.embedWithQwen(text, model || 'text-embedding-v2', apiKey);
+        }
+
         // Provider nativo (padrão) - retorna array simples
         const result = await this.embedWithNative(text, model || 'Xenova/all-MiniLM-L6-v2');
         return result;
@@ -305,6 +309,10 @@ export class VectorStoreService {
 
         if (provider === 'python-embed') {
             return this.embedBatchWithPython(texts, model || 'all-MiniLM-L6-v2');
+        }
+
+        if (provider === 'qwen') {
+            return this.embedBatchWithQwen(texts, model || 'text-embedding-v2', apiKey);
         }
 
         // Provider nativo (padrão) - retorna array de arrays
@@ -579,6 +587,45 @@ export class VectorStoreService {
         return allEmbeddings;
     }
 
+    // ──────────────────────────────────────────────────────────────────────────
+    // Provider: Qwen (Alibaba)
+    // ──────────────────────────────────────────────────────────────────────────
+
+    private async embedWithQwen(text: string, model: string, apiKey?: string): Promise<number[]> {
+        const key = apiKey || process.env.QWEN_API_KEY;
+        if (!key) throw new Error('QWEN_API_KEY não configurada para embedding Qwen');
+
+        const { OpenAI } = require('openai');
+        const qwen = new OpenAI({ apiKey: key, baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1' });
+
+        const response = await qwen.embeddings.create({
+            model,
+            input: text,
+            encoding_format: 'float',
+        });
+
+        return response.data[0].embedding;
+    }
+
+    private async embedBatchWithQwen(texts: string[], model: string, apiKey?: string): Promise<number[][]> {
+        const key = apiKey || process.env.QWEN_API_KEY;
+        if (!key) throw new Error('QWEN_API_KEY não configurada para embedding Qwen');
+
+        const { OpenAI } = require('openai');
+        const qwen = new OpenAI({ apiKey: key, baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1' });
+
+        // Qwen suporta batch de até 25 textos por requisição (documentação oficial)
+        const response = await qwen.embeddings.create({
+            model,
+            input: texts,
+            encoding_format: 'float',
+        });
+
+        // Ordenar pelo índice para garantir ordem correta
+        return response.data
+            .sort((a: any, b: any) => a.index - b.index)
+            .map((item: any) => item.embedding);
+    }
     // ──────────────────────────────────────────────────────────────────────────
     // Utilitários
     // ──────────────────────────────────────────────────────────────────────────

@@ -20,15 +20,6 @@ export interface EmbeddingProviderConfig {
 
 export const EMBEDDING_PROVIDERS: EmbeddingProviderConfig[] = [
     {
-        id: 'native',
-        name: 'Nativo (built-in CPU)',
-        envKey: '',
-        models: [
-            { id: 'Xenova/all-MiniLM-L6-v2', name: 'all-MiniLM-L6-v2 (Mais leve, estável)', dimensions: 384 },
-            { id: 'Xenova/bge-micro-v2', name: 'bge-micro-v2 (Rápido, mas pode crashar)', dimensions: 384 },
-        ],
-    },
-    {
         id: 'openai',
         name: 'OpenAI',
         envKey: 'OPENAI_API_KEY',
@@ -36,6 +27,15 @@ export const EMBEDDING_PROVIDERS: EmbeddingProviderConfig[] = [
             { id: 'text-embedding-3-small', name: 'text-embedding-3-small (Econômico)', dimensions: 1536 },
             { id: 'text-embedding-3-large', name: 'text-embedding-3-large (Alta qualidade)', dimensions: 3072 },
             { id: 'text-embedding-ada-002', name: 'text-embedding-ada-002 (Legado)', dimensions: 1536 },
+        ],
+    },
+    {
+        id: 'native',
+        name: 'Nativo (built-in CPU)',
+        envKey: '',
+        models: [
+            { id: 'Xenova/all-MiniLM-L6-v2', name: 'all-MiniLM-L6-v2 (Mais leve, estável)', dimensions: 384 },
+            { id: 'Xenova/bge-micro-v2', name: 'bge-micro-v2 (Rápido, mas pode crashar)', dimensions: 384 },
         ],
     },
     {
@@ -99,6 +99,15 @@ export const EMBEDDING_PROVIDERS: EmbeddingProviderConfig[] = [
             { id: 'anythingllm:embedding', name: 'AnythingLLM Native Embedder', dimensions: 768 },
         ],
     },
+    {
+        id: 'qwen',
+        name: 'Qwen (Alibaba)',
+        envKey: 'QWEN_API_KEY',
+        models: [
+            { id: 'text-embedding-v2', name: 'text-embedding-v2 (Recomendado)', dimensions: 1024 },
+            { id: 'text-embedding-v1', name: 'text-embedding-v1 (Legado)', dimensions: 1024 },
+        ],
+    },
 ];
 
 
@@ -155,6 +164,8 @@ export class EmbeddingProviderFactory implements OnModuleInit {
                 return this.createNativeEmbeddings(model);
             case 'anythingllm':
                 return this.createAnythingLLMEmbeddings(model, apiKeyOverride, baseUrlOverride);
+            case 'qwen':
+                return this.createQwenEmbeddings(model, apiKeyOverride);
             default:
                 this.logger.warn(`Provider de embedding '${providerId}' sem implementação específica. Tentando como OpenAI-compat.`);
                 return this.createOpenAIEmbeddings(model, apiKeyOverride);
@@ -229,6 +240,17 @@ export class EmbeddingProviderFactory implements OnModuleInit {
             openAIApiKey: apiKey,
             modelName: model,
             configuration: { baseURL: `${baseURL}/openai` },
+        });
+    }
+
+    private createQwenEmbeddings(model: string, apiKeyOverride?: string): Embeddings {
+        const apiKey = apiKeyOverride || this.configService.get<string>('QWEN_API_KEY');
+        if (!apiKey) throw new Error('QWEN_API_KEY não configurada. Configure em Configurações > Integrações.');
+        // Qwen usa endpoint compatível com OpenAI, mas com URL específica
+        return new OpenAIEmbeddings({
+            openAIApiKey: apiKey,
+            modelName: model,
+            configuration: { baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1' },
         });
     }
 
