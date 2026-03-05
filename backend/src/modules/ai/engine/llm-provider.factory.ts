@@ -355,6 +355,9 @@ export class LLMProviderFactory {
 
     /**
      * Detecta qual provider usar baseado no modelId.
+     * Suportaformatos com e sem prefixo:
+     * - Com prefixo: 'deepseek:deepseek-chat', 'groq:llama-3.1-8b'
+     * - Sem prefixo: 'deepseek-chat', 'llama-3.1-8b' (retrocompatível)
      */
     private detectProvider(modelId: string): LLMProviderConfig {
         // Prefixos explícitos
@@ -369,6 +372,7 @@ export class LLMProviderFactory {
             'xai:': 'xai',
             'cohere:': 'cohere',
             'huggingface:': 'huggingface',
+            'deepseek:': 'deepseek',
         };
 
         for (const [prefix, providerId] of Object.entries(prefixMap)) {
@@ -377,7 +381,7 @@ export class LLMProviderFactory {
             }
         }
 
-        // Detecção por padrão do nome
+        // Detecção por padrão do nome (sem prefixo)
         if (modelId.startsWith('claude')) return LLM_PROVIDERS.find(p => p.id === 'anthropic')!;
         if (modelId.startsWith('gemini')) return LLM_PROVIDERS.find(p => p.id === 'gemini')!;
         if (modelId.startsWith('deepseek')) return LLM_PROVIDERS.find(p => p.id === 'deepseek')!;

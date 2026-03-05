@@ -1029,7 +1029,7 @@ Resposta:`;
             'groq:': 'groq', 'openrouter:': 'openrouter', 'ollama:': 'ollama',
             'azure:': 'azure', 'together:': 'together', 'lmstudio:': 'lmstudio',
             'perplexity:': 'perplexity', 'xai:': 'xai', 'cohere:': 'cohere',
-            'huggingface:': 'huggingface',
+            'huggingface:': 'huggingface', 'deepseek:': 'deepseek',
         };
         for (const [prefix, providerId] of Object.entries(prefixMap)) {
             if (modelId.startsWith(prefix)) return providerId;
