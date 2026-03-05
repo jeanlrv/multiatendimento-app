@@ -60,6 +60,10 @@ async function loadExtractor(model) {
             }
             env.backends.onnx.executionProviders = ['wasm'];
             env.backends.onnx.logLevel = 'warning';
+            // Reduzir tamanho do pool de memória para evitar OOM (Alpine Linux)
+            if (env.backends.onnx.wasm) {
+                env.backends.onnx.wasm.maxMemorySize = 128 * 1024 * 1024; // 128MB
+            }
         }
 
         cachedExtractor = await createPipeline('feature-extraction', model, {

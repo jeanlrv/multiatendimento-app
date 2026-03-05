@@ -277,11 +277,11 @@ export class VectorStoreService {
         }
 
         if (provider === 'python-embed') {
-            return this.embedWithPython(text, model || 'paraphrase-MiniLM-L6-v2');
+            return this.embedWithPython(text, model || 'all-MiniLM-L6-v2');
         }
 
         // Provider nativo (padrão) - retorna array simples
-        const result = await this.embedWithNative(text, model || 'Xenova/bge-micro-v2');
+        const result = await this.embedWithNative(text, model || 'Xenova/all-MiniLM-L6-v2');
         return result;
     }
 
@@ -304,11 +304,11 @@ export class VectorStoreService {
         }
 
         if (provider === 'python-embed') {
-            return this.embedBatchWithPython(texts, model || 'paraphrase-MiniLM-L6-v2');
+            return this.embedBatchWithPython(texts, model || 'all-MiniLM-L6-v2');
         }
 
         // Provider nativo (padrão) - retorna array de arrays
-        return this.embedBatchWithNative(texts, model || 'Xenova/bge-micro-v2');
+        return this.embedBatchWithNative(texts, model || 'Xenova/all-MiniLM-L6-v2');
     }
 
     // ──────────────────────────────────────────────────────────────────────────

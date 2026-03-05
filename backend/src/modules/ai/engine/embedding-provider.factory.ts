@@ -24,8 +24,8 @@ export const EMBEDDING_PROVIDERS: EmbeddingProviderConfig[] = [
         name: 'Nativo (built-in CPU)',
         envKey: '',
         models: [
-            { id: 'Xenova/bge-micro-v2', name: 'bge-micro-v2 (Padrão, Muito Leve e Rápido)', dimensions: 384 },
-            { id: 'Xenova/all-MiniLM-L6-v2', name: 'all-MiniLM-L6-v2 (Antigo)', dimensions: 384 },
+            { id: 'Xenova/all-MiniLM-L6-v2', name: 'all-MiniLM-L6-v2 (Mais leve, estável)', dimensions: 384 },
+            { id: 'Xenova/bge-micro-v2', name: 'bge-micro-v2 (Rápido, mas pode crashar)', dimensions: 384 },
         ],
     },
     {
@@ -99,16 +99,6 @@ export const EMBEDDING_PROVIDERS: EmbeddingProviderConfig[] = [
             { id: 'anythingllm:embedding', name: 'AnythingLLM Native Embedder', dimensions: 768 },
         ],
     },
-    {
-        id: 'python-embed',
-        name: 'Python Embed (sentence-transformers)',
-        envKey: '',
-        models: [
-            { id: 'paraphrase-MiniLM-L6-v2', name: 'paraphrase-MiniLM-L6-v2 (Padrão)', dimensions: 384 },
-            { id: 'all-MiniLM-L6-v2', name: 'all-MiniLM-L6-v2', dimensions: 384 },
-            { id: 'paraphrase-multilingual-MiniLM-L12-v2', name: 'paraphrase-multilingual-MiniLM-L12-v2 (Multilíngue)', dimensions: 384 },
-        ],
-    },
 ];
 
 
@@ -165,8 +155,6 @@ export class EmbeddingProviderFactory implements OnModuleInit {
                 return this.createNativeEmbeddings(model);
             case 'anythingllm':
                 return this.createAnythingLLMEmbeddings(model, apiKeyOverride, baseUrlOverride);
-            case 'python-embed':
-                return this.createPythonEmbeddings(model);
             default:
                 this.logger.warn(`Provider de embedding '${providerId}' sem implementação específica. Tentando como OpenAI-compat.`);
                 return this.createOpenAIEmbeddings(model, apiKeyOverride);
@@ -247,14 +235,7 @@ export class EmbeddingProviderFactory implements OnModuleInit {
     private nativeWorkerProcess: ChildProcess | null = null;
     private nativeWorkerModel: string | null = null;
 
-    /**
-     * Cria embeddings via Python subprocesso (sentence-transformers).
-     * Usado como fallback para evitar crash do ONNX no Railway Alpine Linux.
-     */
-    private createPythonEmbeddings(model: string): Embeddings {
-        const { PythonEmbeddings } = require('./python-embeddings.class');
-        return new PythonEmbeddings(model);
-    }
+    // Fallback removido - usar apenas native (ONNX via worker.js)
     private pendingEmbedRequests = new Map<string, { resolve: (v: number[][]) => void; reject: (e: Error) => void }>();
 
     /**
