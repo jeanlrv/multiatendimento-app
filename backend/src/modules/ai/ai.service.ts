@@ -684,7 +684,7 @@ export class AIService {
         }
 
         // Buscar chunks relevantes na base de conhecimento
-        const relevantChunks = await this.vectorStore.searchSimilarity(
+        const relevantChunks = await this.vectorStoreService.searchSimilarity(
             this.prisma,
             companyId,
             query,
@@ -737,7 +737,7 @@ Resposta:`;
                 companyId,
                 agentId,
                 enhancedPrompt,
-                { temperature: options?.temperature || agent.temperature || 0.3 } // Temperatura mais baixa para precisão
+                [], // sem histórico — query direta à base de conhecimento
             );
 
             return {
