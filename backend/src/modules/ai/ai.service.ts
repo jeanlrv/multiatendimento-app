@@ -381,7 +381,7 @@ export class AIService {
             let promptEmbedding: number[] = [];
             try {
                 const companyConfigs = await this.providerConfigService.getDecryptedForCompany(companyId);
-                const embeddingProvider = agent.embeddingProvider || 'openai';
+                const embeddingProvider = agent.embeddingProvider || 'qwen';
                 const embeddingConfig = companyConfigs.get(embeddingProvider);
 
                 // Evita carregar o modelo nativo (@xenova) para cache se não for estritamente necessário
@@ -460,8 +460,13 @@ export class AIService {
                     select: { language: true, embeddingProvider: true, embeddingModel: true },
                 });
                 // Provider e modelo usados para indexar — devem ser iguais ao usado na busca
-                const kbEmbeddingProvider = kb?.embeddingProvider || agent.embeddingProvider || 'native';
-                const kbEmbeddingModel = kb?.embeddingModel || agent.embeddingModel;
+                // Exemplo: Se a KB tiver 'native' (ONNX), usar 'qwen' no Railway para evitar crash
+                let kbEmbeddingProvider = kb?.embeddingProvider || agent.embeddingProvider || 'qwen';
+                if (kbEmbeddingProvider === 'native') {
+                    this.logger.warn(`[RAG] Provider 'native' (ONNX) desabilitado. Substituindo por 'qwen' para Railway`);
+                    kbEmbeddingProvider = 'qwen';
+                }
+                const kbEmbeddingModel = kb?.embeddingModel || agent.embeddingModel || 'text-embedding-v2';
                 const kbEmbeddingConfig = companyConfigs.get(kbEmbeddingProvider);
 
                 this.logger.debug(`[RAG] Buscando base ${agent.knowledgeBaseId} com provider="${kbEmbeddingProvider}" model="${kbEmbeddingModel}"`);
@@ -489,21 +494,45 @@ export class AIService {
 
             // Adiciona instrução de grounding (RAG) se houver contexto
             if (context) {
+                // Parsear chunks com formatação [SOURCE_N] para melhor prompt do LLM
+                const sourceChunks = context.split('\n---\n').map((chunk, index) => {
+                    // Extrair metadata se presente (干ar line com Similaridade)
+                    const lines = chunk.split('\n').filter(line => line.trim());
+                    const contentStart = lines[0].startsWith('Similaridade') ? 1 : 0;
+                    return {
+                        number: index + 1,
+                        content: lines.slice(contentStart).join('\n').trim(),
+                    };
+                }).filter(c => c.content.length > 50); // Filtrar chunks muito curtos
+
+                const formattedContext = sourceChunks
+                    .map(c => `[SOURCE_${c.number}]\n${c.content}\n[END_SOURCE_${c.number}]`)
+                    .join('\n\n');
+
                 systemPrompt += [
                     '',
-                    '---',
-                    '[BASE DE CONHECIMENTO]',
-                    'As informações abaixo foram extraídas da base de conhecimento configurada para este agente.',
-                    'REGRAS OBRIGATÓRIAS:',
-                    '1. Use PREFERENCIALMENTE as informações do contexto abaixo para fundamentar sua resposta.',
-                    '2. Se a resposta estiver parcialmente no contexto, use-a e complemente com seu conhecimento geral, deixando claro o que é cada um.',
-                    '3. Se a informação NÃO estiver no contexto, informe isso claramente e ofereça ajuda alternativa.',
-                    '4. NÃO invente dados, números, URLs ou fatos que não estejam no contexto.',
-                    '5. Cite termos e trechos do contexto quando relevante para demonstrar embasamento.',
+                    '========================================',
+                    '[BASE DE CONHECIMENTO PARA RAG]',
+                    '========================================',
                     '',
-                    '[CONTEXTO RECUPERADO]:',
-                    context,
-                    '---',
+                    'Você é um assistente especializado que responde EXCLUSIVAMENTE com base na base de conhecimento abaixo.',
+                    'SEUS OBRIGAÇÕES:',
+                    '',
+                    '1. [OBRIGATÓRIO] Use APENAS as informações contidas nas SOURCEs abaixo para fundamentar sua resposta.',
+                    '2. [OBRIGATÓRIO] Cite a SOURCE específica (ex: "Conforme SOURCE_1") sempre que usar informações do contexto.',
+                    '3. [OBRIGATÓRIO] Se a resposta estiver parcialmente nas SOURCEs, use-a e complemente apenas com conhecimento geral CLARO.',
+                    '4. [OBRIGATÓRIO] Se a informação NÃO estiver em NENHUMA SOURCE, diga: "Não encontrei informações sobre isso na base de conhecimento."',
+                    '5. [NÃO FAÇA] NÃO invente dados, números, URLs ou fatos que não estejam nas SOURCEs.',
+                    '6. [NÃO FAÇA] NÃO adivinhe ou especule sobre informações ausentes.',
+                    '',
+                    'FORMATO DE RESPOSTA:',
+                    '- Use parágrafos curtos e objetivos.',
+                    '- Referencie SOURCEs usando [SOURCE_N] dentro do texto quando relevante.',
+                    '- Se múltiplas SOURCEs apoiarem o mesmo ponto, cite todas (ex: [SOURCE_1, SOURCE_3]).',
+                    '',
+                    'FONTES (contexto recuperado via busca semântica):',
+                    formattedContext,
+                    '========================================',
                 ].join('\n');
                 // Limpa o contexto da variável enviada diretamente ao llmService para evitar duplicação
                 context = '';
@@ -591,7 +620,7 @@ export class AIService {
             let promptEmbedding: number[] = [];
             if (imageUrls.length === 0) {
                 try {
-                    promptEmbedding = await this.vectorStoreService.generateEmbedding(message, 'native');
+                    promptEmbedding = await this.vectorStoreService.generateEmbedding(message, 'qwen');
                     const cacheKeyPrefix = `${companyId}:${agentId}-mm:`;
                     for (const [key, cached] of this.semanticCache.entries()) {
                         if (key.startsWith(cacheKeyPrefix)) {
@@ -690,8 +719,8 @@ export class AIService {
             query,
             knowledgeBaseId,
             options?.maxChunks || 5,
-            agent.embeddingProvider || 'native',
-            agent.embeddingModel || 'Xenova/all-MiniLM-L6-v2',
+            agent.embeddingProvider || 'qwen',
+            agent.embeddingModel || 'text-embedding-v2',
             undefined, // apiKey será buscada automaticamente
             undefined, // baseUrl será buscado automaticamente
             'portuguese'
@@ -1062,7 +1091,7 @@ Resposta:`;
                 // Semantic Cache — em cache hit retorna resposta inteira (não há como "stream" do cache)
                 let promptEmbedding: number[] = [];
                 try {
-                    promptEmbedding = await this.vectorStoreService.generateEmbedding(message, 'native');
+                    promptEmbedding = await this.vectorStoreService.generateEmbedding(message, 'qwen');
                     const cacheKeyPrefix = `${companyId}:${agentId}:`;
                     for (const [key, cached] of this.semanticCache.entries()) {
                         if (key.startsWith(cacheKeyPrefix)) {

@@ -9,16 +9,9 @@ import { promises as fs } from 'fs';
  * Serviço responsável por gerar e gerenciar embeddings para busca semântica.
  * Suporta múltiplos providers:
  * - 'native': Embedding local via @xenova/transformers (worker isolado)
- * - 'python-embed': Embedding via Python com sentence-transformers (alternativa ao ONNX)
+ * - 'python-embed': Embedding via Python com sentence-transformers
  * - 'openai': Embedding via API OpenAI (text-embedding-3-small, etc)
- * - 'ollama': Embedding via Ollama local (nomic-embed-text, mxbai-embed-large, etc)
- *
- * CORREÇÕES APLICADAS:
- * - Retry automático com backoff exponencial
- * - Fallback entre providers (native → python-embed → openai)
- * - Timeout aumentado para 300s
- * - Melhor logging de erros
- * - Métodos invalidateRagCache e searchSimilarity adicionados
+ * - 'ollama': Embedding via Ollama local (nomic-embed-text, etc)
  */
 
 @Injectable()
@@ -38,7 +31,6 @@ export class VectorStoreService {
 
     /**
      * Invalida o cache RAG para uma base de conhecimento específica.
-     * Chamado quando documentos são atualizados/adicionados/removidos.
      */
     invalidateRagCache(knowledgeBaseId: string, companyId: string): void {
         const cacheKey = `${companyId}:${knowledgeBaseId}`;
@@ -48,7 +40,7 @@ export class VectorStoreService {
 
     /**
      * Busca chunks similares no banco de dados usando busca vetorial ou full-text search.
-     * Fallback: busca semântica via embedding → busca full-text → busca por palavras-chave.
+     * Implementa ranking híbrido: combina busca vetorial, full-text search e priorização por content quality.
      */
     async searchSimilarity(
         prisma: any,
@@ -56,13 +48,16 @@ export class VectorStoreService {
         query: string,
         knowledgeBaseId: string,
         topK: number = 10,
-        embeddingProvider: string = 'native',
+        embeddingProvider: string = 'qwen',
         embeddingModel?: string,
         apiKey?: string,
         baseUrl?: string,
         language: string = 'portuguese',
-        minScore: number = 0.15
+        minScore: number = 0.10
     ): Promise<{ id: string; content: string; score: number; metadata?: any }[]> {
+        const loggerPrefix = `[RAG:KB${knowledgeBaseId}]`;
+        this.logger.log(`${loggerPrefix} Iniciando busca RAG para query: "${query.substring(0, 50)}..." (topK=${topK}, minScore=${minScore})`);
+
         try {
             // 1. Gerar embedding da query
             const queryEmbedding = await this.generateEmbedding(
@@ -79,7 +74,7 @@ export class VectorStoreService {
                     knowledgeBaseId,
                     document: {
                         companyId,
-                        status: 'READY' // Apenas documentos processados com sucesso
+                        status: 'READY'
                     },
                 },
                 select: {
@@ -93,32 +88,63 @@ export class VectorStoreService {
             });
 
             if (!chunks || chunks.length === 0) {
-                this.logger.warn(`[RAG] Nenhum chunk encontrado na KB ${knowledgeBaseId}`);
+                this.logger.warn(`${loggerPrefix} Nenhum chunk encontrado na KB`);
                 return [];
             }
 
-            // 3. Calcular similaridade, filtrar por score mínimo e retornar top-K sem duplicatas
-            const scored = chunks
-                .map((chunk: any) => ({
-                    id: chunk.id,
-                    content: chunk.content,
-                    metadata: chunk.metadata,
-                    pageNumber: chunk.pageNumber,
-                    section: chunk.section,
-                    score: this.cosineSimilarity(queryEmbedding, chunk.embedding),
-                }))
-                // Filtrar chunks com conteúdo significativo
-                .filter(item => item.content && item.content.trim().length > 10)
-                // Filtrar por score mínimo para eliminar chunks irrelevantes
-                .filter(item => item.score >= minScore)
-                // Ordenar por score
-                .sort((a: any, b: any) => b.score - a.score);
+            this.logger.debug(`${loggerPrefix} Buscando ${chunks.length} chunks na memória...`);
 
-            // Deduplicação: remover chunks com conteúdo muito similar entre si (>0.92)
-            const deduplicated: typeof scored = [];
-            for (const candidate of scored) {
+            // 3. Calcular similaridade para todos os chunks
+            const scored = chunks
+                .map((chunk: any) => {
+                    const vectorScore = this.cosineSimilarity(queryEmbedding, chunk.embedding);
+                    return {
+                        id: chunk.id,
+                        content: chunk.content,
+                        metadata: chunk.metadata,
+                        pageNumber: chunk.pageNumber,
+                        section: chunk.section,
+                        vectorScore,
+                        textScore: 0,
+                        hybridScore: 0
+                    };
+                })
+                .filter(item => item.content && item.content.trim().length >= 50);
+
+            if (scored.length === 0) {
+                this.logger.warn(`${loggerPrefix} Nenhum chunk passou no filtro de comprimento`);
+                return [];
+            }
+
+            // 4. Calcular FTS score (BM25-like) para ranking híbrido
+            const queryTerms = query.toLowerCase().split(/\s+/).filter(t => t.length > 2);
+            for (const item of scored) {
+                const contentLower = item.content.toLowerCase();
+                let matchCount = 0;
+                let termScore = 0;
+                for (const term of queryTerms) {
+                    if (contentLower.includes(term)) {
+                        matchCount++;
+                        termScore += 1.0 / (matchCount + 1);
+                    }
+                }
+                item.textScore = termScore;
+            }
+
+            // 5. Calcular Hybrid Score = 0.7 * Vector + 0.3 * Text
+            for (const item of scored) {
+                item.hybridScore = 0.7 * item.vectorScore + 0.3 * item.textScore;
+            }
+
+            // 6. Ordenar por hybrid score e aplicar minScore
+            const sorted = scored
+                .filter(item => item.hybridScore >= minScore)
+                .sort((a: any, b: any) => b.hybridScore - a.hybridScore);
+
+            // 7. Deduplicação: remover chunks com conteúdo muito similar
+            const deduplicated: typeof sorted = [];
+            for (const candidate of sorted) {
                 const isDuplicate = deduplicated.some(existing => {
-                    // Comparação rápida por texto (evita recalcular embeddings)
                     const overlap = this.jaccardSimilarity(candidate.content, existing.content);
                     return overlap > 0.7;
                 });
@@ -128,53 +154,80 @@ export class VectorStoreService {
                 if (deduplicated.length >= topK) break;
             }
 
-            this.logger.debug(`[RAG] ${deduplicated.length} chunks encontrados (score>=${minScore}) para query: "${query.substring(0, 50)}..."`);
-            return deduplicated;
-        } catch (error) {
-            this.logger.error(`[RAG] Erro na busca por similaridade: ${error.message}`);
+            // 8. Logging detalhado dos top chunks
+            this.logger.debug(`${loggerPrefix} Top ${Math.min(5, deduplicated.length)} chunks:`);
+            for (let i = 0; i < Math.min(5, deduplicated.length); i++) {
+                this.logger.debug(`${loggerPrefix}  #${i + 1}: score=${deduplicated[i].hybridScore.toFixed(3)}, text="${deduplicated[i].content.substring(0, 60)}..."`);
+            }
 
-            // Fallback: busca full-text search com peso adicional
-            try {
+            // 9. Fallback: busca full-text search se não houver resultados suficientes
+            if (deduplicated.length < Math.ceil(topK / 2)) {
+                this.logger.warn(`${loggerPrefix} Poucos resultados vetoriais (${deduplicated.length}), usando FTS fallback...`);
+
                 const ftsResults = await prisma.$queryRaw`
-                    SELECT id, content, metadata, page_number as "pageNumber", section, 0.5 as score
+                    SELECT 
+                        dc.id,
+                        dc.content,
+                        dc.metadata,
+                        dc.page_number as "pageNumber",
+                        dc.section,
+                        0.5 + LEAST(0.3, (LENGTH(dc.content) - 100) / 2000.0) as score
                     FROM "DocumentChunk" dc
                     JOIN "Document" d ON dc."documentId" = d.id
                     WHERE dc."knowledgeBaseId" = ${knowledgeBaseId}
                     AND d."companyId" = ${companyId}
                     AND d.status = 'READY'
-                    AND (
-                        dc.content ILIKE '%' || ${query} || '%'
-                        OR dc.content ILIKE '%' || LOWER(${query}) || '%'
-                    )
+                    AND LOWER(dc.content) LIKE '%' || LOWER(${query}) || '%'
                     ORDER BY LENGTH(dc.content) DESC
-                    LIMIT ${topK}
+                    LIMIT ${topK * 2}
                 `;
 
-                this.logger.debug(`[RAG Fallback] ${ftsResults?.length || 0} resultados via full-text search`);
-
-                // Converter resultados para o formato esperado
-                return (ftsResults || []).map((result: any) => ({
+                this.logger.log(`${loggerPrefix} ${ftsResults?.length || 0} resultados via FTS`);
+                const ftsChunks = (ftsResults || []).map((result: any) => ({
                     id: result.id,
                     content: result.content,
-                    score: result.score || 0.5,
                     metadata: result.metadata,
                     pageNumber: result.pageNumber,
-                    section: result.section
+                    section: result.section,
+                    vectorScore: 0.0,
+                    textScore: 0.5 + (result.content.length > 200 ? 0.2 : 0),
+                    hybridScore: 0.7 * 0.5 + 0.3 * 0.5
                 }));
-            } catch (ftsError) {
-                this.logger.error(`[RAG Fallback] Erro na busca full-text: ${ftsError.message}`);
-                return [];
+
+                // Mesclar FTS com resultados vetoriais
+                const merged = [...deduplicated, ...ftsChunks];
+
+                // Re-deduplicar
+                const final: typeof deduplicated = [];
+                for (const candidate of merged) {
+                    const isDuplicate = final.some(existing => {
+                        const overlap = this.jaccardSimilarity(candidate.content, existing.content);
+                        return overlap > 0.7;
+                    });
+                    if (!isDuplicate) {
+                        final.push(candidate);
+                    }
+                    if (final.length >= topK) break;
+                }
+
+                this.logger.log(`${loggerPrefix} resultado final: ${final.length} chunks (vetorial: ${deduplicated.length}, FTS: ${ftsChunks.length})`);
+                return final;
             }
+
+            this.logger.log(`${loggerPrefix} ${deduplicated.length} chunks retornados`);
+            return deduplicated;
+        } catch (error) {
+            this.logger.error(`${loggerPrefix} Erro na busca por similaridade: ${error.message}`, error.stack);
+            return [];
         }
     }
 
     /**
      * Gera embedding para um texto usando o provider especificado.
-     * Inclui retry automático e fallback.
      */
     async generateEmbedding(
         text: string,
-        provider: string = 'native',
+        provider: string = 'qwen',
         model?: string,
         apiKey?: string,
         baseUrl?: string
@@ -182,7 +235,6 @@ export class VectorStoreService {
         const MAX_RETRIES = 3;
         let lastError: Error | null = null;
 
-        // Tentar provider principal
         for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
             try {
                 const embeddings = await this.embedQueryWithProvider(text, provider, model, apiKey, baseUrl);
@@ -197,7 +249,6 @@ export class VectorStoreService {
                 );
 
                 if (attempt < MAX_RETRIES) {
-                    // Backoff exponencial: 1s, 2s, 4s
                     const delay = Math.pow(2, attempt - 1) * 1000;
                     await new Promise(resolve => setTimeout(resolve, delay));
                 }
@@ -205,7 +256,7 @@ export class VectorStoreService {
         }
 
         // Fallback: tentar OpenAI se provider nativo falhar
-        if (provider !== 'openai') {
+        if (provider !== 'openai' && provider !== 'qwen') {
             this.logger.warn(`Provider '${provider}' falhou após ${MAX_RETRIES} tentativas. Tentando fallback para OpenAI...`);
             const openAiKey = process.env.OPENAI_API_KEY;
 
@@ -224,7 +275,26 @@ export class VectorStoreService {
             }
         }
 
-        // Se tudo falhar, lança o último erro
+        // Fallback: tentar Qwen se provider nativo falhar e tiver chave
+        if (provider !== 'qwen') {
+            this.logger.warn(`Provider '${provider}' falhou após ${MAX_RETRIES} tentativas. Tentando fallback para Qwen (Alibaba)...`);
+            const qwenKey = process.env.QWEN_API_KEY;
+
+            if (qwenKey) {
+                try {
+                    const embeddings = await this.embedQueryWithProvider(text, 'qwen', 'text-embedding-v2', qwenKey, undefined);
+                    if (embeddings && embeddings.length > 0) {
+                        this.logger.log('Fallback para Qwen (Alibaba) bem-sucedido');
+                        return embeddings;
+                    }
+                } catch (fallbackErr: any) {
+                    this.logger.error(`Fallback para Qwen também falhou: ${fallbackErr.message}`);
+                }
+            } else {
+                this.logger.warn('QWEN_API_KEY não configurada, pulando fallback');
+            }
+        }
+
         throw new Error(
             `Falha ao gerar embedding: ${lastError?.message || 'Erro desconhecido'}. ` +
             `Provider: ${provider}, Model: ${model || 'default'}`
@@ -236,7 +306,7 @@ export class VectorStoreService {
      */
     async generateEmbeddingsBatch(
         texts: string[],
-        provider: string = 'native',
+        provider: string = 'qwen',
         model?: string,
         apiKey?: string,
         baseUrl?: string
@@ -249,7 +319,6 @@ export class VectorStoreService {
             const batchEmbeddings = await this.generateEmbeddingBatchInternal(batch, provider, model, apiKey, baseUrl);
             allEmbeddings.push(...batchEmbeddings);
 
-            // Pequeno delay entre lotes para não sobrecarregar
             if (i + BATCH_SIZE < texts.length) {
                 await new Promise(resolve => setTimeout(resolve, 50));
             }
@@ -284,9 +353,8 @@ export class VectorStoreService {
             return this.embedWithQwen(text, model || 'text-embedding-v2', apiKey);
         }
 
-        // Provider nativo (padrão) - retorna array simples
-        const result = await this.embedWithNative(text, model || 'Xenova/all-MiniLM-L6-v2');
-        return result;
+        // Provider nativo desabilitado - não usar ONNX/xenova no Railway
+        throw new Error(`Provider '${provider}' não suportado. Use: openai, ollama, python-embed, ou qwen.`);
     }
 
     /**
@@ -315,8 +383,8 @@ export class VectorStoreService {
             return this.embedBatchWithQwen(texts, model || 'text-embedding-v2', apiKey);
         }
 
-        // Provider nativo (padrão) - retorna array de arrays
-        return this.embedBatchWithNative(texts, model || 'Xenova/all-MiniLM-L6-v2');
+        // Provider nativo desabilitado - não usar ONNX/xenova no Railway
+        throw new Error(`Provider '${provider}' não suportado. Use: openai, ollama, python-embed, ou qwen.`);
     }
 
     // ──────────────────────────────────────────────────────────────────────────
@@ -348,7 +416,6 @@ export class VectorStoreService {
         this.embedWorker.on('message', (msg: any) => {
             if (!msg || typeof msg !== 'object') return;
 
-            // Log messages do worker
             if (msg.type === 'log') {
                 const logMsg = `[EmbedWorker #${currentId}] ${msg.message}`;
                 if (msg.level === 'error') this.logger.error(logMsg);
@@ -357,14 +424,12 @@ export class VectorStoreService {
                 return;
             }
 
-            // Worker está pronto
             if (msg.type === 'ready') {
                 this.embedWorkerReady = true;
                 this.logger.log(`[EmbedWorker #${currentId}] Worker pronto`);
                 return;
             }
 
-            // Resultado de embedding
             if (msg.type === 'result' && msg.id !== undefined) {
                 const pending = this.pendingCallbacks.get(msg.id);
                 if (pending) {
@@ -375,7 +440,6 @@ export class VectorStoreService {
                 return;
             }
 
-            // Erro de embedding
             if (msg.type === 'error' && msg.id !== undefined) {
                 const pending = this.pendingCallbacks.get(msg.id);
                 if (pending) {
@@ -391,8 +455,6 @@ export class VectorStoreService {
             this.embedWorkerReady = false;
             this.logger.warn(`[EmbedWorker #${currentId}] Worker saiu com código ${code}`);
 
-            // Rejeitar IMEDIATAMENTE todas as callbacks pendentes
-            // Sem isso, o job de processamento fica travado até o timeout (300s)
             if (this.pendingCallbacks.size > 0) {
                 this.logger.warn(`[EmbedWorker #${currentId}] Rejeitando ${this.pendingCallbacks.size} callback(s) pendente(s) após crash do worker`);
                 const errorMsg = `Worker de embedding finalizou inesperadamente (código: ${code}). ` +
@@ -404,7 +466,6 @@ export class VectorStoreService {
                 }
             }
 
-            // Restart automático após 2s
             setTimeout(() => this.spawnEmbedWorker(), 2000);
         });
 
@@ -421,7 +482,7 @@ export class VectorStoreService {
             }
 
             const id = ++this.embedWorkerId;
-            const timeoutMs = 60_000; // 60 segundos — falha rápida se o worker travar
+            const timeoutMs = 60_000;
 
             const timeout = setTimeout(() => {
                 this.pendingCallbacks.delete(id);
@@ -441,7 +502,7 @@ export class VectorStoreService {
 
         return new Promise((resolve, reject) => {
             const id = ++this.embedWorkerId;
-            const timeoutMs = 60_000; // 60 segundos — falha rápida se o worker travar
+            const timeoutMs = 60_000;
 
             const timeout = setTimeout(() => {
                 this.pendingCallbacks.delete(id);
@@ -481,14 +542,12 @@ export class VectorStoreService {
         const { OpenAI } = require('openai');
         const openai = new OpenAI({ apiKey: key });
 
-        // OpenAI suporta batch de até 2048 textos por requisição
         const response = await openai.embeddings.create({
             model,
             input: texts,
             encoding_format: 'float',
         });
 
-        // Ordenar pelo índice para garantir ordem correta
         return response.data
             .sort((a: any, b: any) => a.index - b.index)
             .map((item: any) => item.embedding);
@@ -511,7 +570,6 @@ export class VectorStoreService {
     }
 
     private async embedBatchWithOllama(texts: string[], model: string, baseUrl?: string): Promise<number[][]> {
-        // Ollama não suporta batch nativo, processar um por um
         const embeddings: number[][] = [];
         for (const text of texts) {
             const emb = await this.embedWithOllama(text, model, baseUrl);
@@ -529,22 +587,15 @@ export class VectorStoreService {
         const scriptPath = join(process.cwd(), 'backend', 'embedding.py');
 
         return new Promise((resolve, reject) => {
-            // Verificar se o script existe
             fs.access(scriptPath, fs.constants.R_OK).then(() => {
-                // Executar o script Python com o texto como argumento
                 execFile(pythonPath, [scriptPath, text], {
-                    timeout: 60000, // 60 segundos
-                    maxBuffer: 1024 * 1024 * 10, // 10MB buffer
+                    timeout: 60000,
+                    maxBuffer: 1024 * 1024 * 10,
                 }, (error, stdout, stderr) => {
                     if (error) {
                         this.logger.warn(`[Python Embed] Erro ao executar embedding: ${error.message}`);
-                        // Se falhar, tentar Onnx como fallback
-                        if (stdout) {
-                            this.logger.debug(`[Python Embed] stdout: ${stdout}`);
-                        }
-                        if (stderr) {
-                            this.logger.debug(`[Python Embed] stderr: ${stderr}`);
-                        }
+                        if (stdout) this.logger.debug(`[Python Embed] stdout: ${stdout}`);
+                        if (stderr) this.logger.debug(`[Python Embed] stderr: ${stderr}`);
                         return reject(new Error(`Falha ao gerar embedding via Python: ${error.message}`));
                     }
 
@@ -568,7 +619,7 @@ export class VectorStoreService {
     }
 
     private async embedBatchWithPython(texts: string[], model: string): Promise<number[][]> {
-        const BATCH_SIZE = 10; // Python é mais lento, processar em lotes menores
+        const BATCH_SIZE = 10;
         const allEmbeddings: number[][] = [];
 
         for (let i = 0; i < texts.length; i += BATCH_SIZE) {
@@ -578,7 +629,6 @@ export class VectorStoreService {
             );
             allEmbeddings.push(...batchEmbeddings);
 
-            // Pequeno delay entre lotes para não sobrecarregar
             if (i + BATCH_SIZE < texts.length) {
                 await new Promise(resolve => setTimeout(resolve, 100));
             }
@@ -614,18 +664,17 @@ export class VectorStoreService {
         const { OpenAI } = require('openai');
         const qwen = new OpenAI({ apiKey: key, baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1' });
 
-        // Qwen suporta batch de até 25 textos por requisição (documentação oficial)
         const response = await qwen.embeddings.create({
             model,
             input: texts,
             encoding_format: 'float',
         });
 
-        // Ordenar pelo índice para garantir ordem correta
         return response.data
             .sort((a: any, b: any) => a.index - b.index)
             .map((item: any) => item.embedding);
     }
+
     // ──────────────────────────────────────────────────────────────────────────
     // Utilitários
     // ──────────────────────────────────────────────────────────────────────────
@@ -653,7 +702,6 @@ export class VectorStoreService {
      * Usada para deduplicação de chunks com conteúdo repetido.
      */
     private jaccardSimilarity(textA: string, textB: string): number {
-        // Tokeniza por palavras simples (sem stopwords para manter simples e rápido)
         const tokenize = (t: string) => new Set(t.toLowerCase().split(/\W+/).filter(w => w.length > 2));
         const setA = tokenize(textA);
         const setB = tokenize(textB);
