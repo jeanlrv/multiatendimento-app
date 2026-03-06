@@ -1,8 +1,13 @@
 # Stage 1 - Build
-FROM node:20-alpine AS builder
+FROM node:20-slim AS builder
 
-# Instalar dependências necessárias para o Prisma
-RUN apk add --no-cache openssl libc6-compat python3 py3-pip py3-setuptools
+# Instalar dependências necessárias para build e Prisma
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    openssl \
+    python3 \
+    python3-pip \
+    python3-setuptools \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -10,6 +15,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Instalar todas as dependências (dev + prod)
+# node:20-slim usa glibc — fastembed e onnxruntime-node têm binários para linux-x64-gnu
 RUN npm install --legacy-peer-deps
 
 # Copiar código fonte e schema Prisma
@@ -23,13 +29,15 @@ RUN npx prisma@6 generate
 RUN npm run build
 
 # Stage 2 - Production
-FROM node:20-alpine
+FROM node:20-slim
 
 # Definir limite de memória elevado (6GB) para o plano Hobby do Railway
 ENV NODE_OPTIONS="--max-old-space-size=6144"
 
-# Usar embedding via OpenAI (compatível com providers compatíveis com API OpenAI)
-# Como fallback, usar o provider nativo (built-in CPU via embedding-worker.js)
+# Instalar apenas o necessário para runtime (Prisma precisa de openssl)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    openssl \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
