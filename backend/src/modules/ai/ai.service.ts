@@ -459,14 +459,9 @@ export class AIService {
                     where: { id: agent.knowledgeBaseId },
                     select: { language: true, embeddingProvider: true, embeddingModel: true },
                 });
-                // Provider e modelo usados para indexar — devem ser iguais ao usado na busca
-                // Exemplo: Se a KB tiver 'native' (ONNX), usar 'qwen' no Railway para evitar crash
-                let kbEmbeddingProvider = kb?.embeddingProvider || agent.embeddingProvider || 'qwen';
-                if (kbEmbeddingProvider === 'native') {
-                    this.logger.warn(`[RAG] Provider 'native' (ONNX) desabilitado. Substituindo por 'qwen' para Railway`);
-                    kbEmbeddingProvider = 'qwen';
-                }
-                const kbEmbeddingModel = kb?.embeddingModel || agent.embeddingModel || 'text-embedding-v2';
+                // Provider e modelo usados para indexar — devem ser os mesmos usados na busca
+                const kbEmbeddingProvider = kb?.embeddingProvider || agent.embeddingProvider || 'native';
+                const kbEmbeddingModel = kb?.embeddingModel || agent.embeddingModel || 'all-MiniLM-L6-v2';
                 const kbEmbeddingConfig = companyConfigs.get(kbEmbeddingProvider);
 
                 this.logger.debug(`[RAG] Buscando base ${agent.knowledgeBaseId} com provider="${kbEmbeddingProvider}" model="${kbEmbeddingModel}"`);

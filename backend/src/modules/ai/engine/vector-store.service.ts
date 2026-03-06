@@ -1,33 +1,31 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { spawn, ChildProcess, execFile } from 'child_process';
+import { execFile } from 'child_process';
 import { join } from 'path';
 import { promises as fs } from 'fs';
+import { EmbeddingProviderFactory } from './embedding-provider.factory';
 
 /**
  * VectorStoreService
  *
  * Serviço responsável por gerar e gerenciar embeddings para busca semântica.
  * Suporta múltiplos providers:
- * - 'native': Embedding local via @xenova/transformers (worker isolado)
- * - 'python-embed': Embedding via Python com sentence-transformers
+ * - 'native': Embedding local via fastembed (onnxruntime-node, sem WASM)
+ * - 'openrouter': Embedding via OpenRouter (OpenAI-compat)
  * - 'openai': Embedding via API OpenAI (text-embedding-3-small, etc)
  * - 'ollama': Embedding via Ollama local (nomic-embed-text, etc)
+ * - 'python-embed': Embedding via Python com sentence-transformers
+ * - 'qwen': Embedding via Alibaba DashScope
+ * - (qualquer outro provider registrado no EmbeddingProviderFactory)
  */
 
 @Injectable()
 export class VectorStoreService {
     private readonly logger = new Logger(VectorStoreService.name);
-    private embedWorker: ChildProcess | null = null;
-    private embedWorkerReady = false;
-    private embedWorkerId = 0;
-    private pendingCallbacks = new Map<number, any>();
 
     // Cache RAG para invalidação
     private ragCache = new Map<string, any[]>();
 
-    constructor() {
-        this.spawnEmbedWorker();
-    }
+    constructor(private readonly embeddingFactory: EmbeddingProviderFactory) { }
 
     /**
      * Invalida o cache RAG para uma base de conhecimento específica.
@@ -353,8 +351,10 @@ export class VectorStoreService {
             return this.embedWithQwen(text, model || 'text-embedding-v2', apiKey);
         }
 
-        // Provider nativo desabilitado - não usar ONNX/xenova no Railway
-        throw new Error(`Provider '${provider}' não suportado. Use: openai, ollama, python-embed, ou qwen.`);
+        // Todos os demais providers (native, openrouter, gemini, cohere, azure, voyage…)
+        // são delegados ao EmbeddingProviderFactory (fastembed / OpenAI-compat)
+        const embedder = this.embeddingFactory.createEmbeddings(provider, model, apiKey, baseUrl);
+        return embedder.embedQuery(text);
     }
 
     /**
@@ -383,136 +383,9 @@ export class VectorStoreService {
             return this.embedBatchWithQwen(texts, model || 'text-embedding-v2', apiKey);
         }
 
-        // Provider nativo desabilitado - não usar ONNX/xenova no Railway
-        throw new Error(`Provider '${provider}' não suportado. Use: openai, ollama, python-embed, ou qwen.`);
-    }
-
-    // ──────────────────────────────────────────────────────────────────────────
-    // Provider: Nativo (@xenova/transformers via worker isolado)
-    // ──────────────────────────────────────────────────────────────────────────
-
-    private spawnEmbedWorker() {
-        if (this.embedWorker) {
-            try {
-                this.embedWorker.kill();
-            } catch { /* ignore */ }
-        }
-
-        const currentId = ++this.embedWorkerId;
-        const workerPath = join(__dirname, 'embedding.worker.js');
-        this.embedWorker = spawn('node', [workerPath], {
-            stdio: ['ipc', 'pipe', 'pipe'],
-            env: { ...process.env },
-        });
-
-        this.embedWorker.stdout?.on('data', (data) => {
-            this.logger.debug(`[EmbedWorker stdout] ${data.toString().trim()}`);
-        });
-
-        this.embedWorker.stderr?.on('data', (data) => {
-            this.logger.warn(`[EmbedWorker stderr] ${data.toString().trim()}`);
-        });
-
-        this.embedWorker.on('message', (msg: any) => {
-            if (!msg || typeof msg !== 'object') return;
-
-            if (msg.type === 'log') {
-                const logMsg = `[EmbedWorker #${currentId}] ${msg.message}`;
-                if (msg.level === 'error') this.logger.error(logMsg);
-                else if (msg.level === 'warn') this.logger.warn(logMsg);
-                else this.logger.log(logMsg);
-                return;
-            }
-
-            if (msg.type === 'ready') {
-                this.embedWorkerReady = true;
-                this.logger.log(`[EmbedWorker #${currentId}] Worker pronto`);
-                return;
-            }
-
-            if (msg.type === 'result' && msg.id !== undefined) {
-                const pending = this.pendingCallbacks.get(msg.id);
-                if (pending) {
-                    clearTimeout(pending.timeout);
-                    this.pendingCallbacks.delete(msg.id);
-                    pending.resolve(msg.embeddings);
-                }
-                return;
-            }
-
-            if (msg.type === 'error' && msg.id !== undefined) {
-                const pending = this.pendingCallbacks.get(msg.id);
-                if (pending) {
-                    clearTimeout(pending.timeout);
-                    this.pendingCallbacks.delete(msg.id);
-                    pending.reject(new Error(msg.message));
-                }
-                return;
-            }
-        });
-
-        this.embedWorker.on('exit', (code) => {
-            this.embedWorkerReady = false;
-            this.logger.warn(`[EmbedWorker #${currentId}] Worker saiu com código ${code}`);
-
-            if (this.pendingCallbacks.size > 0) {
-                this.logger.warn(`[EmbedWorker #${currentId}] Rejeitando ${this.pendingCallbacks.size} callback(s) pendente(s) após crash do worker`);
-                const errorMsg = `Worker de embedding finalizou inesperadamente (código: ${code}). ` +
-                    'O documento será salvo sem vetorização (apenas busca por texto).';
-                for (const [id, pending] of this.pendingCallbacks.entries()) {
-                    clearTimeout(pending.timeout);
-                    pending.reject(new Error(errorMsg));
-                    this.pendingCallbacks.delete(id);
-                }
-            }
-
-            setTimeout(() => this.spawnEmbedWorker(), 2000);
-        });
-
-        this.embedWorker.on('error', (err) => {
-            this.logger.error(`[EmbedWorker #${currentId}] Erro: ${err.message}`);
-        });
-    }
-
-    private embedWithNative(text: string, model: string): Promise<number[]> {
-        return new Promise((resolve, reject) => {
-            if (!this.embedWorker || !this.embedWorkerReady) {
-                reject(new Error('Worker de embeddings não está pronto. Verifique se @xenova/transformers está instalado.'));
-                return;
-            }
-
-            const id = ++this.embedWorkerId;
-            const timeoutMs = 60_000;
-
-            const timeout = setTimeout(() => {
-                this.pendingCallbacks.delete(id);
-                reject(new Error(`Timeout (${timeoutMs / 1000}s) ao gerar embedding nativo`));
-            }, timeoutMs);
-
-            this.pendingCallbacks.set(id, { resolve, reject, timeout });
-
-            this.embedWorker?.send({ type: 'embed', id, model, texts: [text] });
-        });
-    }
-
-    private embedBatchWithNative(texts: string[], model: string): Promise<number[][]> {
-        if (!this.embedWorker || !this.embedWorkerReady) {
-            throw new Error('Worker de embeddings não está pronto');
-        }
-
-        return new Promise((resolve, reject) => {
-            const id = ++this.embedWorkerId;
-            const timeoutMs = 60_000;
-
-            const timeout = setTimeout(() => {
-                this.pendingCallbacks.delete(id);
-                reject(new Error(`Timeout (${timeoutMs / 1000}s) ao gerar embeddings nativos em lote`));
-            }, timeoutMs);
-
-            this.pendingCallbacks.set(id, { resolve, reject, timeout });
-
-            this.embedWorker?.send({ type: 'embed', id, model, texts });
-        });
+        // Todos os demais providers delegados ao EmbeddingProviderFactory
+        const embedder = this.embeddingFactory.createEmbeddings(provider, model, apiKey, baseUrl);
+        return embedder.embedDocuments(texts);
     }
 
     // ──────────────────────────────────────────────────────────────────────────
@@ -737,13 +610,6 @@ export class VectorStoreService {
      * Limpa recursos ao fechar a aplicação.
      */
     onModuleDestroy() {
-        if (this.embedWorker) {
-            this.embedWorker.send({ type: 'exit' });
-            setTimeout(() => {
-                if (this.embedWorker) {
-                    this.embedWorker.kill();
-                }
-            }, 2000);
-        }
+        // EmbeddingProviderFactory (fastembed) gerencia seus próprios recursos via GC
     }
 }
