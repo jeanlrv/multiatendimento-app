@@ -50,6 +50,11 @@ export const AIKnowledgeService = {
         await api.delete(`/ai/knowledge/bases/${id}`);
     },
 
+    updateBase: async (id: string, data: Partial<KnowledgeBase>) => {
+        const response = await api.patch<KnowledgeBase>(`/ai/knowledge/bases/${id}`, data);
+        return response.data;
+    },
+
     addDocument: async (baseId: string, data: Partial<AIDocument>) => {
         const response = await api.post<AIDocument>(`/ai/knowledge/bases/${baseId}/documents`, data);
         return response.data;

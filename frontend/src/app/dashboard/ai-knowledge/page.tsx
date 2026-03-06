@@ -197,13 +197,26 @@ export default function AIKnowledgePage() {
         e.preventDefault();
         try {
             setSubmitting(true);
-            await AIKnowledgeService.createBase(currentBase!);
+
+            if (currentBase?.id) {
+                // Modo Edição
+                await AIKnowledgeService.updateBase(currentBase.id, currentBase);
+                toast.success('Base de conhecimento atualizada com sucesso');
+                // Se a base editada for a selecionada, atualiza os dados dela
+                if (selectedBase?.id === currentBase.id) {
+                    fetchDocuments(currentBase.id);
+                }
+            } else {
+                // Modo Criação
+                await AIKnowledgeService.createBase(currentBase!);
+                toast.success('Base de conhecimento criada com sucesso');
+            }
+
             setIsBaseModalOpen(false);
             fetchBases();
-            toast.success('Base de conhecimento criada com sucesso');
         } catch (error) {
             console.error('Erro ao salvar base:', error);
-            toast.error('Erro ao criar base de conhecimento');
+            toast.error(currentBase?.id ? 'Erro ao atualizar base de conhecimento' : 'Erro ao criar base de conhecimento');
         } finally {
             setSubmitting(false);
         }
@@ -382,7 +395,7 @@ export default function AIKnowledgePage() {
                                 <ChevronLeft size={16} /> Voltar
                             </button>
                             <h3 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white uppercase tracking-tighter italic leading-tight">
-                                Criar <span className="text-primary italic">Base Cognitiva</span>
+                                {currentBase?.id ? 'Editar' : 'Criar'} <span className="text-primary italic">Base Cognitiva</span>
                             </h3>
                         </div>
                     </div>
@@ -445,7 +458,7 @@ export default function AIKnowledgePage() {
                     </div>
                     <div className="pt-6 border-t border-slate-100 dark:border-white/5">
                         <button disabled={submitting} type="submit" className="w-full py-4 bg-primary text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-primary/20 flex items-center justify-center gap-2">
-                            {submitting ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} Sincronizar Base
+                            {submitting ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} {currentBase?.id ? 'Salvar Alterações' : 'Sincronizar Base'}
                         </button>
                     </div>
                 </form>
@@ -694,37 +707,53 @@ export default function AIKnowledgePage() {
                             <div className="space-y-3">
                                 {bases.map(base => (
                                     <div key={base.id} className="relative group">
-                                        <button
-                                            onClick={() => fetchDocuments(base.id)}
-                                            className={`w-full p-5 rounded-2xl flex items-center justify-between transition-all ${selectedBase?.id === base.id ? 'bg-primary text-white shadow-xl translate-x-1' : 'bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300'}`}
-                                        >
-                                            <div className="flex items-center gap-4 truncate">
-                                                <Database size={18} className={selectedBase?.id === base.id ? 'text-white' : 'text-primary'} />
-                                                <div className="text-left truncate">
-                                                    <p className="text-sm font-black uppercase tracking-tight truncate">{base.name}</p>
-                                                    <p className={`text-[9px] font-bold uppercase tracking-widest ${selectedBase?.id === base.id ? 'text-white/70' : 'text-slate-400'}`}>{base._count?.documents || 0} Docs</p>
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={() => fetchDocuments(base.id)}
+                                                className={`flex-1 p-5 rounded-2xl flex items-center justify-between transition-all ${selectedBase?.id === base.id ? 'bg-primary text-white shadow-xl translate-x-1' : 'bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300'}`}
+                                            >
+                                                <div className="flex items-center gap-4 truncate">
+                                                    <Database size={18} className={selectedBase?.id === base.id ? 'text-white' : 'text-primary'} />
+                                                    <div className="text-left truncate">
+                                                        <p className="text-sm font-black uppercase tracking-tight truncate">{base.name}</p>
+                                                        <p className={`text-[9px] font-bold uppercase tracking-widest ${selectedBase?.id === base.id ? 'text-white/70' : 'text-slate-400'}`}>{base._count?.documents || 0} Docs</p>
+                                                    </div>
                                                 </div>
+                                                <ChevronRight size={16} className={`transition-transform ${selectedBase?.id === base.id ? 'translate-x-1' : 'group-hover:translate-x-1'}`} />
+                                            </button>
+
+                                            <div className="flex flex-col gap-1">
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setCurrentBase({ ...base });
+                                                        setIsBaseModalOpen(true);
+                                                    }}
+                                                    className="p-2 bg-primary/10 text-primary rounded-xl hover:bg-primary hover:text-white transition-all shadow-sm"
+                                                    title="Editar Base"
+                                                >
+                                                    <Save size={14} />
+                                                </button>
+                                                <button
+                                                    onClick={async (e) => {
+                                                        e.stopPropagation();
+                                                        if (!confirm(`Excluir permanentemente a base "${base.name}"?\n\nTODOS os documentos e vetores serão removidos.`)) return;
+                                                        try {
+                                                            await AIKnowledgeService.removeBase(base.id);
+                                                            setBases(prev => prev.filter(b => b.id !== base.id));
+                                                            if (selectedBase?.id === base.id) setSelectedBase(null);
+                                                            toast.success('Base de conhecimento excluída');
+                                                        } catch {
+                                                            toast.error('Erro ao excluir base');
+                                                        }
+                                                    }}
+                                                    className="p-2 bg-rose-500/10 text-rose-500 rounded-xl hover:bg-rose-500 hover:text-white transition-all shadow-sm"
+                                                    title="Excluir Base"
+                                                >
+                                                    <Trash2 size={14} />
+                                                </button>
                                             </div>
-                                            <ChevronRight size={16} className={`transition-transform ${selectedBase?.id === base.id ? 'translate-x-1' : 'group-hover:translate-x-1'}`} />
-                                        </button>
-                                        <button
-                                            onClick={async (e) => {
-                                                e.stopPropagation();
-                                                if (!confirm(`Excluir permanentemente a base "${base.name}"?\n\nTODOS os documentos e vetores serão removidos.`)) return;
-                                                try {
-                                                    await AIKnowledgeService.removeBase(base.id);
-                                                    setBases(prev => prev.filter(b => b.id !== base.id));
-                                                    if (selectedBase?.id === base.id) setSelectedBase(null);
-                                                    toast.success('Base de conhecimento excluída');
-                                                } catch {
-                                                    toast.error('Erro ao excluir base');
-                                                }
-                                            }}
-                                            className="absolute -right-2 -top-2 p-2 bg-rose-500 text-white rounded-full opacity-0 group-hover:opacity-100 hover:scale-110 transition-all shadow-lg z-20"
-                                            title="Excluir Base"
-                                        >
-                                            <X size={12} />
-                                        </button>
+                                        </div>
                                     </div>
                                 ))}
                             </div>
