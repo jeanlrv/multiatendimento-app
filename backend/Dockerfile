@@ -56,8 +56,9 @@ RUN sed -i 's/\r$//' /usr/local/bin/entrypoint.sh && \
 RUN mkdir -p /app/public/uploads && \
     chown -R node:node /app
 
-# Executar como usuário não-root (segurança)
-USER node
+# NOTA: USER node removido — volumes Railway são montados como root:root (755)
+# e o usuário node não consegue criar arquivos dentro deles (EACCES).
+# Railway já isola containers; rodar como root é seguro neste ambiente.
 
 # Health check para o Railway e Docker
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
