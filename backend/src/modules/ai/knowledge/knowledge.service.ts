@@ -545,10 +545,23 @@ export class KnowledgeService {
             throw new BadRequestException('Nome não pode exceder 100 caracteres');
         }
 
-        return (this.prisma as any).knowledgeBase.update({
+        // Extrai apenas os campos permitidos para evitar que campos extras do cliente
+        // (id, companyId, createdAt, _count…) sejam passados ao Prisma e causem erro.
+        const { name, description, language, embeddingProvider, embeddingModel } = data;
+        const updateData: Record<string, any> = {};
+        if (name !== undefined) updateData.name = name;
+        if (description !== undefined) updateData.description = description;
+        if (language !== undefined) updateData.language = language;
+        if (embeddingProvider !== undefined) updateData.embeddingProvider = embeddingProvider;
+        if (embeddingModel !== undefined) updateData.embeddingModel = embeddingModel;
+
+        const updated = await (this.prisma as any).knowledgeBase.update({
             where: { id },
-            data
+            data: updateData
         });
+
+        this.emitKnowledgeUpdated(id, companyId);
+        return updated;
     }
 
     async updateBaseDescription(companyId: string, id: string, description: string) {
