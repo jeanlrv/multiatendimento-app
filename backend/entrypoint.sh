@@ -132,20 +132,14 @@ fi
 # DIRETÓRIO DE CACHE FASTEMBED (volume persistente)
 # ============================================
 if [ -n "$FASTEMBED_CACHE_PATH" ]; then
+  mkdir -p "$FASTEMBED_CACHE_PATH" 2>/dev/null || true
   if [ -d "$FASTEMBED_CACHE_PATH" ]; then
-    echo "✅ Diretório fastembed já existe: $FASTEMBED_CACHE_PATH"
+    echo "✅ Fastembed cache: $FASTEMBED_CACHE_PATH"
   else
-    echo "📁 Criando diretório fastembed: $FASTEMBED_CACHE_PATH"
-    if mkdir -p "$FASTEMBED_CACHE_PATH" 2>/dev/null; then
-      chmod 755 "$FASTEMBED_CACHE_PATH" 2>/dev/null || true
-      echo "✅ Diretório fastembed criado"
-    else
-      echo "⚠️  Não foi possível criar $FASTEMBED_CACHE_PATH"
-      echo "   → Monte o volume diretamente em $FASTEMBED_CACHE_PATH no painel do Railway"
-      echo "   → Fallback: usando /tmp/fastembed_cache (não persistente)"
-      export FASTEMBED_CACHE_PATH="/tmp/fastembed_cache"
-      mkdir -p "$FASTEMBED_CACHE_PATH" || true
-    fi
+    echo "⚠️  Nao foi possivel usar $FASTEMBED_CACHE_PATH, fallback para /tmp"
+    FASTEMBED_CACHE_PATH="/tmp/fastembed_cache"
+    mkdir -p "$FASTEMBED_CACHE_PATH"
+    export FASTEMBED_CACHE_PATH
   fi
 fi
 
