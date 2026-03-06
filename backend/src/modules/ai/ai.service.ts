@@ -708,17 +708,25 @@ export class AIService {
         }
 
         // Buscar chunks relevantes na base de conhecimento
+        // Usar o provider da KB (não do agente), pois os chunks foram indexados com o provider da KB.
+        const kb = await (this.prisma as any).knowledgeBase.findUnique({
+            where: { id: knowledgeBaseId },
+            select: { language: true, embeddingProvider: true, embeddingModel: true },
+        });
+        const kbEmbeddingProvider = kb?.embeddingProvider || agent.embeddingProvider || 'native';
+        const kbEmbeddingModel = kb?.embeddingModel || agent.embeddingModel || 'all-MiniLM-L6-v2';
+
         const relevantChunks = await this.vectorStoreService.searchSimilarity(
             this.prisma,
             companyId,
             query,
             knowledgeBaseId,
             options?.maxChunks || 5,
-            agent.embeddingProvider || 'qwen',
-            agent.embeddingModel || 'text-embedding-v2',
+            kbEmbeddingProvider,
+            kbEmbeddingModel,
             undefined, // apiKey será buscada automaticamente
             undefined, // baseUrl será buscado automaticamente
-            'portuguese'
+            kb?.language || 'portuguese'
         );
 
         // Filtrar chunks por score mínimo se especificado
@@ -1118,23 +1126,29 @@ Resposta:`;
                     throw new BadRequestException(`Provider '${providerId}' não configurado.`);
                 }
 
-                const embeddingProvider = agent.embeddingProvider || 'openai';
-                const embeddingConfig = companyConfigs.get(embeddingProvider);
-
                 let context = '';
                 if (agent.knowledgeBaseId) {
                     const kb = await (this.prisma as any).knowledgeBase.findUnique({
                         where: { id: agent.knowledgeBaseId },
-                        select: { language: true },
+                        select: { language: true, embeddingProvider: true, embeddingModel: true },
                     });
+                    // RAG: usa o embeddingProvider da knowledge base (não do agente),
+                    // pois os chunks foram indexados com o provider da KB.
+                    const kbEmbeddingProvider = kb?.embeddingProvider || agent.embeddingProvider || 'native';
+                    const kbEmbeddingModel = kb?.embeddingModel || agent.embeddingModel || 'all-MiniLM-L6-v2';
+                    const kbEmbeddingConfig = companyConfigs.get(kbEmbeddingProvider);
+
+                    this.logger.debug(`[RAG/Stream] Buscando base ${agent.knowledgeBaseId} com provider="${kbEmbeddingProvider}" model="${kbEmbeddingModel}"`);
+
                     const chunks = await this.vectorStoreService.searchSimilarity(
                         this.prisma, companyId, message, agent.knowledgeBaseId,
-                        budget.chunkLimit, agent.embeddingProvider || 'openai',
-                        agent.embeddingModel, embeddingConfig?.apiKey || undefined,
-                        embeddingConfig?.baseUrl || undefined,
+                        budget.chunkLimit, kbEmbeddingProvider,
+                        kbEmbeddingModel, kbEmbeddingConfig?.apiKey || undefined,
+                        kbEmbeddingConfig?.baseUrl || undefined,
                         kb?.language || 'portuguese',
                     );
                     context = chunks.map(c => c.content).join('\n---\n');
+                    this.logger.log(`[RAG/Stream] ${chunks.length} chunks retornados para contexto na KB ${agent.knowledgeBaseId}.`);
                 }
 
                 context = this.guardContextOverflow(agent.prompt || '', context, history, message, finalModelId);
