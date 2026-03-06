@@ -31,6 +31,7 @@ const LLM_PROVIDERS = [
 
 const EMBEDDING_PROVIDERS = [
     { id: 'openai', name: 'OpenAI Embeddings', icon: '🤖', color: '#10a37f', hasBaseUrl: false, description: 'text-embedding-3-small/large' },
+    { id: 'openrouter', name: 'OpenRouter Embeddings', icon: '🔀', color: '#8b5cf6', hasBaseUrl: false, description: 'text-embedding via 200+ modelos (OpenAI, Mistral, Google)' },
     { id: 'gemini', name: 'Google Embeddings', icon: '✨', color: '#4285f4', hasBaseUrl: false, description: 'text-embedding-004' },
     { id: 'cohere', name: 'Cohere Embeddings', icon: '🌐', color: '#0ea5e9', hasBaseUrl: false, description: 'embed-multilingual-v3.0 (PT-BR)' },
     { id: 'azure', name: 'Azure Embeddings', icon: '☁️', color: '#0078d4', hasBaseUrl: true, baseUrlLabel: 'Endpoint Azure', baseUrlPlaceholder: 'https://meu-recurso.openai.azure.com', description: 'text-embedding via Azure' },
@@ -447,12 +448,12 @@ export function AIProvidersSettings() {
                                     </div>
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-center gap-2 flex-wrap">
-                                            <span className="font-black text-sm text-slate-900 dark:text-white">Nativo (built-in CPU)</span>
+                                            <span className="font-black text-sm text-slate-900 dark:text-white">Nativo (fastembed — CPU)</span>
                                             <span className="text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-full bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400">Sempre Ativo</span>
                                             <span className="text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400">Embedding</span>
                                         </div>
                                         <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
-                                            all-MiniLM-L6-v2 · bge-micro-v2 — sem custo, roda localmente no servidor, não requer API Key
+                                            all-MiniLM-L6-v2 · BGE Small EN (inglês, ~25MB) · Multilingual E5 Large (PT-BR, ≥1GB RAM) — sem custo, onnxruntime-node, estável no Railway
                                         </p>
                                     </div>
                                     <span className="flex items-center gap-1 text-[10px] font-black text-green-600 dark:text-green-400 flex-shrink-0">
@@ -478,7 +479,7 @@ export function AIProvidersSettings() {
             {/* Nota sobre providers compartilhados */}
             {activeSection === 'embedding' && (
                 <p className="text-[10px] text-slate-400 dark:text-slate-500 italic">
-                    * OpenAI, Google Gemini, Cohere, Azure e Ollama são configurados na aba LLM Modelos e também ficam disponíveis como providers de embedding automaticamente.
+                    * OpenAI, OpenRouter, Google Gemini, Cohere, Azure e Ollama são configurados na aba LLM Modelos e também ficam disponíveis como providers de embedding automaticamente.
                 </p>
             )}
         </div>

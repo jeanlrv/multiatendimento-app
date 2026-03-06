@@ -2,7 +2,6 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Embeddings } from '@langchain/core/embeddings';
 import { OpenAIEmbeddings } from '@langchain/openai';
-import { ChildProcess } from 'child_process';
 
 export interface EmbeddingModelConfig {
     id: string;
@@ -31,11 +30,12 @@ export const EMBEDDING_PROVIDERS: EmbeddingProviderConfig[] = [
     },
     {
         id: 'native',
-        name: 'Nativo (built-in CPU)',
+        name: 'Nativo (fastembed CPU)',
         envKey: '',
         models: [
-            { id: 'Xenova/all-MiniLM-L6-v2', name: 'all-MiniLM-L6-v2 (Mais leve, estável)', dimensions: 384 },
-            { id: 'Xenova/bge-micro-v2', name: 'bge-micro-v2 (Rápido, mas pode crashar)', dimensions: 384 },
+            { id: 'all-MiniLM-L6-v2', name: 'all-MiniLM-L6-v2 (Leve ~25MB, estável, inglês)', dimensions: 384 },
+            { id: 'bge-small-en-v1.5', name: 'BGE Small EN v1.5 (Leve ~25MB, alta qualidade, inglês)', dimensions: 384 },
+            { id: 'multilingual-e5-large', name: 'Multilingual E5 Large (PT-BR, requer ≥1GB RAM)', dimensions: 1024 },
         ],
     },
     {
@@ -108,6 +108,18 @@ export const EMBEDDING_PROVIDERS: EmbeddingProviderConfig[] = [
             { id: 'text-embedding-v1', name: 'text-embedding-v1 (Legado)', dimensions: 1024 },
         ],
     },
+    {
+        id: 'openrouter',
+        name: 'OpenRouter',
+        envKey: 'OPENROUTER_API_KEY',
+        baseURL: 'https://openrouter.ai/api/v1',
+        models: [
+            { id: 'openai/text-embedding-3-small', name: 'text-embedding-3-small via OpenRouter (Econômico)', dimensions: 1536 },
+            { id: 'openai/text-embedding-3-large', name: 'text-embedding-3-large via OpenRouter (Alta qualidade)', dimensions: 3072 },
+            { id: 'mistral/mistral-embed', name: 'Mistral Embed via OpenRouter', dimensions: 1024 },
+            { id: 'google/text-embedding-004', name: 'Google text-embedding-004 via OpenRouter', dimensions: 768 },
+        ],
+    },
 ];
 
 
@@ -166,6 +178,8 @@ export class EmbeddingProviderFactory implements OnModuleInit {
                 return this.createAnythingLLMEmbeddings(model, apiKeyOverride, baseUrlOverride);
             case 'qwen':
                 return this.createQwenEmbeddings(model, apiKeyOverride);
+            case 'openrouter':
+                return this.createOpenRouterEmbeddings(model, apiKeyOverride);
             default:
                 this.logger.warn(`Provider de embedding '${providerId}' sem implementação específica. Tentando como OpenAI-compat.`);
                 return this.createOpenAIEmbeddings(model, apiKeyOverride);
@@ -243,6 +257,23 @@ export class EmbeddingProviderFactory implements OnModuleInit {
         });
     }
 
+    private createOpenRouterEmbeddings(model: string, apiKeyOverride?: string): Embeddings {
+        const apiKey = apiKeyOverride || this.configService.get<string>('OPENROUTER_API_KEY');
+        if (!apiKey) throw new Error('OPENROUTER_API_KEY não configurada. Configure em Configurações > IA & Modelos.');
+        // OpenRouter expõe endpoint compatível com OpenAI para embeddings
+        return new OpenAIEmbeddings({
+            openAIApiKey: apiKey,
+            modelName: model,
+            configuration: {
+                baseURL: 'https://openrouter.ai/api/v1',
+                defaultHeaders: {
+                    'HTTP-Referer': 'https://kszap.com',
+                    'X-Title': 'KSZap',
+                },
+            },
+        });
+    }
+
     private createQwenEmbeddings(model: string, apiKeyOverride?: string): Embeddings {
         const apiKey = apiKeyOverride || this.configService.get<string>('QWEN_API_KEY');
         if (!apiKey) throw new Error('QWEN_API_KEY não configurada. Configure em Configurações > Integrações.');
@@ -254,120 +285,70 @@ export class EmbeddingProviderFactory implements OnModuleInit {
         });
     }
 
-    private nativeWorkerProcess: ChildProcess | null = null;
-    private nativeWorkerModel: string | null = null;
+    /**
+     * Cache de modelos fastembed carregados (singleton por modelo).
+     * Chave: model ID normalizado (fastembed enum value).
+     */
+    private fastEmbedCache = new Map<string, any>();
 
-    // Fallback removido - usar apenas native (ONNX via worker.js)
-    private pendingEmbedRequests = new Map<string, { resolve: (v: number[][]) => void; reject: (e: Error) => void }>();
+    /** Mapeia IDs de modelo (user-facing) para o enum value do fastembed */
+    private readonly NATIVE_MODEL_MAP: Record<string, string> = {
+        'all-MiniLM-L6-v2': 'fast-all-MiniLM-L6-v2',
+        'bge-small-en-v1.5': 'fast-bge-small-en-v1.5',
+        'multilingual-e5-large': 'fast-multilingual-e5-large',
+        // Compatibilidade com IDs antigos (Xenova/)
+        'Xenova/all-MiniLM-L6-v2': 'fast-all-MiniLM-L6-v2',
+        'Xenova/bge-micro-v2': 'fast-all-MiniLM-L6-v2',
+    };
 
     /**
-     * Retorna (ou cria) um processo filho dedicado ao embedding nativo.
-     * O processo é reutilizado entre chamadas para manter o modelo em cache.
-     * Se o processo morrer (OOM/crash), ele é recriado na próxima chamada.
+     * Retorna (ou cria e cacheia) uma instância FlagEmbedding do fastembed.
+     * Usa onnxruntime-node (binários nativos Linux) — sem WASM, sem SharedArrayBuffer.
      */
-    private getNativeWorker(model: string): ChildProcess {
-        // Reutilizar worker existente se o modelo for o mesmo e o processo estiver vivo
-        if (this.nativeWorkerProcess && !this.nativeWorkerProcess.killed && this.nativeWorkerModel === model) {
-            return this.nativeWorkerProcess;
+    private async getOrCreateFastEmbedModel(modelId: string): Promise<any> {
+        const fastModelId = this.NATIVE_MODEL_MAP[modelId] || 'fast-all-MiniLM-L6-v2';
+
+        if (this.fastEmbedCache.has(fastModelId)) {
+            return this.fastEmbedCache.get(fastModelId);
         }
 
-        // Encerrar worker anterior se existir com modelo diferente
-        if (this.nativeWorkerProcess && !this.nativeWorkerProcess.killed) {
-            try { this.nativeWorkerProcess.send({ type: 'exit' }); } catch { /* ignore */ }
-            this.nativeWorkerProcess = null;
-        }
+        const { FlagEmbedding } = await import('fastembed');
+        const cacheDir = this.configService.get<string>('FASTEMBED_CACHE_PATH') || '/tmp/fastembed_cache';
 
-        // Caminho do worker compilado em dist/ (copiado pelo nest-cli assets)
-        const workerPath = require('path').join(__dirname, 'embedding.worker.js');
-        this.logger.log(`[NativeEmbed] Criando processo filho de embedding: ${workerPath} (modelo: ${model})`);
+        this.logger.log(`[NativeEmbed] Inicializando fastembed modelo "${fastModelId}" (cache: ${cacheDir})`);
 
-        const worker = require('child_process').fork(workerPath, [], {
-            silent: false, // herdar stdout/stderr para aparecer nos logs do Railway
-            execArgv: ['--max-old-space-size=512'], // limite de RAM do processo filho
-        }) as ChildProcess;
-
-        worker.on('message', (msg: any) => {
-            if (!msg || !msg.type) return;
-
-            if (msg.type === 'log') {
-                if (msg.level === 'info') this.logger.log(msg.message);
-                else if (msg.level === 'warn') this.logger.warn(msg.message);
-                else this.logger.error(msg.message);
-                return;
-            }
-
-            if (msg.type === 'ready') {
-                this.logger.log(`[NativeEmbed] Worker pronto (pid ${worker.pid})`);
-                return;
-            }
-
-            const pending = this.pendingEmbedRequests.get(msg.id);
-            if (!pending) return;
-            this.pendingEmbedRequests.delete(msg.id);
-
-            if (msg.type === 'result') {
-                pending.resolve(msg.embeddings);
-            } else if (msg.type === 'error') {
-                pending.reject(new Error(msg.message));
-            }
+        const model = await FlagEmbedding.init({
+            model: fastModelId as any,
+            cacheDir,
+            showDownloadProgress: false,
         });
 
-        worker.on('exit', (code, signal) => {
-            this.logger.warn(`[NativeEmbed] Worker encerrado (code=${code}, signal=${signal})`);
-            // Rejeitar todas as requisições pendentes
-            for (const [id, pending] of this.pendingEmbedRequests) {
-                pending.reject(new Error('Worker de embedding encerrado inesperadamente'));
-                this.pendingEmbedRequests.delete(id);
-            }
-            // Limpar referência para que a próxima chamada crie um novo worker
-            if (this.nativeWorkerProcess === worker) this.nativeWorkerProcess = null;
-        });
-
-        worker.on('error', (err) => {
-            this.logger.error(`[NativeEmbed] Erro no worker: ${err.message}`);
-        });
-
-        this.nativeWorkerProcess = worker;
-        this.nativeWorkerModel = model;
-        return worker;
+        this.fastEmbedCache.set(fastModelId, model);
+        this.logger.log(`[NativeEmbed] Modelo "${fastModelId}" carregado via onnxruntime-node.`);
+        return model;
     }
 
-    private createNativeEmbeddings(model: string): Embeddings {
+    private createNativeEmbeddings(modelId: string): Embeddings {
         return {
             embedDocuments: async (docs: string[]): Promise<number[][]> => {
-                return this.runInNativeWorker(model, docs);
+                const flagModel = await this.getOrCreateFastEmbedModel(modelId);
+                const results: number[][] = [];
+                for await (const batch of flagModel.embed(docs, 32)) {
+                    for (const vec of batch) results.push(Array.from(vec));
+                }
+                return results;
             },
             embedQuery: async (query: string): Promise<number[]> => {
-                const results = await this.runInNativeWorker(model, [query]);
+                const flagModel = await this.getOrCreateFastEmbedModel(modelId);
+                const results: number[][] = [];
+                for await (const batch of flagModel.embed([query], 1)) {
+                    for (const vec of batch) results.push(Array.from(vec));
+                }
                 return results[0];
             },
         } as Embeddings;
     }
 
-    private runInNativeWorker(model: string, texts: string[]): Promise<number[][]> {
-        return new Promise((resolve, reject) => {
-            const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-            const worker = this.getNativeWorker(model);
-
-            const timeout = setTimeout(() => {
-                this.pendingEmbedRequests.delete(id);
-                reject(new Error(`Timeout (120s) ao gerar embeddings com modelo '${model}'`));
-            }, 120_000);
-
-            this.pendingEmbedRequests.set(id, {
-                resolve: (embeddings) => { clearTimeout(timeout); resolve(embeddings); },
-                reject: (err) => { clearTimeout(timeout); reject(err); },
-            });
-
-            try {
-                worker.send({ type: 'embed', id, model, texts });
-            } catch (err) {
-                this.pendingEmbedRequests.delete(id);
-                clearTimeout(timeout);
-                reject(new Error(`Falha ao enviar mensagem ao worker de embedding: ${err.message}`));
-            }
-        });
-    }
 
 
     /**
