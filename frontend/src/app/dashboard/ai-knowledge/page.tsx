@@ -105,10 +105,11 @@ export default function AIKnowledgePage() {
                     // Fallback de segurança para garantir que o "Nativo" esteja sempre disponível no UI
                     return [{
                         id: 'native',
-                        name: 'Nativo (built-in CPU)',
+                        name: 'Nativo (fastembed CPU)',
                         models: [
-                            { id: 'Xenova/all-MiniLM-L6-v2', name: 'all-MiniLM-L6-v2 (Padrão)', dimensions: 384 },
-                            { id: 'Xenova/bge-micro-v2', name: 'bge-micro-v2 (Rápido)', dimensions: 384 }
+                            { id: 'all-MiniLM-L6-v2', name: 'all-MiniLM-L6-v2 (Padrão, ~25MB)', dimensions: 384 },
+                            { id: 'bge-small-en-v1.5', name: 'BGE Small EN v1.5 (~25MB)', dimensions: 384 },
+                            { id: 'multilingual-e5-large', name: 'Multilingual E5 Large (PT-BR)', dimensions: 1024 }
                         ]
                     }];
                 }),

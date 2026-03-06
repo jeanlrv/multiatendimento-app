@@ -579,7 +579,7 @@ export class KnowledgeService {
         });
 
         const totalChunks = await (this.prisma as any).documentChunk.aggregate({
-            where: { knowledgeBaseId: id },
+            where: { document: { knowledgeBaseId: id } },
             _count: true
         });
 

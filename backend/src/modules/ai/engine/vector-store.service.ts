@@ -69,10 +69,10 @@ export class VectorStoreService {
             // 2. Buscar chunks no banco com metadados
             const chunks = await prisma.documentChunk.findMany({
                 where: {
-                    knowledgeBaseId,
                     document: {
+                        knowledgeBaseId,
                         companyId,
-                        status: 'READY'
+                        status: 'READY',
                     },
                 },
                 select: {
@@ -94,6 +94,7 @@ export class VectorStoreService {
 
             // 3. Calcular similaridade para todos os chunks
             const scored = chunks
+                .filter((chunk: any) => Array.isArray(chunk.embedding) && chunk.embedding.length > 0)
                 .map((chunk: any) => {
                     const vectorScore = this.cosineSimilarity(queryEmbedding, chunk.embedding);
                     return {
@@ -104,7 +105,8 @@ export class VectorStoreService {
                         section: chunk.section,
                         vectorScore,
                         textScore: 0,
-                        hybridScore: 0
+                        hybridScore: 0,
+                        score: 0,
                     };
                 })
                 .filter(item => item.content && item.content.trim().length >= 50);
@@ -132,6 +134,7 @@ export class VectorStoreService {
             // 5. Calcular Hybrid Score = 0.7 * Vector + 0.3 * Text
             for (const item of scored) {
                 item.hybridScore = 0.7 * item.vectorScore + 0.3 * item.textScore;
+                item.score = item.hybridScore;
             }
 
             // 6. Ordenar por hybrid score e aplicar minScore
@@ -189,7 +192,8 @@ export class VectorStoreService {
                     section: result.section,
                     vectorScore: 0.0,
                     textScore: 0.5 + (result.content.length > 200 ? 0.2 : 0),
-                    hybridScore: 0.7 * 0.5 + 0.3 * 0.5
+                    hybridScore: 0.7 * 0.5 + 0.3 * 0.5,
+                    score: 0.7 * 0.5 + 0.3 * 0.5,
                 }));
 
                 // Mesclar FTS com resultados vetoriais

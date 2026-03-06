@@ -61,7 +61,7 @@ export class KnowledgeProcessor extends WorkerHost {
 
             // 5. Gera embeddings usando o provider da base de conhecimento
             let embeddingProvider = document.knowledgeBase?.embeddingProvider || 'native';
-            let embeddingModel = document.knowledgeBase?.embeddingModel || 'Xenova/bge-micro-v2';
+            let embeddingModel = document.knowledgeBase?.embeddingModel || 'all-MiniLM-L6-v2';
 
             // Busca API key da empresa para o provider de embedding configurado
             let embeddingApiKey: string | undefined;
