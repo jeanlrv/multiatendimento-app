@@ -129,6 +129,16 @@ else
 fi
 
 # ============================================
+# DIRETÓRIO DE CACHE FASTEMBED (volume persistente)
+# ============================================
+if [ -n "$FASTEMBED_CACHE_PATH" ]; then
+  echo "📁 Criando diretório fastembed: $FASTEMBED_CACHE_PATH"
+  mkdir -p "$FASTEMBED_CACHE_PATH" && chmod 755 "$FASTEMBED_CACHE_PATH" \
+    && echo "✅ Diretório fastembed pronto" \
+    || echo "⚠️  Não foi possível criar $FASTEMBED_CACHE_PATH (verificar permissões do volume)"
+fi
+
+# ============================================
 # INICIAR APLICAÇÃO
 # ============================================
 echo "=========================================="
