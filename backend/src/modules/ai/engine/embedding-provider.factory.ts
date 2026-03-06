@@ -130,11 +130,32 @@ export class EmbeddingProviderFactory implements OnModuleInit {
     constructor(private configService: ConfigService) { }
 
     /**
-     * O warm-up automático foi removido para garantir estabilidade no Railway.
-     * O modelo será carregado sob demanda no primeiro uso pelo método createNativeEmbeddings.
+     * Pré-aquece o modelo nativo de embedding ao iniciar o módulo.
+     * Se FASTEMBED_CACHE_PATH aponta para um volume persistente, o modelo já estará
+     * em disco e o warm-up será rápido (~1-2s). No primeiro deploy com volume vazio,
+     * o download (~25MB–1.2GB dependendo do modelo) ocorre aqui, antes de qualquer
+     * request chegar, evitando timeout nas primeiras chamadas.
+     *
+     * Controle via env vars:
+     *   FASTEMBED_WARMUP_MODEL  — ID do modelo a pré-carregar (padrão: all-MiniLM-L6-v2)
+     *   FASTEMBED_WARMUP        — "false" para desativar (padrão: true)
      */
     async onModuleInit() {
-        this.logger.log('[AI] EmbeddingProviderFactory inicializado (Warm-up automático desativado para estabilidade).');
+        const warmupEnabled = this.configService.get<string>('FASTEMBED_WARMUP') !== 'false';
+        if (!warmupEnabled) {
+            this.logger.log('[AI] EmbeddingProviderFactory inicializado (warm-up desativado via FASTEMBED_WARMUP=false).');
+            return;
+        }
+
+        const warmupModel = this.configService.get<string>('FASTEMBED_WARMUP_MODEL') || 'all-MiniLM-L6-v2';
+        this.logger.log(`[AI] Pré-aquecendo modelo nativo "${warmupModel}"...`);
+
+        try {
+            await this.getOrCreateFastEmbedModel(warmupModel);
+            this.logger.log(`[AI] Modelo "${warmupModel}" pronto para uso.`);
+        } catch (err: any) {
+            this.logger.warn(`[AI] Warm-up falhou para "${warmupModel}": ${err.message}. Embedding nativo será carregado sob demanda.`);
+        }
     }
 
     /**
@@ -314,14 +335,24 @@ export class EmbeddingProviderFactory implements OnModuleInit {
 
         const { FlagEmbedding } = await import('fastembed');
         const cacheDir = this.configService.get<string>('FASTEMBED_CACHE_PATH') || '/tmp/fastembed_cache';
+        const timeoutMs = parseInt(this.configService.get<string>('FASTEMBED_TIMEOUT_MS') || '300000', 10);
 
-        this.logger.log(`[NativeEmbed] Inicializando fastembed modelo "${fastModelId}" (cache: ${cacheDir})`);
+        this.logger.log(`[NativeEmbed] Inicializando fastembed modelo "${fastModelId}" (cache: ${cacheDir}, timeout: ${timeoutMs}ms)`);
 
-        const model = await FlagEmbedding.init({
+        const initPromise = FlagEmbedding.init({
             model: fastModelId as any,
             cacheDir,
             showDownloadProgress: false,
         });
+
+        const timeoutPromise = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error(
+                `fastembed init timeout após ${timeoutMs}ms. Modelo "${fastModelId}" é grande demais para download em tempo real. ` +
+                `Use all-MiniLM-L6-v2 (~25MB) ou configure FASTEMBED_TIMEOUT_MS para aumentar o timeout.`
+            )), timeoutMs)
+        );
+
+        const model = await Promise.race([initPromise, timeoutPromise]);
 
         this.fastEmbedCache.set(fastModelId, model);
         this.logger.log(`[NativeEmbed] Modelo "${fastModelId}" carregado via onnxruntime-node.`);

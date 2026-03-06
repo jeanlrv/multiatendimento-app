@@ -166,7 +166,7 @@ export class VectorStoreService {
                 this.logger.warn(`${loggerPrefix} Poucos resultados vetoriais (${deduplicated.length}), usando FTS fallback...`);
 
                 const ftsResults = await prisma.$queryRaw`
-                    SELECT 
+                    SELECT
                         dc.id,
                         dc.content,
                         dc.metadata,
@@ -175,7 +175,7 @@ export class VectorStoreService {
                         0.5 + LEAST(0.3, (LENGTH(dc.content) - 100) / 2000.0) as score
                     FROM "DocumentChunk" dc
                     JOIN "Document" d ON dc."documentId" = d.id
-                    WHERE dc."knowledgeBaseId" = ${knowledgeBaseId}
+                    WHERE d."knowledgeBaseId" = ${knowledgeBaseId}
                     AND d."companyId" = ${companyId}
                     AND d.status = 'READY'
                     AND LOWER(dc.content) LIKE '%' || LOWER(${query}) || '%'
