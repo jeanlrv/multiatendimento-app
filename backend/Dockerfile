@@ -34,9 +34,10 @@ FROM node:20-slim
 # Definir limite de memória elevado (6GB) para o plano Hobby do Railway
 ENV NODE_OPTIONS="--max-old-space-size=6144"
 
-# Instalar apenas o necessário para runtime (Prisma precisa de openssl)
+# Instalar apenas o necessário para runtime (Prisma precisa de openssl; nc para health checks)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     openssl \
+    netcat-openbsd \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

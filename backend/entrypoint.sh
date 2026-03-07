@@ -39,19 +39,42 @@ fi
 echo "✅ ENCRYPTION_KEY configurada"
 
 # ============================================
-# CONFIGURAÇÃO REDIS (OPCIONAL)
+# AGUARDAR REDIS (evita ETIMEDOUT no BullMQ)
 # ============================================
 echo "🔍 Verificando configuração do Redis..."
 
+# Extrair host e porta do Redis
 if [ -n "$REDIS_URL" ]; then
-  echo "✅ REDIS_URL configurada"
+  REDIS_WAIT_HOST=$(echo "$REDIS_URL" | sed -n 's|.*@\([^:/]*\).*|\1|p')
+  REDIS_WAIT_PORT=$(echo "$REDIS_URL" | sed -n 's|.*:\([0-9][0-9]*\)$|\1|p')
+  REDIS_WAIT_PORT=${REDIS_WAIT_PORT:-6379}
+  echo "✅ REDIS_URL configurada → $REDIS_WAIT_HOST:$REDIS_WAIT_PORT"
 elif [ -n "$REDISHOST" ] || [ -n "$REDIS_HOST" ]; then
-  REDIS_HOST=${REDISHOST:-$REDIS_HOST}
-  REDIS_PORT=${REDISPORT:-${REDIS_PORT:-6379}}
-  echo "✅ Redis configurado: $REDIS_HOST:$REDIS_PORT"
+  REDIS_WAIT_HOST=${REDISHOST:-$REDIS_HOST}
+  REDIS_WAIT_PORT=${REDISPORT:-${REDIS_PORT:-6379}}
+  echo "✅ Redis configurado: $REDIS_WAIT_HOST:$REDIS_WAIT_PORT"
 else
   echo "⚠️  Redis não configurado (funcionalidades limitadas)"
   echo "   Workflows e filas não estarão disponíveis"
+fi
+
+# Aguardar Redis ficar acessível (resolve ETIMEDOUT no Railway ao iniciar)
+if [ -n "$REDIS_WAIT_HOST" ] && [ "$REDIS_WAIT_HOST" != "localhost" ]; then
+  echo "⏳ Aguardando Redis ($REDIS_WAIT_HOST:$REDIS_WAIT_PORT)..."
+  REDIS_RETRY=0
+  REDIS_MAX=30
+  while [ $REDIS_RETRY -lt $REDIS_MAX ]; do
+    if nc -z "$REDIS_WAIT_HOST" "$REDIS_WAIT_PORT" 2>/dev/null; then
+      echo "✅ Redis disponível"
+      break
+    fi
+    REDIS_RETRY=$((REDIS_RETRY + 1))
+    echo "   Redis não disponível, tentativa $REDIS_RETRY/$REDIS_MAX..."
+    sleep 2
+  done
+  if [ $REDIS_RETRY -eq $REDIS_MAX ]; then
+    echo "⚠️  Timeout aguardando Redis. Continuando (BullMQ tentará reconectar)..."
+  fi
 fi
 
 # ============================================
