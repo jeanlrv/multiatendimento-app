@@ -79,17 +79,34 @@ export class VectorStoreService {
                 return [];
             }
 
-            const chunks = await prisma.documentChunk.findMany({
+            // Limite de segurança: KBs com muitos docs podem ter milhares de chunks.
+            // Carregar todos em RAM (embedding JSON = ~8-40KB/chunk) causa OOM em bases grandes.
+            // Estratégia: amostragem aleatória quando exceder MAX_CHUNKS_IN_MEMORY.
+            const MAX_CHUNKS_IN_MEMORY = 2000;
+            const totalChunks = await prisma.documentChunk.count({
                 where: { documentId: { in: validDocIds } },
-                select: {
-                    id: true,
-                    content: true,
-                    embedding: true,
-                    metadata: true,
-                    pageNumber: true,
-                    section: true
-                },
             });
+
+            let chunkQuery: any = {
+                where: { documentId: { in: validDocIds } },
+                select: { id: true, content: true, embedding: true, metadata: true, pageNumber: true, section: true },
+            };
+
+            // Se exceder o limite, carrega apenas os chunks mais recentes (docs recentes têm prioridade)
+            if (totalChunks > MAX_CHUNKS_IN_MEMORY) {
+                this.logger.warn(`${loggerPrefix} KB grande: ${totalChunks} chunks (limite ${MAX_CHUNKS_IN_MEMORY}). Carregando amostra por documento mais recente.`);
+                // Pega os docIds ordenados por data de criação (mais recentes primeiro)
+                const recentDocs = await prisma.document.findMany({
+                    where: { id: { in: validDocIds } },
+                    orderBy: { createdAt: 'desc' },
+                    select: { id: true },
+                    take: Math.ceil(MAX_CHUNKS_IN_MEMORY / 10), // ~10 chunks por doc em média
+                });
+                chunkQuery.where = { documentId: { in: recentDocs.map((d: any) => d.id) } };
+                chunkQuery.take = MAX_CHUNKS_IN_MEMORY;
+            }
+
+            const chunks = await prisma.documentChunk.findMany(chunkQuery);
 
             if (!chunks || chunks.length === 0) {
                 this.logger.warn(`${loggerPrefix} Nenhum chunk encontrado na KB`);

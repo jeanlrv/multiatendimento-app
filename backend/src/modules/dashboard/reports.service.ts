@@ -64,7 +64,7 @@ export class ReportsService {
                     </div>
 
                     <div style="text-align: center; margin-top: 40px;">
-                        <a href="${process.env.FRONTEND_URL}/dashboard" style="background-color: #2563eb; color: white; padding: 14px 32px; text-decoration: none; border-radius: 12px; font-weight: bold; font-size: 14px; box-shadow: 0 10px 15px -3px rgba(37, 99, 235, 0.3);">Ver Dashboard Completo</a>
+                        <a href="${process.env.FRONTEND_PUBLIC_URL || process.env.CORS_ORIGIN || ''}/dashboard" style="background-color: #2563eb; color: white; padding: 14px 32px; text-decoration: none; border-radius: 12px; font-weight: bold; font-size: 14px; box-shadow: 0 10px 15px -3px rgba(37, 99, 235, 0.3);">Ver Dashboard Completo</a>
                     </div>
                 </div>
 

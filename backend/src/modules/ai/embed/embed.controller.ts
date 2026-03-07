@@ -47,12 +47,14 @@ export class EmbedController {
         const config = await this.embedService.getPublicConfig(embedId, origin as string).catch(() => null);
 
         if (!config) {
-            return res.status(404).send('console.error("[KSZap] Agent not found or disabled.");');
+            return res.status(404).send('console.error("[KSZap] Widget não encontrado ou desativado. Verifique se o agente está ativo, o widget está habilitado e o agente foi salvo.");');
         }
 
-        const frontendUrl = process.env.FRONTEND_URL;
+        // FRONTEND_PUBLIC_URL → URL pública do Next.js (ex: https://app.kszap.com)
+        // CORS_ORIGIN         → fallback (já deve ser a URL pública do frontend)
+        const frontendUrl = process.env.FRONTEND_PUBLIC_URL || process.env.CORS_ORIGIN;
         if (!frontendUrl) {
-            return res.status(500).send('console.error("[KSZap] FRONTEND_URL não configurado no servidor. Contate o administrador.");');
+            return res.status(500).send('console.error("[KSZap] FRONTEND_PUBLIC_URL não configurado no servidor. Configure a variável de ambiente FRONTEND_PUBLIC_URL com a URL pública do frontend.");');
         }
 
         const positionProp = config.position === 'bottom-left' ? 'left: 20px;' : 'right: 20px;';

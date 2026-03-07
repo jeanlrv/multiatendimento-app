@@ -160,7 +160,28 @@ export class KnowledgeProcessor extends WorkerHost {
                     rawContent: `ERRO: ${error.message?.substring(0, 900) || 'Erro desconhecido'}\n\nVerifique o tipo do arquivo e se ele está corrompido.`
                 },
             });
-            throw error;
+
+            // Erros permanentes (nunca se resolvem com retry) → não relança para evitar
+            // loop infinito de retentativas no BullMQ. BullMQ marca o job como "completed".
+            const permanentErrorPatterns = [
+                'escaneado',
+                'sem camada de texto',
+                'senha',
+                'password',
+                'encrypted',
+                'DRM',
+                'corrompido',
+                'inválid',
+                'não suportado',
+                'Documento não encontrado',
+            ];
+            const isPermanent = permanentErrorPatterns.some(p => error.message?.toLowerCase().includes(p.toLowerCase()));
+            if (isPermanent) {
+                this.logger.warn(`[Processador] Erro permanente — não reenfileirando: ${error.message}`);
+                return { success: false, error: error.message };
+            }
+
+            throw error; // erros transitórios (rede, timeout) → BullMQ pode reintentar
         }
     }
 
@@ -291,10 +312,22 @@ export class KnowledgeProcessor extends WorkerHost {
                     });
 
                     if (!pdfData.text || pdfData.text.trim().length === 0) {
-                        throw new Error(
-                            'PDF parece ser escaneado (sem camada de texto). ' +
-                            'Para PDFs escaneados, converta para texto usando OCR antes de enviar.'
-                        );
+                        // PDF escaneado — sem camada de texto extraível por pdf-parse.
+                        // Fallback: usar rawContent (descrição fornecida pelo usuário) se disponível.
+                        const fallbackText = rawContent && rawContent.trim().length > 20
+                            ? rawContent.trim()
+                            : null;
+
+                        if (fallbackText) {
+                            this.logger.warn(`[PDF] PDF escaneado — sem texto nativo. Usando rawContent como fallback (${fallbackText.length} chars): ${contentUrl}`);
+                            return { text: fallbackText, pageCount: pdfData.numpages };
+                        }
+
+                        // Sem fallback: cria um chunk mínimo com metadado do arquivo
+                        const filename = contentUrl?.split('/').pop() || 'documento.pdf';
+                        const minimalText = `[Documento sem texto extraível]\nArquivo: ${filename}\nObservação: Este PDF contém apenas imagens (PDF escaneado). Para ter o conteúdo indexado, converta o PDF para texto via OCR antes de enviar.`;
+                        this.logger.warn(`[PDF] PDF escaneado — criando chunk de metadado mínimo: ${filename}`);
+                        return { text: minimalText, pageCount: pdfData.numpages };
                     }
 
                     // Limpeza pós-extração do PDF

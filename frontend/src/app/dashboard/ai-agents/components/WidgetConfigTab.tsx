@@ -18,12 +18,17 @@ export default function WidgetConfigTab({ agent, onChange }: WidgetConfigTabProp
     const [hexInput, setHexInput] = useState(agent.embedBrandColor || '#4F46E5')
     const [logoError, setLogoError] = useState(false)
 
-    const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002/api'
-    const scriptBaseUrl = backendUrl.replace('/api', '') // Ex: https://backend.railway.app
+    // NEXT_PUBLIC_BACKEND_PUBLIC_URL → URL pública do backend (Railway/produção)
+    // NEXT_PUBLIC_API_URL            → fallback (deve ser URL pública do backend no browser)
+    const backendPublicUrl = (
+        process.env.NEXT_PUBLIC_BACKEND_PUBLIC_URL ||
+        process.env.NEXT_PUBLIC_API_URL ||
+        'http://localhost:3002'
+    ).replace(/\/api\/?$/, '') // garante que não termina em /api
     const isAgentSaved = !!agent.id && !!agent.embedId
 
     const embedScript = isAgentSaved
-        ? `<script src="${scriptBaseUrl}/api/embed/${agent.embedId}/script.js" defer></script>`
+        ? `<script src="${backendPublicUrl}/api/embed/${agent.embedId}/script.js" defer></script>`
         : ''
 
     const brandColor = agent.embedBrandColor || '#4F46E5'
@@ -69,6 +74,11 @@ export default function WidgetConfigTab({ agent, onChange }: WidgetConfigTabProp
 
                 {agent.embedEnabled && (
                     <div className="mt-5 space-y-3">
+                        {/* Aviso: o widget só funciona DEPOIS de salvar o agente */}
+                        <div className="flex items-start gap-3 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-600/30 rounded-2xl text-[11px] font-bold text-amber-700 dark:text-amber-300">
+                            <AlertCircle size={14} className="mt-0.5 shrink-0" />
+                            <span>Salve o agente (botão abaixo) para que o widget seja ativado no servidor. Sem salvar, o script retorna erro mesmo com o toggle ativo.</span>
+                        </div>
                         <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Script de Incorporação</label>
                         {!isAgentSaved ? (
                             <div className="flex items-center gap-3 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-600/30 rounded-2xl text-xs font-bold text-amber-700 dark:text-amber-300">
