@@ -171,59 +171,62 @@ export class VectorStoreService {
             if (deduplicated.length < Math.ceil(topK / 2)) {
                 this.logger.warn(`${loggerPrefix} Poucos resultados vetoriais (${deduplicated.length}), usando FTS fallback...`);
 
-                // Tabelas reais (Prisma @@map): document_chunks, documents
-                // Removido: d."companyId" (campo não existe em Document — companyId é em KnowledgeBase)
-                // Removido: dc.section (coluna pode não existir em DBs antigos antes da migration)
-                const ftsResults = await prisma.$queryRaw`
-                    SELECT
-                        dc.id,
-                        dc.content,
-                        dc.metadata,
-                        dc.page_number as "pageNumber",
-                        0.5 + LEAST(0.3, (LENGTH(dc.content) - 100) / 2000.0) as score
-                    FROM "document_chunks" dc
-                    JOIN "documents" d ON dc."documentId" = d.id
-                    WHERE d."knowledgeBaseId" = ${knowledgeBaseId}
-                    AND d.status = 'READY'
-                    AND LOWER(dc.content) LIKE '%' || LOWER(${query}) || '%'
-                    ORDER BY LENGTH(dc.content) DESC
-                    LIMIT ${topK * 2}
-                `;
+                try {
+                    // Tabelas reais (Prisma @@map): document_chunks, documents
+                    // Nota: colunas camelCase sem @map ficam com nome original no PG ("pageNumber", "documentId")
+                    const ftsResults = await prisma.$queryRaw`
+                        SELECT
+                            dc.id,
+                            dc.content,
+                            dc.metadata,
+                            dc."pageNumber",
+                            0.5 + LEAST(0.3, (LENGTH(dc.content) - 100) / 2000.0) as score
+                        FROM "document_chunks" dc
+                        JOIN "documents" d ON dc."documentId" = d.id
+                        WHERE d."knowledgeBaseId" = ${knowledgeBaseId}
+                        AND d.status = 'READY'
+                        AND LOWER(dc.content) LIKE '%' || LOWER(${query}) || '%'
+                        ORDER BY LENGTH(dc.content) DESC
+                        LIMIT ${topK * 2}
+                    `;
 
-                this.logger.log(`${loggerPrefix} ${ftsResults?.length || 0} resultados via FTS`);
-                const ftsChunks = (ftsResults || []).map((result: any) => {
-                    const sqlScore = parseFloat(result.score) || 0.5;
-                    return {
-                        id: result.id,
-                        content: result.content,
-                        metadata: result.metadata,
-                        pageNumber: result.pageNumber,
-                        section: null,
-                        vectorScore: 0.0,
-                        textScore: sqlScore,
-                        hybridScore: sqlScore,
-                        score: sqlScore,
-                    };
-                });
-
-                // Mesclar FTS com resultados vetoriais
-                const merged = [...deduplicated, ...ftsChunks];
-
-                // Re-deduplicar
-                const final: typeof deduplicated = [];
-                for (const candidate of merged) {
-                    const isDuplicate = final.some(existing => {
-                        const overlap = this.jaccardSimilarity(candidate.content, existing.content);
-                        return overlap > 0.7;
+                    this.logger.log(`${loggerPrefix} ${ftsResults?.length || 0} resultados via FTS`);
+                    const ftsChunks = (ftsResults || []).map((result: any) => {
+                        const sqlScore = parseFloat(result.score) || 0.5;
+                        return {
+                            id: result.id,
+                            content: result.content,
+                            metadata: result.metadata,
+                            pageNumber: result.pageNumber,
+                            section: null,
+                            vectorScore: 0.0,
+                            textScore: sqlScore,
+                            hybridScore: sqlScore,
+                            score: sqlScore,
+                        };
                     });
-                    if (!isDuplicate) {
-                        final.push(candidate);
-                    }
-                    if (final.length >= topK) break;
-                }
 
-                this.logger.log(`${loggerPrefix} resultado final: ${final.length} chunks (vetorial: ${deduplicated.length}, FTS: ${ftsChunks.length})`);
-                return final;
+                    // Mesclar FTS com resultados vetoriais e re-deduplicar
+                    const merged = [...deduplicated, ...ftsChunks];
+                    const final: typeof deduplicated = [];
+                    for (const candidate of merged) {
+                        const isDuplicate = final.some(existing => {
+                            const overlap = this.jaccardSimilarity(candidate.content, existing.content);
+                            return overlap > 0.7;
+                        });
+                        if (!isDuplicate) {
+                            final.push(candidate);
+                        }
+                        if (final.length >= topK) break;
+                    }
+
+                    this.logger.log(`${loggerPrefix} resultado final: ${final.length} chunks (vetorial: ${deduplicated.length}, FTS: ${ftsChunks.length})`);
+                    return final;
+                } catch (ftsError) {
+                    // FTS falhou — retorna os resultados vetoriais que já temos (não descarta)
+                    this.logger.warn(`${loggerPrefix} FTS fallback falhou (${ftsError.message}), retornando ${deduplicated.length} chunks vetoriais`);
+                    return deduplicated;
+                }
             }
 
             this.logger.log(`${loggerPrefix} ${deduplicated.length} chunks retornados`);
