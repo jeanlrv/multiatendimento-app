@@ -643,7 +643,20 @@ export default function AIAgentsPage() {
                                         chatHistory.map((msg, i) => (
                                             <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                                                 <div className={`max-w-[80%] p-4 rounded-2xl text-sm font-medium ${msg.role === 'user' ? 'bg-primary text-white ml-12 rounded-tr-none' : 'bg-white dark:bg-white/10 text-slate-800 dark:text-slate-200 mr-12 rounded-tl-none shadow-sm'}`}>
-                                                    {msg.content}
+                                                    <div
+                                                        className="whitespace-pre-wrap break-words leading-relaxed"
+                                                        dangerouslySetInnerHTML={{
+                                                            __html: (() => {
+                                                                const e = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                                                                return e(msg.content)
+                                                                    .replace(/```([\s\S]*?)```/g, '<pre class="bg-black/20 text-xs px-2 py-1 rounded mt-1 overflow-x-auto font-mono whitespace-pre-wrap"><code>$1</code></pre>')
+                                                                    .replace(/`([^`\n]+)`/g, '<code class="bg-black/20 text-xs px-1 py-0.5 rounded font-mono">$1</code>')
+                                                                    .replace(/\*([^*\n]+)\*/g, '<strong class="font-black">$1</strong>')
+                                                                    .replace(/_([^_\n]+)_/g, '<em class="italic opacity-90">$1</em>')
+                                                                    .replace(/~([^~\n]+)~/g, '<del class="line-through opacity-70">$1</del>');
+                                                            })()
+                                                        }}
+                                                    />
                                                 </div>
                                             </div>
                                         ))

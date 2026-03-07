@@ -54,7 +54,7 @@ export class VectorStoreService {
         minScore: number = 0.10
     ): Promise<{ id: string; content: string; score: number; metadata?: any }[]> {
         const loggerPrefix = `[RAG:KB${knowledgeBaseId}]`;
-        this.logger.log(`${loggerPrefix} Iniciando busca RAG para query: "${query.substring(0, 50)}..." (topK=${topK}, minScore=${minScore})`);
+        this.logger.log(`${loggerPrefix} Iniciando busca RAG para query: "${query.substring(0, 50)}..." (company=${companyId}, topK=${topK}, minScore=${minScore})`);
 
         try {
             // 1. Gerar embedding da query
@@ -171,18 +171,19 @@ export class VectorStoreService {
             if (deduplicated.length < Math.ceil(topK / 2)) {
                 this.logger.warn(`${loggerPrefix} Poucos resultados vetoriais (${deduplicated.length}), usando FTS fallback...`);
 
+                // Tabelas reais (Prisma @@map): document_chunks, documents
+                // Removido: d."companyId" (campo não existe em Document — companyId é em KnowledgeBase)
+                // Removido: dc.section (coluna pode não existir em DBs antigos antes da migration)
                 const ftsResults = await prisma.$queryRaw`
                     SELECT
                         dc.id,
                         dc.content,
                         dc.metadata,
                         dc.page_number as "pageNumber",
-                        dc.section,
                         0.5 + LEAST(0.3, (LENGTH(dc.content) - 100) / 2000.0) as score
-                    FROM "DocumentChunk" dc
-                    JOIN "Document" d ON dc."documentId" = d.id
+                    FROM "document_chunks" dc
+                    JOIN "documents" d ON dc."documentId" = d.id
                     WHERE d."knowledgeBaseId" = ${knowledgeBaseId}
-                    AND d."companyId" = ${companyId}
                     AND d.status = 'READY'
                     AND LOWER(dc.content) LIKE '%' || LOWER(${query}) || '%'
                     ORDER BY LENGTH(dc.content) DESC
@@ -190,17 +191,20 @@ export class VectorStoreService {
                 `;
 
                 this.logger.log(`${loggerPrefix} ${ftsResults?.length || 0} resultados via FTS`);
-                const ftsChunks = (ftsResults || []).map((result: any) => ({
-                    id: result.id,
-                    content: result.content,
-                    metadata: result.metadata,
-                    pageNumber: result.pageNumber,
-                    section: result.section,
-                    vectorScore: 0.0,
-                    textScore: 0.5 + (result.content.length > 200 ? 0.2 : 0),
-                    hybridScore: 0.7 * 0.5 + 0.3 * 0.5,
-                    score: 0.7 * 0.5 + 0.3 * 0.5,
-                }));
+                const ftsChunks = (ftsResults || []).map((result: any) => {
+                    const sqlScore = parseFloat(result.score) || 0.5;
+                    return {
+                        id: result.id,
+                        content: result.content,
+                        metadata: result.metadata,
+                        pageNumber: result.pageNumber,
+                        section: null,
+                        vectorScore: 0.0,
+                        textScore: sqlScore,
+                        hybridScore: sqlScore,
+                        score: sqlScore,
+                    };
+                });
 
                 // Mesclar FTS com resultados vetoriais
                 const merged = [...deduplicated, ...ftsChunks];

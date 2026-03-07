@@ -157,15 +157,28 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ msg, index, onRepl
                     </div>
                 )}
 
-                {/* Conteúdo de texto com Markdown básico */}
+                {/* Conteúdo de texto com formatação estilo WhatsApp */}
                 {msg.content && (
                     <div className="text-sm font-medium leading-relaxed select-text whitespace-pre-wrap break-words">
                         {(() => {
-                            // Regex simples para *bold*, _italic_, ~strike~
-                            let content = msg.content
-                                .replace(/\*(.*?)\*/g, '<strong class="font-black">$1</strong>')
-                                .replace(/_(.*?)_/g, '<em class="italic opacity-90">$1</em>')
-                                .replace(/~(.*?)~/g, '<del class="line-through opacity-70">$1</del>');
+                            // Escapar HTML antes de aplicar formatação (previne XSS)
+                            const escape = (t: string) => t
+                                .replace(/&/g, '&amp;')
+                                .replace(/</g, '&lt;')
+                                .replace(/>/g, '&gt;');
+
+                            // Formatação estilo WhatsApp:
+                            // ```bloco``` → <pre><code>
+                            // `inline` → <code>
+                            // *negrito* → <strong>
+                            // _itálico_ → <em>
+                            // ~riscado~ → <del>
+                            const content = escape(msg.content)
+                                .replace(/```([\s\S]*?)```/g, '<pre class="bg-black/20 text-xs px-2 py-1 rounded mt-1 overflow-x-auto font-mono whitespace-pre-wrap"><code>$1</code></pre>')
+                                .replace(/`([^`\n]+)`/g, '<code class="bg-black/20 text-xs px-1 py-0.5 rounded font-mono">$1</code>')
+                                .replace(/\*([^*\n]+)\*/g, '<strong class="font-black">$1</strong>')
+                                .replace(/_([^_\n]+)_/g, '<em class="italic opacity-90">$1</em>')
+                                .replace(/~([^~\n]+)~/g, '<del class="line-through opacity-70">$1</del>');
 
                             return <div dangerouslySetInnerHTML={{ __html: content }} />;
                         })()}
