@@ -140,7 +140,7 @@ export class EmbeddingProviderFactory implements OnModuleInit {
      *   FASTEMBED_WARMUP_MODEL  — ID do modelo a pré-carregar (padrão: all-MiniLM-L6-v2)
      *   FASTEMBED_WARMUP        — "false" para desativar (padrão: true)
      */
-    async onModuleInit() {
+    onModuleInit() {
         const warmupEnabled = this.configService.get<string>('FASTEMBED_WARMUP') !== 'false';
         if (!warmupEnabled) {
             this.logger.log('[AI] EmbeddingProviderFactory inicializado (warm-up desativado via FASTEMBED_WARMUP=false).');
@@ -148,14 +148,20 @@ export class EmbeddingProviderFactory implements OnModuleInit {
         }
 
         const warmupModel = this.configService.get<string>('FASTEMBED_WARMUP_MODEL') || 'all-MiniLM-L6-v2';
-        this.logger.log(`[AI] Pré-aquecendo modelo nativo "${warmupModel}"...`);
+        this.logger.log(`[AI] Warm-up agendado para "${warmupModel}" (fire-and-forget após boot).`);
 
-        try {
-            await this.getOrCreateFastEmbedModel(warmupModel);
-            this.logger.log(`[AI] Modelo "${warmupModel}" pronto para uso.`);
-        } catch (err: any) {
-            this.logger.warn(`[AI] Warm-up falhou para "${warmupModel}": ${err.message}. Embedding nativo será carregado sob demanda.`);
-        }
+        // Fire-and-forget via setImmediate: NestJS termina o boot (ioredis conecta,
+        // app escuta na porta) ANTES de carregar o modelo nativo.
+        // O onnxruntime-node lê ~1.2GB do cache em disco — se feito no onModuleInit
+        // síncrono, bloqueia o event loop e causa ETIMEDOUT nas conexões ioredis.
+        setImmediate(async () => {
+            try {
+                await this.getOrCreateFastEmbedModel(warmupModel);
+                this.logger.log(`[AI] Modelo "${warmupModel}" pronto para uso.`);
+            } catch (err: any) {
+                this.logger.warn(`[AI] Warm-up falhou para "${warmupModel}": ${err.message}. Embedding nativo será carregado sob demanda.`);
+            }
+        });
     }
 
     /**
