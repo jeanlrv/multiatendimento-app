@@ -636,8 +636,14 @@ export class KnowledgeProcessor extends WorkerHost {
 
         // Determinar extensão do arquivo
         const ext = audioUrl.split('.').pop()?.toLowerCase() || 'mp3';
-        const validExts = ['mp3', 'mp4', 'mpeg', 'mpga', 'm4a', 'wav', 'webm', 'ogg'];
-        const finalExt = validExts.includes(ext) ? ext : 'mp3';
+        // faster-whisper-server usa ffmpeg → aceita todos os formatos abaixo
+        // OpenAI API oficial aceita: mp3, mp4, mpeg, mpga, m4a, wav, webm
+        // Formatos WhatsApp (opus, oga, amr, 3gp) são enviados como-estão para o servidor local;
+        // se cair no fallback OpenAI API, serão renomeados para mp3 (ffmpeg já converte o conteúdo)
+        const nativeWhisperExts = ['mp3', 'mp4', 'mpeg', 'mpga', 'm4a', 'wav', 'webm', 'ogg'];
+        const localServerExts = [...nativeWhisperExts, 'opus', 'oga', 'aac', 'amr', '3gp', '3gpp', 'flac'];
+        const supportedExts = whisperBaseUrl ? localServerExts : nativeWhisperExts;
+        const finalExt = supportedExts.includes(ext) ? ext : 'mp3';
 
         const file = await toFile(buffer, `audio.${finalExt}`);
 

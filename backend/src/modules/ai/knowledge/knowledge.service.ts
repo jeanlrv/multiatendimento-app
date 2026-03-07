@@ -278,7 +278,8 @@ export class KnowledgeService {
             'html', 'htm',
             'csv', 'json', 'yaml', 'yml', 'xml',
             'js', 'ts', 'jsx', 'tsx', 'py', 'java', 'go', 'rb', 'php', 'cs', 'cpp', 'c', 'rs', 'swift', 'kt', 'sh', 'bash', 'sql',
-            'mp3', 'wav', 'mp4', 'ogg', 'webm', 'm4a', 'mpeg'
+            'mp3', 'wav', 'mp4', 'ogg', 'webm', 'm4a', 'mpeg',
+            'opus', 'aac', 'amr', '3gp', '3gpp', 'oga'  // formatos WhatsApp
         ]);
         if (!ALLOWED_EXTS.has(ext)) {
             return { valid: false, error: `Extensão não suportada: .${ext}` };
@@ -678,7 +679,13 @@ const EXT_TO_SOURCE_TYPE: Record<string, string> = {
     flac: 'AUDIO',
     aac: 'AUDIO',
     wma: 'AUDIO',
-    alac: 'AUDIO'
+    alac: 'AUDIO',
+    // Formatos WhatsApp
+    opus: 'AUDIO',   // mensagens de voz WhatsApp (principal)
+    oga: 'AUDIO',    // ogg áudio (alias WhatsApp)
+    amr: 'AUDIO',    // AMR narrowband (voz WhatsApp antigo)
+    '3gp': 'AUDIO',  // 3GP (dispositivos móveis antigos)
+    '3gpp': 'AUDIO', // alias 3GP
 };
 
 const EXT_TO_MIME: Record<string, string> = {
@@ -705,6 +712,12 @@ const EXT_TO_MIME: Record<string, string> = {
     ogg: 'audio/ogg',
     webm: 'audio/webm',
     m4a: 'audio/mp4',
+    opus: 'audio/ogg; codecs=opus',
+    oga: 'audio/ogg',
+    aac: 'audio/aac',
+    amr: 'audio/amr',
+    '3gp': 'audio/3gpp',
+    '3gpp': 'audio/3gpp',
 };
 
 export function detectSourceType(ext: string): string {

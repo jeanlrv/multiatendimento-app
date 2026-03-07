@@ -41,7 +41,7 @@ function DocTypeIcon({ sourceType, size = 20 }: { sourceType: string; size?: num
 const URL_INPUT_TYPES = new Set(['URL', 'YOUTUBE', 'GITHUB']);
 
 // Accept string cobrindo todos os tipos de arquivo suportados
-const ALL_FILE_ACCEPT = '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.epub,.txt,.md,.mdx,.markdown,.rtf,.csv,.json,.yaml,.yml,.xml,.html,.htm,.js,.ts,.jsx,.tsx,.py,.java,.go,.rb,.php,.cs,.cpp,.c,.rs,.swift,.kt,.sh,.sql,.mp3,.wav,.mp4,.ogg,.webm,.m4a';
+const ALL_FILE_ACCEPT = '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.epub,.txt,.md,.mdx,.markdown,.rtf,.csv,.json,.yaml,.yml,.xml,.html,.htm,.js,.ts,.jsx,.tsx,.py,.java,.go,.rb,.php,.cs,.cpp,.c,.rs,.swift,.kt,.sh,.sql,.mp3,.wav,.mp4,.ogg,.webm,.m4a,.opus,.oga,.aac,.amr,.3gp,.3gpp';
 
 // Tipos que exigem entrada de URL ou texto (não upload de arquivo)
 const WEB_TYPES = [
@@ -65,6 +65,7 @@ function autoDetectSourceType(filename: string): string {
         cpp: 'CODE', c: 'CODE', rs: 'CODE', swift: 'CODE', kt: 'CODE',
         sh: 'CODE', sql: 'CODE',
         mp3: 'AUDIO', wav: 'AUDIO', mp4: 'AUDIO', ogg: 'AUDIO', webm: 'AUDIO', m4a: 'AUDIO',
+        opus: 'AUDIO', oga: 'AUDIO', aac: 'AUDIO', amr: 'AUDIO', '3gp': 'AUDIO', '3gpp': 'AUDIO',
     };
     return map[ext] || 'TEXT';
 }
