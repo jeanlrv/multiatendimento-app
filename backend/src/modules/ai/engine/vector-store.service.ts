@@ -67,14 +67,20 @@ export class VectorStoreService {
             );
 
             // 2. Buscar chunks no banco com metadados
+            // Document não tem companyId direto — buscar IDs via Document e filtrar por documentId
+            const validDocs = await prisma.document.findMany({
+                where: { knowledgeBaseId, status: 'READY' },
+                select: { id: true },
+            });
+            const validDocIds = validDocs.map((d: any) => d.id);
+
+            if (validDocIds.length === 0) {
+                this.logger.warn(`${loggerPrefix} Nenhum documento READY na KB`);
+                return [];
+            }
+
             const chunks = await prisma.documentChunk.findMany({
-                where: {
-                    document: {
-                        knowledgeBaseId,
-                        companyId,
-                        status: 'READY',
-                    },
-                },
+                where: { documentId: { in: validDocIds } },
                 select: {
                     id: true,
                     content: true,

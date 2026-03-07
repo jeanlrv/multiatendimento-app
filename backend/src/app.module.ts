@@ -76,7 +76,7 @@ import { QuickRepliesModule } from './modules/quick-replies/quick-replies.module
                 };
 
                 const baseConnectionOptions = {
-                    connectTimeout: 10000,      // 10s por tentativa
+                    connectTimeout: 35000,      // 35s — fastembed bloqueia event loop ~20s no boot
                     maxRetriesPerRequest: null,  // BullMQ requer null (sem limite por request)
                     enableOfflineQueue: true,    // Fila offline habilitada (BullMQ precisa)
                     retryStrategy,

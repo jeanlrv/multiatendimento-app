@@ -591,8 +591,12 @@ export class KnowledgeService {
             _count: true
         });
 
+        const kbDocIds = await (this.prisma as any).document.findMany({
+            where: { knowledgeBaseId: id },
+            select: { id: true },
+        });
         const totalChunks = await (this.prisma as any).documentChunk.aggregate({
-            where: { document: { knowledgeBaseId: id } },
+            where: { documentId: { in: kbDocIds.map((d: any) => d.id) } },
             _count: true
         });
 

@@ -15,7 +15,7 @@ export class LockService implements OnModuleInit, OnModuleDestroy {
 
         const baseOpts = {
             lazyConnect: true,
-            connectTimeout: 10000,
+            connectTimeout: 35000,      // 35s — fastembed bloqueia event loop ~20s no boot
             maxRetriesPerRequest: null,
             retryStrategy,
         };
