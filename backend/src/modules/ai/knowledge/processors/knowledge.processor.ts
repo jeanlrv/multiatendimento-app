@@ -600,32 +600,53 @@ export class KnowledgeProcessor extends WorkerHost {
     }
 
     /**
-     * Transcreve áudio via OpenAI Whisper API.
+     * Transcreve áudio via Whisper.
+     *
+     * Prioridade:
+     * 1. WHISPER_BASE_URL → servidor local compatível com OpenAI (faster-whisper-api, LocalAI, etc.)
+     * 2. OPENAI_API_KEY   → OpenAI Whisper API (cloud)
+     *
+     * Para transcrição 100% local (sem API key), configure um servidor Whisper:
+     *   Docker: docker run -p 9000:9000 fedirz/faster-whisper-server:latest-cpu
+     *   Railway: adicione serviço faster-whisper e configure WHISPER_BASE_URL=http://<host>:9000
+     *   LocalAI: WHISPER_BASE_URL=http://localhost:8080/v1
      */
     private async transcribeAudio(audioUrl: string): Promise<string> {
+        const whisperBaseUrl = process.env.WHISPER_BASE_URL;
         const openAiKey = process.env.OPENAI_API_KEY;
-        if (!openAiKey) throw new Error('OPENAI_API_KEY necessária para transcrição de áudio (Whisper)');
 
-        this.logger.log(`Transcrevendo áudio via Whisper: ${audioUrl}`);
+        // Validar que ao menos um dos dois está configurado
+        if (!whisperBaseUrl && !openAiKey) {
+            throw new Error(
+                'Transcrição de áudio requer OPENAI_API_KEY (OpenAI) ou WHISPER_BASE_URL (servidor local). ' +
+                'Para uso local: docker run -p 9000:9000 fedirz/faster-whisper-server:latest-cpu e configure WHISPER_BASE_URL=http://localhost:9000'
+            );
+        }
+
+        this.logger.log(`Transcrevendo áudio via Whisper (${whisperBaseUrl ? 'LOCAL: ' + whisperBaseUrl : 'OpenAI API'}): ${audioUrl}`);
 
         const buffer = await this.getContentBuffer(audioUrl);
-        const { OpenAI } = require('openai');
-        const openai = new OpenAI({ apiKey: openAiKey });
+        const { OpenAI, toFile } = require('openai');
+
+        // Servidor local não precisa de API key real, mas o SDK exige uma string não-vazia
+        const openai = new OpenAI({
+            apiKey: openAiKey || 'local-no-key-required',
+            ...(whisperBaseUrl ? { baseURL: whisperBaseUrl } : {}),
+        });
 
         // Determinar extensão do arquivo
         const ext = audioUrl.split('.').pop()?.toLowerCase() || 'mp3';
-        const filename = `audio.${ext}`;
-
-        // Whisper aceita: mp3, mp4, mpeg, mpga, m4a, wav, webm
         const validExts = ['mp3', 'mp4', 'mpeg', 'mpga', 'm4a', 'wav', 'webm', 'ogg'];
         const finalExt = validExts.includes(ext) ? ext : 'mp3';
 
-        const { toFile } = require('openai');
         const file = await toFile(buffer, `audio.${finalExt}`);
+
+        // faster-whisper-server usa modelo configurado no servidor; OpenAI usa 'whisper-1'
+        const model = process.env.WHISPER_MODEL || 'whisper-1';
 
         const transcription = await openai.audio.transcriptions.create({
             file,
-            model: 'whisper-1',
+            model,
             language: 'pt', // Preferência pelo português
             response_format: 'text',
         });

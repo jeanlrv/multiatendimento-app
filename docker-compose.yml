@@ -74,6 +74,11 @@ services:
       VOYAGE_API_KEY: ${VOYAGE_API_KEY:-}
       # ── Integrações de ingestão ──────────────────────────────────────────────
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      # ── Whisper local (transcrição de áudio sem API key) ─────────────────────
+      # Deixar vazio para usar OpenAI API (requer OPENAI_API_KEY)
+      # Com faster-whisper rodando: WHISPER_BASE_URL=http://whisper:9000/v1
+      WHISPER_BASE_URL: ${WHISPER_BASE_URL:-}
+      WHISPER_MODEL: ${WHISPER_MODEL:-whisper-1}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
       REDIS_HOST: redis
       REDIS_PORT: 6379
@@ -153,9 +158,29 @@ services:
       retries: 5
       start_period: 20s
 
+  # ── Whisper local (opcional) ────────────────────────────────────────────────
+  # Descomente para habilitar transcrição de áudio sem usar a API OpenAI.
+  # Configure no backend: WHISPER_BASE_URL=http://whisper:9000/v1
+  # Modelo padrão: tiny (rápido, ~150MB). Opções: tiny, base, small, medium, large-v3
+  #
+  # whisper:
+  #   image: fedirz/faster-whisper-server:latest-cpu
+  #   container_name: whatsapp-whisper
+  #   environment:
+  #     WHISPER__MODEL: ${WHISPER_LOCAL_MODEL:-tiny}
+  #     WHISPER__LANGUAGE: pt
+  #   ports:
+  #     - "127.0.0.1:9000:9000"
+  #   volumes:
+  #     - whisper_models:/root/.cache/huggingface
+  #   networks:
+  #     - app-network
+  #   restart: unless-stopped
+
 volumes:
   postgres_data:
   redis_data:
+  # whisper_models:  # descomente junto com o serviço acima
 
 
 networks:
