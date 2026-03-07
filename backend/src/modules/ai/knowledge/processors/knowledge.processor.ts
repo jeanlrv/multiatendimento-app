@@ -232,8 +232,29 @@ export class KnowledgeProcessor extends WorkerHost {
 
             case 'CSV': {
                 const src = rawContent || (contentUrl ? (await this.getContentBuffer(contentUrl)).toString('utf-8') : '');
-                const lines = src.split('\n').filter(l => l.trim());
-                return { text: lines.join('\n') };
+                // Parsear CSV com suporte a campos entre aspas
+                const parseCsvLine = (line: string): string[] => {
+                    const result: string[] = [];
+                    let current = '';
+                    let inQuotes = false;
+                    for (let i = 0; i < line.length; i++) {
+                        const ch = line[i];
+                        if (ch === '"') { inQuotes = !inQuotes; }
+                        else if (ch === ',' && !inQuotes) { result.push(current.trim()); current = ''; }
+                        else { current += ch; }
+                    }
+                    result.push(current.trim());
+                    return result;
+                };
+                const lines = src.split('\n').map(l => l.trim()).filter(l => l);
+                if (lines.length === 0) return { text: '' };
+                const headers = parseCsvLine(lines[0]);
+                const rows = lines.slice(1).map(line => {
+                    const vals = parseCsvLine(line);
+                    // Formato semântico: "Coluna: Valor | Coluna: Valor" (mesmo padrão do XLSX)
+                    return headers.map((h, i) => `${h}: ${vals[i] ?? ''}`).join(' | ');
+                }).filter(r => r.replace(/[|:\s]/g, ''));
+                return { text: `${headers.join(', ')}\n\n${rows.join('\n')}` };
             }
 
             // ── PDF ───────────────────────────────────────────────────────────────
