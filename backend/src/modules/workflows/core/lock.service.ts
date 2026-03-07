@@ -7,27 +7,43 @@ export class LockService implements OnModuleInit, OnModuleDestroy {
     private readonly logger = new Logger(LockService.name);
 
     constructor() {
-        const redisOptions = process.env.REDIS_URL
-            ? process.env.REDIS_URL
-            : {
+        // Retry strategy com backoff exponencial — evita crash se Redis demorar a subir
+        const retryStrategy = (times: number) => {
+            if (times >= 10) return 30000; // após 10 tentativas: 30s entre retries
+            return Math.min(500 * Math.pow(2, times - 1), 10000);
+        };
+
+        const baseOpts = {
+            lazyConnect: true,
+            connectTimeout: 10000,
+            maxRetriesPerRequest: null,
+            retryStrategy,
+        };
+
+        const redisUrl = process.env.REDIS_URL;
+        this.client = redisUrl
+            ? new Redis(redisUrl, baseOpts as any)
+            : new Redis({
+                ...baseOpts,
                 host: process.env.REDISHOST || process.env.REDIS_HOST || 'localhost',
                 port: Number(process.env.REDISPORT || process.env.REDIS_PORT) || 6379,
                 password: process.env.REDISPASSWORD || process.env.REDIS_PASSWORD || undefined,
-            };
+            });
 
-        this.client = typeof redisOptions === 'string'
-            ? new Redis(redisOptions, { lazyConnect: true })
-            : new Redis({ ...redisOptions, lazyConnect: true });
-
-        this.client.on('error', (err) => this.logger.error('Redis LockService Error', err));
+        // Logar erros sem derrubar o processo
+        this.client.on('error', (err) => this.logger.warn(`Redis LockService: ${err.message}`));
+        this.client.on('connect', () => this.logger.log('Redis LockService conectado.'));
     }
 
     async onModuleInit() {
-        await this.client.connect();
+        // Conecta de forma não-bloqueante: se falhar, ioredis tenta reconectar automaticamente
+        this.client.connect().catch((err) => {
+            this.logger.warn(`Redis LockService não conectou no boot: ${err.message}. Reconectará automaticamente.`);
+        });
     }
 
     async onModuleDestroy() {
-        await this.client.quit();
+        try { await this.client.quit(); } catch { /* silencioso */ }
     }
 
     /**
