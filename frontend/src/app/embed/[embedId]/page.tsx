@@ -52,7 +52,23 @@ export default function EmbedChatPage() {
 
     const scrollRef = useRef<HTMLDivElement>(null)
     const textareaRef = useRef<HTMLTextAreaElement>(null)
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002/api'
+
+    // Determine API URL — priority: ?api= query param (set by embed script) > build-time env vars
+    // Necessário no Railway onde NEXT_PUBLIC_API_URL pode apontar para URL interna (.railway.internal)
+    const buildTimeApiUrl = (
+        process.env.NEXT_PUBLIC_BACKEND_PUBLIC_URL ||
+        process.env.NEXT_PUBLIC_API_URL ||
+        'http://localhost:3002'
+    ).replace(/\/api\/?$/, '') + '/api'
+    const [apiUrl, setApiUrl] = useState(buildTimeApiUrl)
+
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search)
+        const apiParam = params.get('api')
+        if (apiParam && apiParam.startsWith('http')) {
+            setApiUrl(apiParam.replace(/\/api\/?$/, '') + '/api')
+        }
+    }, [])
 
     // Initialize session and config
     useEffect(() => {

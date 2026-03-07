@@ -18,17 +18,26 @@ export default function WidgetConfigTab({ agent, onChange }: WidgetConfigTabProp
     const [hexInput, setHexInput] = useState(agent.embedBrandColor || '#4F46E5')
     const [logoError, setLogoError] = useState(false)
 
-    // NEXT_PUBLIC_BACKEND_PUBLIC_URL → URL pública do backend (Railway/produção)
-    // NEXT_PUBLIC_API_URL            → fallback (deve ser URL pública do backend no browser)
+    // URL pública do backend para o src do <script>
     const backendPublicUrl = (
         process.env.NEXT_PUBLIC_BACKEND_PUBLIC_URL ||
         process.env.NEXT_PUBLIC_API_URL ||
         'http://localhost:3002'
-    ).replace(/\/api\/?$/, '') // garante que não termina em /api
+    ).replace(/\/api\/?$/, '')
+
+    // URL pública do frontend: window.location.origin é sempre correta quando rodando no browser.
+    // É passada como query param para o script.js para que o iframe aponte para a URL correta,
+    // independentemente de CORS_ORIGIN ou variáveis do Railway estarem com URL interna.
+    const frontendOrigin = typeof window !== 'undefined' ? window.location.origin : ''
+
     const isAgentSaved = !!agent.id && !!agent.embedId
 
+    const scriptSrc = isAgentSaved
+        ? `${backendPublicUrl}/api/embed/${agent.embedId}/script.js?frontend=${encodeURIComponent(frontendOrigin)}`
+        : ''
+
     const embedScript = isAgentSaved
-        ? `<script src="${backendPublicUrl}/api/embed/${agent.embedId}/script.js" defer></script>`
+        ? `<script src="${scriptSrc}" defer></script>`
         : ''
 
     const brandColor = agent.embedBrandColor || '#4F46E5'

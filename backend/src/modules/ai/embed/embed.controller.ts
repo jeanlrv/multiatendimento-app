@@ -50,19 +50,33 @@ export class EmbedController {
             return res.status(404).send('console.error("[KSZap] Widget não encontrado ou desativado. Verifique se o agente está ativo, o widget está habilitado e o agente foi salvo.");');
         }
 
-        // FRONTEND_PUBLIC_URL → URL pública do Next.js (ex: https://app.kszap.com)
-        // CORS_ORIGIN         → fallback (já deve ser a URL pública do frontend)
-        const frontendUrl = process.env.FRONTEND_PUBLIC_URL || process.env.CORS_ORIGIN;
+        // Prioridade para resolver a URL pública do frontend:
+        // 1. ?frontend= query param (gerado pelo WidgetConfigTab via window.location.origin — mais confiável)
+        // 2. FRONTEND_PUBLIC_URL env var (configurado manualmente no Railway)
+        // 3. CORS_ORIGIN env var (fallback — pode ser URL interna no Railway!)
+        const frontendParam = req.query?.frontend as string | undefined;
+        const frontendUrl = (frontendParam && frontendParam.startsWith('http'))
+            ? frontendParam
+            : (process.env.FRONTEND_PUBLIC_URL || process.env.CORS_ORIGIN);
+
         if (!frontendUrl) {
-            return res.status(500).send('console.error("[KSZap] FRONTEND_PUBLIC_URL não configurado no servidor. Configure a variável de ambiente FRONTEND_PUBLIC_URL com a URL pública do frontend.");');
+            return res.status(500).send('console.error("[KSZap] URL do frontend não resolvida. Configure FRONTEND_PUBLIC_URL no servidor ou regenere o script de embed no painel.");');
         }
 
         const positionProp = config.position === 'bottom-left' ? 'left: 20px;' : 'right: 20px;';
+
+        // URL pública do backend para chamadas API dentro do iframe
+        // Prioridade: BACKEND_PUBLIC_URL env > protocolo+host da requisição atual
+        const backendPublicUrl = (
+            process.env.BACKEND_PUBLIC_URL ||
+            `${req.protocol}://${req.get('host')}`
+        ).replace(/\/+$/, '');
 
         // Escape values safe for JS string injection
         const safeName = (config.agentName || 'Chat').replace(/['"\\]/g, '');
         const safeColor = (config.brandColor || '#4F46E5').replace(/['"\\]/g, '');
         const safeLogo = (config.brandLogo || '').replace(/['"\\]/g, '');
+        const safeApiUrl = backendPublicUrl.replace(/['"\\]/g, '');
 
         const scriptContent = `
 (function() {
@@ -73,6 +87,7 @@ export class EmbedController {
     var brandLogo  = "${safeLogo}";
     var agentName  = "${safeName}";
     var frontendUrl = "${frontendUrl}";
+    var apiUrl     = "${safeApiUrl}";
     var positionStyle = "${positionProp}";
     var isOpen = false;
 
@@ -116,7 +131,7 @@ export class EmbedController {
 
     /* ── Iframe ── */
     var iframe = document.createElement('iframe');
-    iframe.src = frontendUrl + '/embed/' + embedId;
+    iframe.src = frontendUrl + '/embed/' + embedId + '?api=' + encodeURIComponent(apiUrl);
     iframe.id = 'kszap-embed-iframe';
     iframe.allow = 'microphone';
     iframe.style.cssText = [
