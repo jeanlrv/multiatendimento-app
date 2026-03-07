@@ -63,32 +63,52 @@ import { QuickRepliesModule } from './modules/quick-replies/quick-replies.module
                 const port = parseInt(process.env.REDISPORT || process.env.REDIS_PORT || '6379', 10);
                 const password = process.env.REDISPASSWORD || process.env.REDIS_PASSWORD || undefined;
 
-                console.log(`🔍 [Redis Config] Host: ${host}, Port: ${port}, HasPassword: ${!!password}, HasURL: ${!!redisUrl}`);
+                console.log(`🔍 [Redis Config] URL: ${redisUrl ? redisUrl.replace(/:\/\/[^@]*@/, '://***@') : 'N/A'}, Host: ${host}, Port: ${port}, HasPassword: ${!!password}`);
 
-                return {
-                    connection: (() => {
-                        if (redisUrl) {
-                            try {
-                                const parsed = new URL(redisUrl);
-                                const isTls = parsed.protocol === 'rediss:';
-                                return {
-                                    host: parsed.hostname,
-                                    port: parseInt(parsed.port, 10) || 6379,
-                                    password: parsed.password || undefined,
-                                    username: parsed.username || undefined,
-                                    ...(isTls ? { tls: { rejectUnauthorized: false } } : {}),
-                                };
-                            } catch (e) {
-                                console.error('❌ [Redis Config] Erro ao parsear REDIS_URL:', e.message);
-                            }
-                        }
-                        return {
-                            host,
-                            port,
-                            password,
-                        };
-                    })(),
+                // Retry strategy com backoff exponencial — evita spam no log quando Redis está fora
+                const retryStrategy = (times: number) => {
+                    if (times >= 10) {
+                        // Após 10 tentativas, backoff longo (30s) para evitar spam
+                        return 30000;
+                    }
+                    // Backoff exponencial: 500ms, 1s, 2s, 4s, 8s, 16s... cap em 10s
+                    return Math.min(500 * Math.pow(2, times - 1), 10000);
                 };
+
+                const baseConnectionOptions = {
+                    connectTimeout: 10000,      // 10s por tentativa
+                    maxRetriesPerRequest: null,  // BullMQ requer null (sem limite por request)
+                    enableOfflineQueue: true,    // Fila offline habilitada (BullMQ precisa)
+                    retryStrategy,
+                    lazyConnect: false,
+                };
+
+                const connection = (() => {
+                    if (redisUrl) {
+                        try {
+                            const parsed = new URL(redisUrl);
+                            const isTls = parsed.protocol === 'rediss:';
+                            return {
+                                ...baseConnectionOptions,
+                                host: parsed.hostname,
+                                port: parseInt(parsed.port, 10) || 6379,
+                                password: parsed.password || undefined,
+                                username: parsed.username || undefined,
+                                ...(isTls ? { tls: { rejectUnauthorized: false } } : {}),
+                            };
+                        } catch (e) {
+                            console.error('❌ [Redis Config] Erro ao parsear REDIS_URL:', e.message);
+                        }
+                    }
+                    return {
+                        ...baseConnectionOptions,
+                        host,
+                        port,
+                        password,
+                    };
+                })();
+
+                return { connection };
             },
         }),
         DatabaseModule,
