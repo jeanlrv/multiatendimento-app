@@ -478,7 +478,7 @@ export class KnowledgeProcessor extends WorkerHost {
                     throw new Error(`Arquivo de áudio não encontrado: ${contentUrl}`);
                 }
 
-                return { text: await this.transcribeAudio(contentUrl) };
+                return { text: await this.transcribeAudio(contentUrl, document.knowledgeBase?.companyId) };
             }
 
             default:
@@ -611,14 +611,24 @@ export class KnowledgeProcessor extends WorkerHost {
      *   Railway: adicione serviço faster-whisper e configure WHISPER_BASE_URL=http://<host>:9000
      *   LocalAI: WHISPER_BASE_URL=http://localhost:8080/v1
      */
-    private async transcribeAudio(audioUrl: string): Promise<string> {
-        const whisperBaseUrl = process.env.WHISPER_BASE_URL;
-        const openAiKey = process.env.OPENAI_API_KEY;
+    private async transcribeAudio(audioUrl: string, companyId?: string): Promise<string> {
+        // Resolve provider: prioridade company DB config → env vars
+        let whisperBaseUrl: string | null = null;
+        let openAiKey: string | null = process.env.OPENAI_API_KEY || null;
 
-        // Validar que ao menos um dos dois está configurado
+        if (companyId) {
+            const companyConfigs = await this.providerConfigService.getDecryptedForCompany(companyId);
+            const localConfig = companyConfigs.get('whisper-local');
+            if (localConfig?.baseUrl) whisperBaseUrl = localConfig.baseUrl;
+            const openaiConfig = companyConfigs.get('openai');
+            if (openaiConfig?.apiKey) openAiKey = openaiConfig.apiKey;
+        }
+
+        if (!whisperBaseUrl) whisperBaseUrl = process.env.WHISPER_BASE_URL || null;
+
         if (!whisperBaseUrl && !openAiKey) {
             throw new Error(
-                'Transcrição de áudio requer OPENAI_API_KEY (OpenAI) ou WHISPER_BASE_URL (servidor local). ' +
+                'Transcrição de áudio requer OPENAI_API_KEY (OpenAI) ou WHISPER_BASE_URL/whisper-local config (servidor local). ' +
                 'Para uso local: docker run -p 9000:9000 fedirz/faster-whisper-server:latest-cpu e configure WHISPER_BASE_URL=http://localhost:9000'
             );
         }
@@ -628,7 +638,6 @@ export class KnowledgeProcessor extends WorkerHost {
         const buffer = await this.getContentBuffer(audioUrl);
         const { OpenAI, toFile } = require('openai');
 
-        // Servidor local não precisa de API key real, mas o SDK exige uma string não-vazia
         const openai = new OpenAI({
             apiKey: openAiKey || 'local-no-key-required',
             ...(whisperBaseUrl ? { baseURL: whisperBaseUrl } : {}),

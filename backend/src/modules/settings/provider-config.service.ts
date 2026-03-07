@@ -4,6 +4,26 @@ import { CryptoService } from '../../common/services/crypto.service';
 import { LLM_PROVIDERS } from '../ai/engine/llm-provider.factory';
 import { EMBEDDING_PROVIDERS } from '../ai/engine/embedding-provider.factory';
 
+/** Registry de providers de transcrição de áudio */
+export const TRANSCRIPTION_PROVIDERS = [
+    {
+        id: 'whisper-local',
+        name: 'Whisper Local (faster-whisper-server)',
+        description: 'Servidor Whisper local/Railway — MIT License, sem custo por chamada',
+        noApiKey: true,
+        hasBaseUrl: true,
+        baseUrlLabel: 'URL do servidor faster-whisper',
+        baseUrlPlaceholder: 'http://localhost:9000/v1',
+        models: [
+            { id: 'tiny', name: 'Tiny (~75MB, muito rápido)' },
+            { id: 'base', name: 'Base (~150MB, rápido)' },
+            { id: 'small', name: 'Small (~500MB, bom)' },
+            { id: 'medium', name: 'Medium (~1.5GB, PT-BR recomendado)' },
+            { id: 'large-v3', name: 'Large v3 (~3GB, máxima qualidade)' },
+        ],
+    },
+] as const;
+
 export interface ProviderConfigInput {
     apiKey?: string;
     baseUrl?: string;
@@ -239,9 +259,55 @@ export class ProviderConfigService {
     private detectCategory(provider: string): string {
         const isLLM = LLM_PROVIDERS.some(p => p.id === provider);
         const isEmbedding = EMBEDDING_PROVIDERS.some(p => p.id === provider);
+        const isTranscription = TRANSCRIPTION_PROVIDERS.some(p => p.id === provider);
 
+        if (isTranscription) return 'transcription';
         if (isLLM && isEmbedding) return 'both';
         if (isEmbedding) return 'embedding';
         return 'llm';
+    }
+
+    /**
+     * Retorna providers de transcrição de áudio disponíveis para uma empresa.
+     * Priority: company DB config (whisper-local) → env WHISPER_BASE_URL → openai config → env OPENAI_API_KEY.
+     */
+    async getAvailableTranscriptionProviders(companyId: string): Promise<{
+        id: string;
+        name: string;
+        isDefault: boolean;
+        baseUrl: string | null;
+    }[]> {
+        try {
+            const companyConfigs = await this.getDecryptedForCompany(companyId);
+            const result: { id: string; name: string; isDefault: boolean; baseUrl: string | null }[] = [];
+
+            // 1. faster-whisper-server (local/Railway)
+            const localConfig = companyConfigs.get('whisper-local');
+            const globalBaseUrl = process.env.WHISPER_BASE_URL;
+            if (localConfig?.baseUrl || globalBaseUrl) {
+                result.push({
+                    id: 'whisper-local',
+                    name: 'Whisper Local (faster-whisper-server)',
+                    isDefault: true, // local tem prioridade se disponível
+                    baseUrl: localConfig?.baseUrl || globalBaseUrl || null,
+                });
+            }
+
+            // 2. OpenAI Whisper (reutiliza chave do provider openai ou env OPENAI_API_KEY)
+            const openaiConfig = companyConfigs.get('openai');
+            if (openaiConfig?.apiKey || process.env.OPENAI_API_KEY) {
+                result.push({
+                    id: 'openai',
+                    name: 'OpenAI Whisper (whisper-1)',
+                    isDefault: result.length === 0, // só padrão se não houver local
+                    baseUrl: null,
+                });
+            }
+
+            return result;
+        } catch (error) {
+            this.logger.error(`Erro ao listar transcription providers para empresa ${companyId}: ${error.message}`);
+            return [];
+        }
     }
 }

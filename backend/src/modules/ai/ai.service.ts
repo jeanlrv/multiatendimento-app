@@ -10,7 +10,6 @@ import { ProviderConfigService } from '../settings/provider-config.service';
 import { Observable } from 'rxjs';
 import { v4 as uuidv4 } from 'uuid';
 import axios from 'axios';
-import * as FormData from 'form-data';
 
 @Injectable()
 export class AIService {
@@ -828,45 +827,61 @@ Resposta:`;
 
     async transcribeAudio(mediaUrl: string, companyId?: string) {
         try {
-            this.logger.log(`Iniciando transcrição nativa (Whisper) para: ${mediaUrl}`);
+            // Resolve provider: prioridade company DB config → env vars
+            let whisperBaseUrl: string | null = null;
+            let openAiKey: string | null = process.env.OPENAI_API_KEY || null;
 
-            // Resolve API key: prefere chave da empresa no banco, fallback para env var global
-            let openAiKey = process.env.OPENAI_API_KEY;
             if (companyId) {
                 const companyConfigs = await this.providerConfigService.getDecryptedForCompany(companyId);
+                // 1. faster-whisper-server por empresa
+                const localConfig = companyConfigs.get('whisper-local');
+                if (localConfig?.baseUrl) whisperBaseUrl = localConfig.baseUrl;
+                // 2. OpenAI por empresa
                 const openaiConfig = companyConfigs.get('openai');
                 if (openaiConfig?.apiKey) openAiKey = openaiConfig.apiKey;
             }
 
-            if (!openAiKey) {
-                this.logger.warn('Aviso: OPENAI_API_KEY não definida. Transcrição indisponível.');
-                return "[Serviço de transcrição indisponível]";
+            // Fallback para env vars globais
+            if (!whisperBaseUrl) whisperBaseUrl = process.env.WHISPER_BASE_URL || null;
+
+            if (!whisperBaseUrl && !openAiKey) {
+                this.logger.warn('Transcrição indisponível: configure WHISPER_BASE_URL (local) ou OPENAI_API_KEY nas configurações.');
+                return "[Serviço de transcrição indisponível — configure um provider de transcrição]";
             }
 
-            // 1. Baixar o arquivo de áudio
+            this.logger.log(`Transcrevendo áudio via Whisper (${whisperBaseUrl ? 'LOCAL: ' + whisperBaseUrl : 'OpenAI API'}): ${mediaUrl}`);
+
+            // Baixar o arquivo de áudio
             const audioResponse = await axios.get(mediaUrl, { responseType: 'arraybuffer' });
             const audioBuffer = Buffer.from(audioResponse.data);
 
-            // 2. Preparar payload FormData para a API da OpenAI
-            const formData = new FormData();
-            formData.append('file', audioBuffer, { filename: 'audio.ogg', contentType: 'audio/ogg' });
-            formData.append('model', 'whisper-1');
+            const { OpenAI, toFile } = require('openai');
+            const openai = new OpenAI({
+                apiKey: openAiKey || 'local-no-key-required',
+                ...(whisperBaseUrl ? { baseURL: whisperBaseUrl } : {}),
+            });
 
-            // 3. Enviar para transcrição Whisper direto na OpenAI
-            const response = await axios.post(
-                'https://api.openai.com/v1/audio/transcriptions',
-                formData,
-                {
-                    headers: {
-                        ...formData.getHeaders(),
-                        Authorization: `Bearer ${openAiKey}`,
-                    },
-                }
-            );
+            // faster-whisper aceita todos os formatos (ffmpeg); OpenAI API só aceita os nativos
+            const ext = mediaUrl.split('.').pop()?.toLowerCase() || 'ogg';
+            const nativeExts = ['mp3', 'mp4', 'mpeg', 'mpga', 'm4a', 'wav', 'webm', 'ogg'];
+            const localExts = [...nativeExts, 'opus', 'oga', 'aac', 'amr', '3gp', '3gpp', 'flac'];
+            const supportedExts = whisperBaseUrl ? localExts : nativeExts;
+            const finalExt = supportedExts.includes(ext) ? ext : 'ogg';
 
-            return response.data.text || null;
+            const file = await toFile(audioBuffer, `audio.${finalExt}`);
+            const model = process.env.WHISPER_MODEL || (whisperBaseUrl ? 'medium' : 'whisper-1');
+
+            const transcription = await openai.audio.transcriptions.create({
+                file,
+                model,
+                language: 'pt',
+                response_format: 'text',
+            });
+
+            const text = typeof transcription === 'string' ? transcription : (transcription as any).text;
+            return text || null;
         } catch (error) {
-            this.logger.error(`Erro na transcrição de áudio com Whisper: ${error.message}`);
+            this.logger.error(`Erro na transcrição de áudio: ${error.message}`);
             return "[Erro na transcrição automática do áudio]";
         }
     }

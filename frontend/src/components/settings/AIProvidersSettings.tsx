@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Brain, Eye, EyeOff, Save, Trash2, CheckCircle2, XCircle,
-    ChevronDown, ChevronUp, Link, Server, Sparkles
+    ChevronDown, ChevronUp, Link, Server, Sparkles, Mic
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
@@ -39,6 +39,20 @@ const EMBEDDING_PROVIDERS = [
     { id: 'ollama', name: 'Ollama Embeddings', icon: '🦙', color: '#84cc16', hasBaseUrl: true, baseUrlLabel: 'URL do Ollama', baseUrlPlaceholder: 'http://localhost:11434/v1', description: 'nomic-embed-text local', noApiKey: true },
     { id: 'anythingllm', name: 'AnythingLLM RAG', icon: '📦', color: '#3b82f6', hasBaseUrl: true, baseUrlLabel: 'URL do AnythingLLM', baseUrlPlaceholder: 'http://localhost:3001/api/v1', description: 'Nativo do AnythingLLM' },
     { id: 'qwen', name: 'Qwen Embeddings', icon: '💡', color: '#fbbf24', hasBaseUrl: false, description: 'text-embedding-v2 (Alibaba DashScope)' },
+] as const;
+
+const TRANSCRIPTION_PROVIDERS_META = [
+    {
+        id: 'whisper-local',
+        name: 'Whisper Local (faster-whisper-server)',
+        icon: '🎙️',
+        color: '#10b981',
+        hasBaseUrl: true,
+        baseUrlLabel: 'URL do servidor faster-whisper',
+        baseUrlPlaceholder: 'http://localhost:9000/v1',
+        description: 'Servidor local/Railway — MIT License, gratuito, PT-BR nativo',
+        noApiKey: true,
+    },
 ] as const;
 
 // Combinar providers únicos (sem duplicatas de id)
@@ -305,7 +319,7 @@ function ProviderCard({ meta, config, onSave, onDelete }: ProviderCardProps) {
 export function AIProvidersSettings() {
     const [loading, setLoading] = useState(true);
     const [configs, setConfigs] = useState<ProviderConfig[]>([]);
-    const [activeSection, setActiveSection] = useState<'llm' | 'embedding'>('llm');
+    const [activeSection, setActiveSection] = useState<'llm' | 'embedding' | 'transcription'>('llm');
 
     const fetchConfigs = useCallback(async () => {
         try {
@@ -395,11 +409,12 @@ export function AIProvidersSettings() {
                 </p>
             </div>
 
-            {/* Tabs LLM / Embedding */}
+            {/* Tabs LLM / Embedding / Transcrição */}
             <div className="flex gap-2 p-1.5 bg-slate-100 dark:bg-white/5 rounded-2xl border border-slate-200 dark:border-white/10 w-fit">
                 {[
                     { id: 'llm' as const, label: 'Modelos LLM', icon: <Brain size={14} />, count: llmProviders.filter(p => getConfig(p.id)).length },
                     { id: 'embedding' as const, label: 'Embeddings', icon: <Server size={14} />, count: embeddingOnlyProviders.filter(p => getConfig(p.id)).length },
+                    { id: 'transcription' as const, label: 'Transcrição', icon: <Mic size={14} />, count: TRANSCRIPTION_PROVIDERS_META.filter(p => getConfig(p.id)).length },
                 ].map(tab => (
                     <button
                         key={tab.id}
@@ -438,6 +453,47 @@ export function AIProvidersSettings() {
                             onDelete={handleDelete}
                         />
                     ))}
+                    {activeSection === 'transcription' && (
+                        <>
+                            {/* OpenAI Whisper — reusa chave da aba LLM */}
+                            <div className="rounded-2xl border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/10 overflow-hidden">
+                                <div className="flex items-center gap-3 p-4">
+                                    <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0 shadow-sm bg-blue-100 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700">
+                                        🤖
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <span className="font-black text-sm text-slate-900 dark:text-white">OpenAI Whisper (whisper-1)</span>
+                                            <span className="text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400">Automático</span>
+                                        </div>
+                                        <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
+                                            Usa a chave OpenAI configurada na aba <strong>Modelos LLM</strong>. Ativo se OpenAI estiver configurado ou OPENAI_API_KEY estiver definida.
+                                        </p>
+                                    </div>
+                                    {getConfig('openai') ? (
+                                        <span className="flex items-center gap-1 text-[10px] font-black text-green-600 dark:text-green-400 flex-shrink-0">
+                                            <CheckCircle2 size={14} /> Ativo
+                                        </span>
+                                    ) : (
+                                        <span className="flex items-center gap-1 text-[10px] font-black text-slate-400 flex-shrink-0">
+                                            <XCircle size={14} /> Sem chave
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Whisper Local (faster-whisper-server) — configurável por empresa */}
+                            {TRANSCRIPTION_PROVIDERS_META.map(meta => (
+                                <ProviderCard
+                                    key={meta.id}
+                                    meta={meta as any}
+                                    config={getConfig(meta.id)}
+                                    onSave={handleSave}
+                                    onDelete={handleDelete}
+                                />
+                            ))}
+                        </>
+                    )}
                     {activeSection === 'embedding' && (
                         <>
                             {/* Card Nativo — sempre disponível, sem chave */}
@@ -480,6 +536,11 @@ export function AIProvidersSettings() {
             {activeSection === 'embedding' && (
                 <p className="text-[10px] text-slate-400 dark:text-slate-500 italic">
                     * OpenAI, OpenRouter, Google Gemini, Cohere, Azure e Ollama são configurados na aba LLM Modelos e também ficam disponíveis como providers de embedding automaticamente.
+                </p>
+            )}
+            {activeSection === 'transcription' && (
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 italic">
+                    * Whisper Local tem prioridade sobre OpenAI. Se ambos estiverem configurados, o servidor local é usado. Configure WHISPER_MODEL no ambiente para definir o modelo padrão (tiny/base/small/medium/large-v3).
                 </p>
             )}
         </div>

@@ -134,6 +134,13 @@ export class AIController {
         }
     }
 
+    @Get('transcription-providers')
+    @RequirePermission(Permission.AI_READ)
+    @ApiOperation({ summary: 'Listar providers de transcrição de áudio disponíveis para a empresa' })
+    async getTranscriptionProviders(@Req() req: any) {
+        return this.providerConfigService.getAvailableTranscriptionProviders(req.user.companyId);
+    }
+
     // ========== Copilot ==========
 
     @Post('copilot-suggest')
