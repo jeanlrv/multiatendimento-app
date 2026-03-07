@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, Sse, UnauthorizedException, Logger } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, Res, Sse, UnauthorizedException, Logger } from '@nestjs/common';
 import { AIService } from './ai.service';
 import { CreateAIAgentDto } from './dto/create-ai-agent.dto';
 import { UpdateAIAgentDto } from './dto/update-ai-agent.dto';
@@ -95,9 +95,35 @@ export class AIController {
 
     @Sse('agents/:id/stream')
     @RequirePermission(Permission.AI_CHAT)
-    @ApiOperation({ summary: 'Streaming de respostas da IA' })
+    @ApiOperation({ summary: 'Streaming de respostas da IA (GET/SSE legado)' })
     streamChat(@Req() req: any, @Param('id') id: string, @Body() chatRequest: ChatRequestDto): Observable<any> {
         return this.aiService.streamChat(req.user.companyId, id, chatRequest.message, chatRequest.history || []);
+    }
+
+    @Post('agents/:id/chat-stream')
+    @RequirePermission(Permission.AI_CHAT)
+    @ApiOperation({ summary: 'Streaming SSE de respostas da IA via POST (token a token)' })
+    async streamChatHttp(
+        @Req() req: any,
+        @Param('id') id: string,
+        @Body() chatRequest: ChatRequestDto,
+        @Res() res: any,
+    ): Promise<void> {
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache, no-transform');
+        res.setHeader('Connection', 'keep-alive');
+        res.setHeader('X-Accel-Buffering', 'no'); // desabilita buffer do nginx
+        res.flushHeaders();
+
+        const observable = this.aiService.streamChat(req.user.companyId, id, chatRequest.message, chatRequest.history || []);
+        observable.subscribe({
+            next: (event: any) => res.write(`data: ${JSON.stringify(event.data)}\n\n`),
+            error: (err: any) => {
+                res.write(`data: ${JSON.stringify({ type: 'error', message: err.message })}\n\n`);
+                res.end();
+            },
+            complete: () => res.end(),
+        });
     }
 
     // ========== Models & Usage ==========

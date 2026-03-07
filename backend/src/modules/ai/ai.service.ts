@@ -472,7 +472,12 @@ export class AIService {
                     kbEmbeddingConfig?.baseUrl || undefined,
                     kb?.language || 'portuguese',
                 );
-                context = chunks.map(c => c.content).join('\n---\n');
+                context = chunks.map((c: any, i: number) => {
+                    const docName = c.metadata?.documentName || c.metadata?.source || c.metadata?.filename || '';
+                    const page = c.pageNumber ? ` (pág. ${c.pageNumber})` : '';
+                    const prefix = docName ? `[Fonte ${i + 1}: ${docName}${page}]\n` : '';
+                    return `${prefix}${c.content}`;
+                }).join('\n---\n');
                 this.logger.log(`[RAG] ${chunks.length} chunks retornados para contexto na KB ${agent.knowledgeBaseId}.`);
             } else {
                 this.logger.log(`[RAG] Ignorado. Agente ${agent.name} não possui knowledgeBaseId configurado.`);
@@ -1162,7 +1167,12 @@ Resposta:`;
                         kbEmbeddingConfig?.baseUrl || undefined,
                         kb?.language || 'portuguese',
                     );
-                    context = chunks.map(c => c.content).join('\n---\n');
+                    context = chunks.map((c: any, i: number) => {
+                        const docName = c.metadata?.documentName || c.metadata?.source || c.metadata?.filename || '';
+                        const page = c.pageNumber ? ` (pág. ${c.pageNumber})` : '';
+                        const prefix = docName ? `[Fonte ${i + 1}: ${docName}${page}]\n` : '';
+                        return `${prefix}${c.content}`;
+                    }).join('\n---\n');
                     this.logger.log(`[RAG/Stream] ${chunks.length} chunks retornados para contexto na KB ${agent.knowledgeBaseId}.`);
                 }
 

@@ -75,9 +75,36 @@ export const AIAgentsService = {
         return response.data;
     },
 
-    streamChat: async (agentId: string, message: string, history: { role: string; content: string }[] = []) => {
-        const response = await api.post(`/ai/agents/${agentId}/stream`, { message, history });
-        return response.data;
+    /** AsyncGenerator que emite eventos SSE token a token: { type: 'chunk'|'end'|'error', content: string } */
+    streamChat: async function* (agentId: string, message: string, history: { role: string; content: string }[] = []) {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+        const res = await fetch(`/api/ai/agents/${agentId}/chat-stream`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({ message, history }),
+        });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({ message: 'Erro ao iniciar stream' }));
+            throw new Error(err.message || `HTTP ${res.status}`);
+        }
+        const reader = res.body!.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop()!;
+            for (const line of lines) {
+                if (!line.startsWith('data: ')) continue;
+                try { yield JSON.parse(line.slice(6)) as { type: string; content: string }; }
+                catch { /* linha malformada */ }
+            }
+        }
     },
 
     getUsage: async () => {

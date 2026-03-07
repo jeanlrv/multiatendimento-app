@@ -116,12 +116,13 @@ export default function EmbedChatPage() {
         if (!inputValue.trim() || isLoading || !sessionId) return
 
         const userMsg: Message = { role: 'user', content: inputValue.trim(), ts: Date.now() }
-        setMessages(prev => [...prev, userMsg])
+        // Adiciona placeholder vazio que será preenchido token a token
+        setMessages(prev => [...prev, userMsg, { role: 'assistant', content: '', ts: Date.now() }])
         setInputValue('')
         setIsLoading(true)
 
         try {
-            const res = await fetch(`${apiUrl}/embed/${embedId}/chat`, {
+            const res = await fetch(`${apiUrl}/embed/${embedId}/chat-stream`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ sessionId, message: userMsg.content })
@@ -132,14 +133,44 @@ export default function EmbedChatPage() {
                 throw new Error(errorData.message || 'Erro ao enviar mensagem.')
             }
 
-            const data = await res.json()
-            setMessages(prev => [...prev, { role: 'assistant', content: data.response, ts: Date.now() }])
+            const reader = res.body!.getReader()
+            const decoder = new TextDecoder()
+            let buffer = ''
+            while (true) {
+                const { done, value } = await reader.read()
+                if (done) break
+                buffer += decoder.decode(value, { stream: true })
+                const lines = buffer.split('\n')
+                buffer = lines.pop()!
+                for (const line of lines) {
+                    if (!line.startsWith('data: ')) continue
+                    try {
+                        const event = JSON.parse(line.slice(6))
+                        if (event.type === 'chunk') {
+                            setMessages(prev => {
+                                const updated = [...prev]
+                                const last = updated[updated.length - 1]
+                                updated[updated.length - 1] = { ...last, content: last.content + event.content }
+                                return updated
+                            })
+                        } else if (event.type === 'error') {
+                            throw new Error(event.message || 'Erro no servidor.')
+                        }
+                    } catch (parseErr: any) {
+                        if (parseErr.message?.includes('Erro')) throw parseErr
+                    }
+                }
+            }
         } catch (err: any) {
-            setMessages(prev => [...prev, {
-                role: 'assistant',
-                content: `Desculpe, ocorreu um erro: ${err.message}`,
-                ts: Date.now()
-            }])
+            setMessages(prev => {
+                const updated = [...prev]
+                updated[updated.length - 1] = {
+                    role: 'assistant',
+                    content: `Desculpe, ocorreu um erro: ${err.message}`,
+                    ts: Date.now()
+                }
+                return updated
+            })
         } finally {
             setIsLoading(false)
         }

@@ -8,10 +8,12 @@ import { ChatOpenAI } from '@langchain/openai';
 export class LLMService {
     private readonly logger = new Logger(LLMService.name);
 
-    private readonly TIMEOUT_MS = 30_000;
+    private readonly TIMEOUT_MS = 120_000; // 2 minutos — geração longa (linha do tempo, resumos, etc.)
     private readonly MAX_RETRIES = 3;
-    /** Status codes / error messages que justificam retry. */
-    private readonly RETRYABLE = ['429', '503', 'rate_limit', 'timeout', 'overloaded', 'ECONNRESET', 'ETIMEDOUT'];
+    /** Status codes / error messages que justificam retry.
+     *  Nota: 'timeout' removido intencionalmente — nosso timer de 120s não é erro transiente;
+     *  re-tentar só aumentaria o tempo de espera para o usuário. */
+    private readonly RETRYABLE = ['429', '503', 'rate_limit', 'overloaded', 'ECONNRESET', 'ETIMEDOUT'];
 
     constructor(
         private configService: ConfigService,
@@ -29,7 +31,7 @@ export class LLMService {
                 const result = await Promise.race<T>([
                     fn(),
                     new Promise<never>((_, reject) =>
-                        setTimeout(() => reject(new Error('LLM request timeout (30s)')), this.TIMEOUT_MS)
+                        setTimeout(() => reject(new Error('LLM request timeout (120s)')), this.TIMEOUT_MS)
                     ),
                 ]);
                 return result;

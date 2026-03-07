@@ -108,20 +108,34 @@ export default function AIAgentsPage() {
         setChatLoading(true);
         const userMsg = { role: 'user', content: chatMessage };
         const updatedHistory = [...chatHistory, userMsg];
-        setChatHistory(updatedHistory);
+        // Adiciona placeholder vazio que será preenchido token a token
+        setChatHistory([...updatedHistory, { role: 'assistant', content: '' }]);
         setChatMessage('');
 
         try {
-            const response = await AIAgentsService.chat(currentAgent.id, userMsg.content, updatedHistory.slice(0, -1));
-            setChatHistory(prev => [...prev, { role: 'assistant', content: typeof response === 'string' ? response : (response as any)?.textResponse || 'Sem resposta' }]);
+            for await (const event of AIAgentsService.streamChat(currentAgent.id, userMsg.content, updatedHistory.slice(0, -1))) {
+                if (event.type === 'chunk') {
+                    setChatHistory(prev => {
+                        const updated = [...prev];
+                        const last = updated[updated.length - 1];
+                        updated[updated.length - 1] = { ...last, content: last.content + event.content };
+                        return updated;
+                    });
+                } else if (event.type === 'error') {
+                    setChatHistory(prev => {
+                        const updated = [...prev];
+                        updated[updated.length - 1] = { role: 'assistant', content: `⚠️ ${event.content}` };
+                        return updated;
+                    });
+                }
+            }
         } catch (error: any) {
-            const errorData = error.response?.data;
-            const errorMsg = errorData?.message
-                || errorData?.error
-                || (typeof errorData === 'string' ? errorData : null)
-                || error.message
-                || 'Erro ao processar mensagem. Verifique se o provider de IA está configurado.';
-            setChatHistory(prev => [...prev, { role: 'assistant', content: `⚠️ ${errorMsg}` }]);
+            const errorMsg = error.message || 'Erro ao processar mensagem. Verifique se o provider de IA está configurado.';
+            setChatHistory(prev => {
+                const updated = [...prev];
+                updated[updated.length - 1] = { role: 'assistant', content: `⚠️ ${errorMsg}` };
+                return updated;
+            });
             toast.error(errorMsg, { duration: 6000 });
         } finally {
             setChatLoading(false);

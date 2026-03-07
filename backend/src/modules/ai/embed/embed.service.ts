@@ -1,4 +1,5 @@
 import { Injectable, Logger, NotFoundException, BadRequestException, HttpException, HttpStatus, OnModuleDestroy } from '@nestjs/common';
+import { Observable } from 'rxjs';
 import { PrismaService } from '../../../database/prisma.service';
 import { AIService } from '../ai.service';
 
@@ -179,6 +180,64 @@ export class EmbedService implements OnModuleDestroy {
             this.logger.error(`Erro no chat embed (Agent ${agent.id}): ${error.message}`);
             throw new HttpException(error.message || 'Erro ao processar mensagem.', HttpStatus.INTERNAL_SERVER_ERROR);
         }
+    }
+
+    /** Versão streaming do chat: retorna Observable de tokens + salva sessão no DB ao concluir. */
+    async streamChat(embedId: string, sessionId: string, message: string, origin?: string): Promise<Observable<any>> {
+        if (!sessionId) throw new BadRequestException('SessionId é obrigatório.');
+
+        const agent = await (this.prisma as any).aIAgent.findUnique({
+            where: { embedId },
+            select: { id: true, companyId: true, embedEnabled: true, isActive: true, embedRateLimit: true, embedAllowedDomains: true }
+        });
+
+        if (!agent || !agent.isActive || !agent.embedEnabled) {
+            throw new NotFoundException('Agente de IA indisponível.');
+        }
+
+        if (origin && agent.embedAllowedDomains?.length > 0 && !this.validateDomain(origin, agent.embedAllowedDomains)) {
+            throw new HttpException('Domínio não autorizado.', HttpStatus.FORBIDDEN);
+        }
+
+        this.checkRateLimit(sessionId, agent.embedRateLimit);
+
+        let session = await (this.prisma as any).embedChatSession.findUnique({
+            where: { embedId_sessionId: { embedId, sessionId } }
+        });
+
+        if (!session) {
+            session = await (this.prisma as any).embedChatSession.create({
+                data: { embedId, sessionId, messages: [] }
+            });
+        }
+
+        const currentMessages: any[] = Array.isArray(session.messages) ? [...session.messages] : [];
+        const historyForLLM = currentMessages.map((m: any) => ({ role: m.role, content: m.content }));
+        currentMessages.push({ role: 'user', content: message, ts: Date.now() });
+
+        const agentObservable = this.aiService.streamChat(agent.companyId, agent.id, message, historyForLLM);
+        const sessionDbId = session.id;
+        const prisma = this.prisma;
+        const logger = this.logger;
+        let fullResponse = '';
+
+        return new Observable(observer => {
+            agentObservable.subscribe({
+                next: (event: any) => {
+                    if (event.data?.type === 'chunk') fullResponse += event.data.content;
+                    observer.next(event);
+                },
+                error: (err: any) => observer.error(err),
+                complete: () => {
+                    const msgs = [...currentMessages, { role: 'assistant', content: fullResponse, ts: Date.now() }];
+                    (prisma as any).embedChatSession.update({
+                        where: { id: sessionDbId },
+                        data: { messages: msgs },
+                    }).catch((e: any) => logger.error(`Erro ao salvar sessão embed stream: ${e.message}`));
+                    observer.complete();
+                },
+            });
+        });
     }
 
     async getHistory(embedId: string, sessionId: string, origin?: string) {

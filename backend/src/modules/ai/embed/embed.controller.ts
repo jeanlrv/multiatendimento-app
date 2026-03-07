@@ -27,6 +27,37 @@ export class EmbedController {
     }
 
     @Public()
+    @Post(':embedId/chat-stream')
+    async streamChat(
+        @Param('embedId') embedId: string,
+        @Body() body: { sessionId: string; message: string },
+        @Headers('origin') origin: string,
+        @Res() res: Response,
+    ): Promise<void> {
+        const r = res as any;
+        r.setHeader('Content-Type', 'text/event-stream');
+        r.setHeader('Cache-Control', 'no-cache, no-transform');
+        r.setHeader('Connection', 'keep-alive');
+        r.setHeader('X-Accel-Buffering', 'no');
+        r.flushHeaders();
+
+        try {
+            const observable = await this.embedService.streamChat(embedId, body.sessionId, body.message, origin);
+            observable.subscribe({
+                next: (event: any) => r.write(`data: ${JSON.stringify(event.data)}\n\n`),
+                error: (err: any) => {
+                    r.write(`data: ${JSON.stringify({ type: 'error', message: err.message })}\n\n`);
+                    r.end();
+                },
+                complete: () => r.end(),
+            });
+        } catch (err: any) {
+            r.write(`data: ${JSON.stringify({ type: 'error', message: err.message })}\n\n`);
+            r.end();
+        }
+    }
+
+    @Public()
     @Get(':embedId/history/:sessionId')
     async getHistory(
         @Param('embedId') embedId: string,
