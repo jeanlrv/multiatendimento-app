@@ -247,9 +247,9 @@ model Company {
   smtpConfigs        SMTPConfig[]
   auditLogs          AuditLog[]
   roles              Role[]
-  limitTokens        Int                 @default(100000)
-  limitTokensPerHour Int                 @default(10000)
-  limitTokensPerDay  Int                 @default(100000)
+  limitTokens        Int                 @default(0)
+  limitTokensPerHour Int                 @default(0)
+  limitTokensPerDay  Int                 @default(0)
   dailyCostAlertUsd  Float               @default(0)  // 0 = alertas desativados
   logoUrl            String?
   primaryColor       String              @default("#3B82F6") // Padrão KSZap Blue

@@ -22,6 +22,18 @@ export class UpdateCompanyDto {
     limitTokens?: number;
 
     @IsOptional()
+    @IsNumber()
+    @Min(0)
+    @Type(() => Number)
+    limitTokensPerHour?: number;
+
+    @IsOptional()
+    @IsNumber()
+    @Min(0)
+    @Type(() => Number)
+    limitTokensPerDay?: number;
+
+    @IsOptional()
     @IsEnum(PlanTier)
     plan?: PlanTier;
 

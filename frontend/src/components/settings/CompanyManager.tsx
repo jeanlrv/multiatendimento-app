@@ -12,6 +12,8 @@ interface Company {
     primaryColor: string;
     secondaryColor: string;
     limitTokens: number;
+    limitTokensPerHour: number;
+    limitTokensPerDay: number;
 }
 
 export function CompanyManager() {
@@ -47,7 +49,9 @@ export function CompanyManager() {
         setSubmitting(true);
         const payload = {
             ...formData,
-            limitTokens: formData.limitTokens ? Number(formData.limitTokens) : undefined,
+            limitTokens: formData.limitTokens !== '' && formData.limitTokens !== undefined ? Number(formData.limitTokens) : 0,
+            limitTokensPerHour: formData.limitTokensPerHour !== '' && formData.limitTokensPerHour !== undefined ? Number(formData.limitTokensPerHour) : 0,
+            limitTokensPerDay: formData.limitTokensPerDay !== '' && formData.limitTokensPerDay !== undefined ? Number(formData.limitTokensPerDay) : 0,
         };
         try {
             if (editingCompany) {
@@ -87,7 +91,7 @@ export function CompanyManager() {
             setFormData(company);
         } else {
             setEditingCompany(null);
-            setFormData({ name: '', primaryColor: '#3B82F6', secondaryColor: '#1E293B', limitTokens: 100000 });
+            setFormData({ name: '', primaryColor: '#3B82F6', secondaryColor: '#1E293B', limitTokens: 0, limitTokensPerHour: 0, limitTokensPerDay: 0 });
         }
         setIsFormOpen(true);
     };
@@ -162,13 +166,39 @@ export function CompanyManager() {
                         </div>
                     </div>
                     <div>
-                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block ml-2">Limite Mensal de Tokens (IA)</label>
+                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block ml-2">Limite Mensal de Tokens (IA) — 0 = ilimitado</label>
                         <input
                             type="number"
-                            value={formData.limitTokens || ''}
+                            min="0"
+                            value={formData.limitTokens ?? ''}
                             onChange={e => setFormData({ ...formData, limitTokens: e.target.value })}
                             className="w-full px-5 py-3 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 outline-none focus:ring-2 focus:ring-primary/20 text-sm font-semibold dark:text-white placeholder:text-slate-400 transition-all font-mono"
+                            placeholder="0 = ilimitado"
                         />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block ml-2">Limite por Hora — 0 = ilimitado</label>
+                            <input
+                                type="number"
+                                min="0"
+                                value={formData.limitTokensPerHour ?? ''}
+                                onChange={e => setFormData({ ...formData, limitTokensPerHour: e.target.value })}
+                                className="w-full px-5 py-3 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 outline-none focus:ring-2 focus:ring-primary/20 text-sm font-semibold dark:text-white placeholder:text-slate-400 transition-all font-mono"
+                                placeholder="0 = ilimitado"
+                            />
+                        </div>
+                        <div>
+                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block ml-2">Limite por Dia — 0 = ilimitado</label>
+                            <input
+                                type="number"
+                                min="0"
+                                value={formData.limitTokensPerDay ?? ''}
+                                onChange={e => setFormData({ ...formData, limitTokensPerDay: e.target.value })}
+                                className="w-full px-5 py-3 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 outline-none focus:ring-2 focus:ring-primary/20 text-sm font-semibold dark:text-white placeholder:text-slate-400 transition-all font-mono"
+                                placeholder="0 = ilimitado"
+                            />
+                        </div>
                     </div>
 
                     <div className="pt-4 flex gap-4">
@@ -235,8 +265,16 @@ export function CompanyManager() {
                         </div>
                         <div className="space-y-2 ml-4 mb-4">
                             <div className="flex items-center justify-between text-xs text-slate-500 font-semibold border-b border-white/5 pb-2">
-                                <span>Tokens de IA Mensais:</span>
-                                <span className="text-primary font-bold">{company.limitTokens?.toLocaleString('pt-BR')}</span>
+                                <span>Tokens Mensais:</span>
+                                <span className="text-primary font-bold">{company.limitTokens > 0 ? company.limitTokens.toLocaleString('pt-BR') : '∞'}</span>
+                            </div>
+                            <div className="flex items-center justify-between text-xs text-slate-500 font-semibold border-b border-white/5 pb-2">
+                                <span>Por Hora:</span>
+                                <span className="font-bold">{(company.limitTokensPerHour ?? 0) > 0 ? (company.limitTokensPerHour).toLocaleString('pt-BR') : '∞'}</span>
+                            </div>
+                            <div className="flex items-center justify-between text-xs text-slate-500 font-semibold border-b border-white/5 pb-2">
+                                <span>Por Dia:</span>
+                                <span className="font-bold">{(company.limitTokensPerDay ?? 0) > 0 ? (company.limitTokensPerDay).toLocaleString('pt-BR') : '∞'}</span>
                             </div>
                             <div className="flex items-center justify-between text-xs text-slate-500 font-semibold pt-1">
                                 <span>ID:</span>

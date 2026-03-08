@@ -18,12 +18,35 @@ interface EmbedConfig {
     position: string
 }
 
+// Escape HTML antes de aplicar formatação para prevenir XSS
+function escapeHtml(text: string): string {
+    return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+}
+
+// Formata texto estilo WhatsApp: *bold*, _italic_, `code`, ```block```
+function formatMessage(raw: string): string {
+    let t = escapeHtml(raw)
+    t = t.replace(/```([\s\S]*?)```/g, '<pre style="background:#f3f4f6;padding:8px 10px;border-radius:6px;font-size:11px;overflow-x:auto;margin:4px 0;font-family:monospace;white-space:pre-wrap">$1</pre>')
+    t = t.replace(/`([^`\n]+)`/g, '<code style="background:#f0f0f0;padding:1px 5px;border-radius:3px;font-family:monospace;font-size:0.9em">$1</code>')
+    t = t.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    t = t.replace(/\*([^*\n]+)\*/g, '<strong>$1</strong>')
+    t = t.replace(/_([^_\n]+)_/g, '<em>$1</em>')
+    t = t.replace(/~([^~\n]+)~/g, '<del>$1</del>')
+    t = t.replace(/\n/g, '<br>')
+    return t
+}
+
 function AgentAvatar({ logo, name, color, size }: { logo: string | null; name: string; color: string; size: number }) {
-    if (logo) {
+    const [imgError, setImgError] = useState(false)
+    if (logo && !imgError) {
         return (
             <img
                 src={logo}
                 alt={name}
+                onError={() => setImgError(true)}
                 style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, display: 'block' }}
             />
         )
@@ -46,6 +69,7 @@ export default function EmbedChatPage() {
     const [messages, setMessages] = useState<Message[]>([])
     const [inputValue, setInputValue] = useState('')
     const [isLoading, setIsLoading] = useState(false)
+    const [isStreaming, setIsStreaming] = useState(false)
     const [config, setConfig] = useState<EmbedConfig | null>(null)
     const [error, setError] = useState<string | null>(null)
     const [sessionId, setSessionId] = useState<string | null>(null)
@@ -53,8 +77,7 @@ export default function EmbedChatPage() {
     const scrollRef = useRef<HTMLDivElement>(null)
     const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-    // Determine API URL — priority: ?api= query param (set by embed script) > build-time env vars
-    // Necessário no Railway onde NEXT_PUBLIC_API_URL pode apontar para URL interna (.railway.internal)
+    // Determine API URL — priority: ?api= query param > build-time env vars
     const buildTimeApiUrl = (
         process.env.NEXT_PUBLIC_BACKEND_PUBLIC_URL ||
         process.env.NEXT_PUBLIC_API_URL ||
@@ -62,17 +85,22 @@ export default function EmbedChatPage() {
     ).replace(/\/api\/?$/, '') + '/api'
     const [apiUrl, setApiUrl] = useState(buildTimeApiUrl)
 
+    // Lê ?api= do query string (injetado pelo embed script) na montagem
     useEffect(() => {
-        const params = new URLSearchParams(window.location.search)
-        const apiParam = params.get('api')
+        const p = new URLSearchParams(window.location.search)
+        const apiParam = p.get('api')
         if (apiParam && apiParam.startsWith('http')) {
             setApiUrl(apiParam.replace(/\/api\/?$/, '') + '/api')
         }
     }, [])
 
-    // Initialize session and config
+    // Inicializa sessão e busca config; re-executa quando apiUrl muda (URL correta injetada)
     useEffect(() => {
         if (!embedId) return
+
+        // Limpa estados anteriores ao re-tentar com nova URL
+        setError(null)
+        setConfig(null)
 
         let sid = localStorage.getItem(`kszap_session_${embedId}`)
         if (!sid) {
@@ -91,10 +119,8 @@ export default function EmbedChatPage() {
 
         fetch(`${apiUrl}/embed/${embedId}/history/${sid}`)
             .then(res => res.json())
-            .then(data => {
-                if (data.messages?.length > 0) setMessages(data.messages)
-            })
-            .catch(() => { /* histórico vazio, ignorar */ })
+            .then(data => { if (data.messages?.length > 0) setMessages(data.messages) })
+            .catch(() => { /* histórico vazio — ignorar */ })
     }, [embedId, apiUrl])
 
     // Auto-scroll ao fim
@@ -116,10 +142,10 @@ export default function EmbedChatPage() {
         if (!inputValue.trim() || isLoading || !sessionId) return
 
         const userMsg: Message = { role: 'user', content: inputValue.trim(), ts: Date.now() }
-        // Adiciona placeholder vazio que será preenchido token a token
         setMessages(prev => [...prev, userMsg, { role: 'assistant', content: '', ts: Date.now() }])
         setInputValue('')
         setIsLoading(true)
+        setIsStreaming(false)
 
         try {
             const res = await fetch(`${apiUrl}/embed/${embedId}/chat-stream`, {
@@ -147,6 +173,7 @@ export default function EmbedChatPage() {
                     try {
                         const event = JSON.parse(line.slice(6))
                         if (event.type === 'chunk') {
+                            setIsStreaming(true) // esconde dots assim que primeiro token chega
                             setMessages(prev => {
                                 const updated = [...prev]
                                 const last = updated[updated.length - 1]
@@ -173,6 +200,7 @@ export default function EmbedChatPage() {
             })
         } finally {
             setIsLoading(false)
+            setIsStreaming(false)
         }
     }, [inputValue, isLoading, sessionId, embedId, apiUrl])
 
@@ -185,6 +213,13 @@ export default function EmbedChatPage() {
 
     const handleClose = () => {
         window.parent?.postMessage('KSZAP_CLOSE_EMBED', '*')
+    }
+
+    const handleClearChat = () => {
+        const sid = crypto.randomUUID()
+        localStorage.setItem(`kszap_session_${embedId}`, sid)
+        setSessionId(sid)
+        setMessages([])
     }
 
     if (error) {
@@ -218,30 +253,14 @@ export default function EmbedChatPage() {
                 background: config.brandColor, color: 'white', flexShrink: 0,
                 boxShadow: '0 1px 6px rgba(0,0,0,0.18)'
             }}>
-                {/* Avatar com indicador online */}
                 <div style={{ position: 'relative', flexShrink: 0 }}>
-                    {config.brandLogo ? (
-                        <img
-                            src={config.brandLogo}
-                            alt={config.agentName}
-                            style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.5)', display: 'block' }}
-                        />
-                    ) : (
-                        <div style={{
-                            width: 40, height: 40, borderRadius: '50%', background: 'rgba(255,255,255,0.22)',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontWeight: 700, fontSize: 16, border: '2px solid rgba(255,255,255,0.35)'
-                        }}>
-                            {config.agentName[0]?.toUpperCase()}
-                        </div>
-                    )}
+                    <AgentAvatar logo={config.brandLogo} name={config.agentName} color="rgba(255,255,255,0.25)" size={40} />
                     <div style={{
                         position: 'absolute', bottom: 1, right: 1, width: 10, height: 10,
                         borderRadius: '50%', background: '#4ade80', border: '2px solid white'
                     }} />
                 </div>
 
-                {/* Nome + status */}
                 <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 600, fontSize: 14, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {config.agentName}
@@ -251,6 +270,25 @@ export default function EmbedChatPage() {
                     </div>
                 </div>
 
+                {/* Botão limpar conversa */}
+                {messages.length > 0 && (
+                    <button
+                        onClick={handleClearChat}
+                        aria-label="Nova conversa"
+                        title="Nova conversa"
+                        style={{
+                            background: 'rgba(255,255,255,0.12)', border: 'none', borderRadius: '50%',
+                            width: 30, height: 30, cursor: 'pointer', color: 'white', flexShrink: 0,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center'
+                        }}
+                    >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="1 4 1 10 7 10"></polyline>
+                            <path d="M3.51 15a9 9 0 1 0 .49-3.51"></path>
+                        </svg>
+                    </button>
+                )}
+
                 {/* Botão fechar */}
                 <button
                     onClick={handleClose}
@@ -258,11 +296,8 @@ export default function EmbedChatPage() {
                     style={{
                         background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: '50%',
                         width: 30, height: 30, cursor: 'pointer', color: 'white', flexShrink: 0,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        transition: 'background 0.2s'
+                        display: 'flex', alignItems: 'center', justifyContent: 'center'
                     }}
-                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.25)')}
-                    onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.15)')}
                 >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                         <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
@@ -283,7 +318,7 @@ export default function EmbedChatPage() {
                             background: 'white', color: '#374151', padding: '10px 13px',
                             borderRadius: '16px 16px 16px 4px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
                             border: '1px solid #eef0f2', fontSize: 13, lineHeight: 1.55,
-                            maxWidth: '83%', whiteSpace: 'pre-wrap', wordBreak: 'break-word'
+                            maxWidth: '83%', wordBreak: 'break-word'
                         }}>
                             {config.welcomeMsg}
                         </div>
@@ -296,25 +331,36 @@ export default function EmbedChatPage() {
                         {msg.role === 'assistant' && (
                             <AgentAvatar logo={config.brandLogo} name={config.agentName} color={config.brandColor} size={28} />
                         )}
-                        <div style={{
-                            padding: '10px 13px', fontSize: 13, lineHeight: 1.55,
-                            maxWidth: '83%', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-                            borderRadius: msg.role === 'user' ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
-                            ...(msg.role === 'user' ? {
+                        {msg.role === 'assistant' ? (
+                            // Assistente: HTML formatado (já escapado)
+                            <div
+                                style={{
+                                    padding: '10px 13px', fontSize: 13, lineHeight: 1.6,
+                                    maxWidth: '83%', wordBreak: 'break-word',
+                                    borderRadius: '16px 16px 16px 4px',
+                                    background: 'white', color: '#374151',
+                                    boxShadow: '0 1px 3px rgba(0,0,0,0.08)', border: '1px solid #eef0f2',
+                                    minHeight: msg.content === '' ? 20 : undefined,
+                                }}
+                                dangerouslySetInnerHTML={{ __html: formatMessage(msg.content) }}
+                            />
+                        ) : (
+                            // Usuário: texto puro
+                            <div style={{
+                                padding: '10px 13px', fontSize: 13, lineHeight: 1.55,
+                                maxWidth: '83%', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                                borderRadius: '16px 16px 4px 16px',
                                 background: config.brandColor, color: 'white',
                                 boxShadow: `0 2px 8px ${config.brandColor}40`
-                            } : {
-                                background: 'white', color: '#374151',
-                                boxShadow: '0 1px 3px rgba(0,0,0,0.08)', border: '1px solid #eef0f2'
-                            })
-                        }}>
-                            {msg.content}
-                        </div>
+                            }}>
+                                {msg.content}
+                            </div>
+                        )}
                     </div>
                 ))}
 
-                {/* Indicador de digitação */}
-                {isLoading && (
+                {/* Indicador de digitação — só exibe antes do primeiro token */}
+                {isLoading && !isStreaming && (
                     <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
                         <AgentAvatar logo={config.brandLogo} name={config.agentName} color={config.brandColor} size={28} />
                         <div style={{
@@ -373,7 +419,7 @@ export default function EmbedChatPage() {
                         disabled={isLoading || !inputValue.trim()}
                         style={{
                             width: 32, height: 32, borderRadius: '50%', border: 'none', flexShrink: 0,
-                            background: inputValue.trim() ? config.brandColor : '#d1d5db',
+                            background: inputValue.trim() && !isLoading ? config.brandColor : '#d1d5db',
                             color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center',
                             cursor: inputValue.trim() && !isLoading ? 'pointer' : 'not-allowed',
                             transition: 'background 0.2s, transform 0.1s',
@@ -405,6 +451,9 @@ export default function EmbedChatPage() {
                 ::-webkit-scrollbar-track { background: transparent; }
                 ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; }
                 * { box-sizing: border-box; }
+                strong { font-weight: 700; }
+                em { font-style: italic; opacity: 0.9; }
+                del { opacity: 0.7; }
             `}</style>
         </div>
     )

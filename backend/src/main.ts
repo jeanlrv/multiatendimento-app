@@ -66,11 +66,26 @@ async function bootstrap() {
                 ? '*'
                 : [];
 
-        const app = await NestFactory.create<NestExpressApplication>(AppModule, {
-            cors: {
-                origin: allowedOrigins,
-                credentials: true,
-            },
+        // Criamos o app SEM cors para poder registrar embed CORS antes do global
+        const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+        // ── CORS para Embed (deve ser PRIMEIRO, antes do enableCors global) ──────
+        // Preflight OPTIONS de sites externos chega aqui ANTES do global CORS,
+        // garantindo que 'Access-Control-Allow-Origin: *' seja enviado corretamente.
+        app.use('/api/embed', (req: any, res: any, next: any) => {
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+            res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Origin, Accept');
+            if (req.method === 'OPTIONS') {
+                return res.status(204).end();
+            }
+            next();
+        });
+
+        // ── CORS global para rotas autenticadas ─────────────────────────────────
+        app.enableCors({
+            origin: allowedOrigins,
+            credentials: true,
         });
 
         // Graceful shutdown — aguarda requests em andamento antes de encerrar
@@ -114,17 +129,6 @@ async function bootstrap() {
         // Health check endpoint sem prefixo /api — usado pelo Docker healthcheck
         app.getHttpAdapter().get('/health', (_req: any, res: any) => {
             res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
-        });
-
-        // CORS for Embed endpoints (Permitir * para widgets externos)
-        app.use('/api/embed', (req, res, next) => {
-            res.header('Access-Control-Allow-Origin', '*');
-            res.header('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-            res.header('Access-Control-Allow-Headers', 'Content-Type, Origin, Accept');
-            if (req.method === 'OPTIONS') {
-                return res.sendStatus(200);
-            }
-            next();
         });
 
         const port = process.env.PORT || 3000;

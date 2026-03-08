@@ -44,6 +44,8 @@ export class CompaniesService {
                 primaryColor: data.primaryColor ?? '#3B82F6',
                 secondaryColor: data.secondaryColor ?? '#1E293B',
                 limitTokens: data.limitTokens ?? 100000,
+                limitTokensPerHour: data.limitTokensPerHour ?? 0,
+                limitTokensPerDay: data.limitTokensPerDay ?? 0,
                 plan: data.plan ?? 'STARTER',
                 maxUsers: data.maxUsers ?? 3,
                 maxDepartments: data.maxDepartments ?? 1,
@@ -59,6 +61,8 @@ export class CompaniesService {
         if (data.primaryColor !== undefined) updateData.primaryColor = data.primaryColor;
         if (data.secondaryColor !== undefined) updateData.secondaryColor = data.secondaryColor;
         if (data.limitTokens !== undefined) updateData.limitTokens = data.limitTokens;
+        if (data.limitTokensPerHour !== undefined) updateData.limitTokensPerHour = data.limitTokensPerHour;
+        if (data.limitTokensPerDay !== undefined) updateData.limitTokensPerDay = data.limitTokensPerDay;
         if (data.plan !== undefined) updateData.plan = data.plan;
         if (data.maxUsers !== undefined) updateData.maxUsers = data.maxUsers;
         if (data.maxDepartments !== undefined) updateData.maxDepartments = data.maxDepartments;

@@ -19,11 +19,16 @@ export default function WidgetConfigTab({ agent, onChange }: WidgetConfigTabProp
     const [logoError, setLogoError] = useState(false)
 
     // URL pública do backend para o src do <script>
+    // Usa apenas NEXT_PUBLIC_BACKEND_PUBLIC_URL (mapeado de BACKEND_PUBLIC_URL no Railway).
+    // Não cai para NEXT_PUBLIC_API_URL pois pode ser URL interna (.railway.internal).
     const backendPublicUrl = (
         process.env.NEXT_PUBLIC_BACKEND_PUBLIC_URL ||
-        process.env.NEXT_PUBLIC_API_URL ||
         'http://localhost:3002'
     ).replace(/\/api\/?$/, '')
+
+    const isInternalUrl = backendPublicUrl.includes('railway.internal') ||
+        backendPublicUrl.includes('localhost') ||
+        backendPublicUrl.startsWith('http://backend')
 
     // URL pública do frontend: window.location.origin é sempre correta quando rodando no browser.
     // É passada como query param para o script.js para que o iframe aponte para a URL correta,
@@ -89,6 +94,12 @@ export default function WidgetConfigTab({ agent, onChange }: WidgetConfigTabProp
                             <span>Salve o agente (botão abaixo) para que o widget seja ativado no servidor. Sem salvar, o script retorna erro mesmo com o toggle ativo.</span>
                         </div>
                         <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Script de Incorporação</label>
+                        {isInternalUrl && (
+                            <div className="flex items-start gap-3 p-3 bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-600/30 rounded-2xl text-[11px] font-bold text-rose-700 dark:text-rose-300">
+                                <AlertCircle size={14} className="mt-0.5 shrink-0" />
+                                <span>URL do backend parece ser interna (<code className="font-mono">{backendPublicUrl}</code>). Configure a variável de ambiente <strong>BACKEND_PUBLIC_URL</strong> com a URL pública do backend para que o widget funcione em sites externos.</span>
+                            </div>
+                        )}
                         {!isAgentSaved ? (
                             <div className="flex items-center gap-3 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-600/30 rounded-2xl text-xs font-bold text-amber-700 dark:text-amber-300">
                                 <AlertCircle size={16} /> Salve o agente primeiro para gerar o script.
@@ -346,7 +357,7 @@ export default function WidgetConfigTab({ agent, onChange }: WidgetConfigTabProp
                     </div>
 
                     <a
-                        href={`/embed/${agent.embedId}`}
+                        href={`/embed/${agent.embedId}?api=${encodeURIComponent(backendPublicUrl + '/api')}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="flex items-center justify-center gap-2 w-full py-3 bg-slate-100 dark:bg-white/5 hover:bg-primary/10 hover:text-primary rounded-xl text-xs font-bold uppercase tracking-widest transition-all"
