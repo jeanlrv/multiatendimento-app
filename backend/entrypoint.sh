@@ -113,6 +113,11 @@ echo "✅ Banco de dados disponível"
 # ============================================
 echo "📦 Executando migrações do Prisma..."
 
+# Resolver migrações que falharam em deploys anteriores (se houver).
+# O comando ignora erro caso a migração não esteja em estado de falha.
+echo "🔧 Verificando migrações com falha anteriores..."
+npx prisma@6 migrate resolve --rolled-back 20260307000002_fix_token_limits_default 2>&1 || true
+
 echo "🚀 Executando migrate deploy..."
 if npx prisma@6 migrate deploy 2>&1; then
   echo "✅ Migrações aplicadas com sucesso"
