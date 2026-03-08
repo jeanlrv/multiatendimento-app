@@ -1,7 +1,7 @@
 import { AIAgent } from '@/services/ai-agents'
 import { motion } from 'framer-motion'
 import { Copy, Check, Palette, Type, Layout, ExternalLink, AlertCircle, Globe, Shield } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 interface WidgetConfigTabProps {
     agent: Partial<AIAgent>
@@ -18,13 +18,16 @@ export default function WidgetConfigTab({ agent, onChange }: WidgetConfigTabProp
     const [hexInput, setHexInput] = useState(agent.embedBrandColor || '#4F46E5')
     const [logoError, setLogoError] = useState(false)
 
-    // URL pública do backend para o src do <script>
-    // Usa apenas NEXT_PUBLIC_BACKEND_PUBLIC_URL (mapeado de BACKEND_PUBLIC_URL no Railway).
-    // Não cai para NEXT_PUBLIC_API_URL pois pode ser URL interna (.railway.internal).
-    const backendPublicUrl = (
-        process.env.NEXT_PUBLIC_BACKEND_PUBLIC_URL ||
-        'http://localhost:3002'
-    ).replace(/\/api\/?$/, '')
+    // URL pública do backend — lida em runtime via API route para não depender de build-time NEXT_PUBLIC_*
+    const fallbackUrl = (process.env.NEXT_PUBLIC_BACKEND_PUBLIC_URL || 'http://localhost:3002').replace(/\/api\/?$/, '').replace(/\/$/, '')
+    const [backendPublicUrl, setBackendPublicUrl] = useState(fallbackUrl)
+
+    useEffect(() => {
+        fetch('/api/public-config')
+            .then(r => r.json())
+            .then(data => { if (data.backendUrl) setBackendPublicUrl(data.backendUrl) })
+            .catch(() => { /* mantém fallback */ })
+    }, [])
 
     const isInternalUrl = backendPublicUrl.includes('railway.internal') ||
         backendPublicUrl.includes('localhost') ||

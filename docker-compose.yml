@@ -117,6 +117,8 @@ services:
       # URL pública do backend — usada para gerar o <script> de embed do widget
       # No Railway, defina como a URL pública do serviço backend (ex: https://backend-xxx.up.railway.app)
       NEXT_PUBLIC_BACKEND_PUBLIC_URL: ${BACKEND_PUBLIC_URL:-}
+      BACKEND_PUBLIC_URL: ${BACKEND_PUBLIC_URL:-}
+      BACKEND_URL: ${BACKEND_URL:-}
       NODE_OPTIONS: "--max-old-space-size=2048"
       WATCHPACK_POLLING: "true"
     ports:
