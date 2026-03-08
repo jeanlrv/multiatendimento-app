@@ -2,10 +2,26 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 export function middleware(request: NextRequest) {
+    const pathname = request.nextUrl.pathname;
+
+    // ── Rotas de embed: remover restrições de framing ─────────────────────────
+    // Next.js injeta X-Frame-Options: SAMEORIGIN por padrão.
+    // Para rotas /embed/* precisamos remover esse header para que o iframe
+    // funcione em qualquer site externo (https://, http://, file://).
+    if (pathname.startsWith('/embed/')) {
+        const response = NextResponse.next();
+        // Apagar X-Frame-Options para que o iframe funcione em qualquer origem.
+        // Não setamos frame-ancestors no CSP — qualquer wildcard bloqueia file://.
+        // Sem X-Frame-Options e sem frame-ancestors = sem restrição de framing.
+        response.headers.delete('X-Frame-Options');
+        response.headers.delete('Content-Security-Policy');
+        return response;
+    }
+
+    // ── Rotas autenticadas ────────────────────────────────────────────────────
     // 'session' cookie dura 7 dias (set no login, persiste mesmo após token 15min expirar)
     // 'token' cookie dura 15min (alinhado com JWT)
     const hasSession = request.cookies.get('session')?.value || request.cookies.get('token')?.value;
-    const pathname = request.nextUrl.pathname;
     const isAuthPage = pathname.startsWith('/login');
     const isDashboardPage = pathname.startsWith('/dashboard');
     const isRootPage = pathname === '/';
@@ -29,6 +45,6 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-    matcher: ['/', '/dashboard/:path*', '/login'],
+    // Inclui /embed/* para que o middleware intercepte e remova os headers de framing
+    matcher: ['/', '/dashboard/:path*', '/login', '/embed/:path*'],
 };
-
