@@ -243,7 +243,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
     return (
         <SessionTimeoutGuard>
-            <div className="h-screen sober-gradient flex overflow-hidden transition-colors duration-300 text-slate-900 dark:text-white">
+            <div className="h-[100dvh] sober-gradient flex overflow-hidden transition-colors duration-300 text-slate-900 dark:text-white">
                 <Toaster position="top-right" richColors closeButton />
 
                 {/* ── SIDEBAR DESKTOP (md+) ────────────────────────────────── */}
@@ -314,25 +314,26 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 </AnimatePresence>
 
                 {/* ── MAIN CONTENT ─────────────────────────────────────────── */}
-                <div className="flex-1 flex flex-col relative z-10 overflow-hidden min-w-0 h-full">
+                {/* overflow-hidden e h-full removidos: causavam conteúdo invisível no iOS/mobile */}
+                <div className="flex-1 flex flex-col relative z-10 min-w-0 min-h-0">
 
                     {/* ── HEADER ───────────────────────────────────────────── */}
-                    <header className="h-16 md:h-24 flex items-center justify-between px-4 md:px-10 relative z-20 flex-shrink-0">
-                        <div className="flex items-center gap-3 md:gap-10">
+                    <header className="h-14 md:h-20 flex items-center justify-between px-3 md:px-8 relative z-20 flex-shrink-0 border-b border-slate-200/60 dark:border-white/5 liquid-glass shadow-sm">
+                        <div className="flex items-center gap-2 md:gap-8">
                             {/* Botão hamburger — só mobile */}
                             <button
                                 onClick={() => setMobileMenuOpen(true)}
-                                className="md:hidden p-2 rounded-2xl liquid-glass border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:bg-white/50 transition-all"
+                                className="md:hidden flex items-center justify-center w-10 h-10 rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 active:scale-95 transition-all"
                                 aria-label="Abrir menu"
                             >
-                                <Menu size={22} />
+                                <Menu size={20} />
                             </button>
 
-                            {/* Logo — visível em qualquer tamanho */}
-                            <div className="h-10 md:h-14 w-auto min-w-[100px] md:min-w-[160px] bg-gradient-to-br from-primary to-primary-foreground rounded-xl md:rounded-2xl flex items-center justify-center shadow-lg overflow-hidden flex-shrink-0">
+                            {/* Logo */}
+                            <div className="h-9 md:h-12 w-auto min-w-[90px] md:min-w-[150px] bg-gradient-to-br from-primary to-primary-foreground rounded-xl flex items-center justify-center shadow-md overflow-hidden flex-shrink-0">
                                 {logoUrl
-                                    ? <img src={logoUrl} alt={companyName} className="h-full w-full object-contain p-1 px-3 md:p-2 md:px-5" />
-                                    : <span className="text-white font-black text-base md:text-xl italic px-3 md:px-8">{companyName}</span>}
+                                    ? <img src={logoUrl} alt={companyName} className="h-full w-full object-contain p-1 px-2 md:p-2 md:px-4" />
+                                    : <span className="text-white font-black text-sm md:text-lg italic px-2 md:px-6">{companyName}</span>}
                             </div>
 
                             {/* Quick nav — apenas lg+ */}
@@ -346,7 +347,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                         </div>
 
                         {/* Direita do header */}
-                        <div className="flex items-center gap-2 md:gap-6">
+                        <div className="flex items-center gap-1.5 md:gap-4">
                             {/* Relógio — oculto em xs */}
                             <div className="hidden sm:flex items-center gap-3 liquid-glass px-4 py-2.5 rounded-full border border-slate-200 dark:border-white/10 shadow-sm">
                                 <Clock size={14} className="text-primary" />
@@ -363,18 +364,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                             </div>
 
                             {/* Presença */}
-                            <button onClick={() => setPresenceSidebarOpen(!presenceSidebarOpen)} className={`p-2 md:p-2.5 rounded-full border transition-all ${presenceSidebarOpen ? 'bg-primary text-white border-primary shadow-lg shadow-primary/20' : 'liquid-glass border-slate-200 dark:border-white/10 text-slate-400 hover:text-primary'}`} title="Hub de Colaboradores">
-                                <UsersIcon size={18} />
+                            <button onClick={() => setPresenceSidebarOpen(!presenceSidebarOpen)} className={`w-9 h-9 flex items-center justify-center rounded-full border transition-all active:scale-95 ${presenceSidebarOpen ? 'bg-primary text-white border-primary shadow-lg shadow-primary/20' : 'liquid-glass border-slate-200 dark:border-white/10 text-slate-400 hover:text-primary'}`} title="Hub de Colaboradores">
+                                <UsersIcon size={16} />
                             </button>
 
                             <NotificationBell />
 
-                            <div className="flex items-center gap-2 md:gap-4 border-l pl-3 md:pl-6 border-slate-200 dark:border-white/10">
+                            <div className="flex items-center gap-1.5 md:gap-3 border-l pl-2 md:pl-4 border-slate-200 dark:border-white/10">
                                 <ModeToggle />
                                 <div className="relative group">
                                     <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
-                                    <Link href="/dashboard/profile" className="flex items-center gap-2 bg-white/5 p-1 rounded-full border border-white/10 pr-2 hover:bg-white/10 transition-all shadow-md">
-                                        <div className="w-7 h-7 md:w-8 md:h-8 rounded-full bg-primary overflow-hidden border border-white/20 flex-shrink-0">
+                                    <Link href="/dashboard/profile" className="flex items-center gap-1.5 md:gap-2 bg-white/5 p-1 rounded-full border border-white/10 md:pr-2 hover:bg-white/10 transition-all shadow-md active:scale-95">
+                                        <div className="w-8 h-8 rounded-full bg-primary overflow-hidden border border-white/20 flex-shrink-0">
                                             {user.avatar ? <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-[10px] font-black text-white">{user.name.charAt(0).toUpperCase()}</div>}
                                         </div>
                                         <span className="text-xs font-bold text-slate-700 dark:text-slate-300 hidden lg:block max-w-[80px] truncate">{user.name.split(' ')[0]}</span>
@@ -387,46 +388,49 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                         </div>
                     </header>
 
-                    {/* ── CONTEÚDO + ESPAÇO PARA BOTTOM NAV ───────────────── */}
-                    <main className="px-3 md:px-6 pb-20 md:pb-6 flex-1 overflow-x-hidden overflow-y-auto custom-scrollbar min-h-0">
+                    {/* ── CONTEÚDO DAS PÁGINAS ─────────────────────────────── */}
+                    {/* min-h-0: obrigatório em flex child para scroll funcionar no Safari/iOS */}
+                    <main className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 px-3 md:px-6 pt-1 pb-[64px] md:pb-6 custom-scrollbar">
                         {children}
                     </main>
                 </div>
 
                 {/* ── BOTTOM NAV MOBILE (< md) ─────────────────────────────── */}
-                <nav className="fixed bottom-0 left-0 right-0 z-30 md:hidden liquid-glass border-t border-slate-200 dark:border-white/10 shadow-2xl">
-                    <div className="flex items-center justify-around px-2 py-2 safe-area-bottom">
-                        {bottomNavItems.map((item) => {
-                            const isActive = !item.isMenu && pathname === item.path;
-                            const count = (item as any).liveCount ?? 0;
-                            return item.isMenu ? (
-                                <button
-                                    key="menu"
-                                    onClick={() => setMobileMenuOpen(true)}
-                                    className={`flex flex-col items-center gap-1 px-3 py-1.5 rounded-2xl transition-all ${mobileMenuOpen ? 'text-primary' : 'text-slate-400'}`}
-                                >
-                                    <span className="text-2xl">{item.icon}</span>
-                                    <span className="text-[9px] font-black uppercase tracking-widest">Menu</span>
-                                </button>
-                            ) : (
-                                <Link
-                                    key={item.path}
-                                    href={item.path}
-                                    className={`relative flex flex-col items-center gap-1 px-3 py-1.5 rounded-2xl transition-all ${isActive ? 'text-primary' : 'text-slate-400 hover:text-slate-600'}`}
-                                >
-                                    {isActive && (
-                                        <motion.div layoutId="bottomNavIndicator" className="absolute inset-0 bg-primary/10 rounded-2xl" />
-                                    )}
-                                    <span className="text-2xl relative z-10">{item.icon}</span>
-                                    <span className="text-[9px] font-black uppercase tracking-widest relative z-10">{item.label}</span>
-                                    {count > 0 && (
-                                        <span className="absolute top-0 right-1 h-4 w-4 bg-primary text-white text-[8px] font-black rounded-full flex items-center justify-center">
-                                            {count > 9 ? '9+' : count}
-                                        </span>
-                                    )}
-                                </Link>
-                            );
-                        })}
+                <nav className="fixed bottom-0 left-0 right-0 z-30 md:hidden">
+                    <div className="liquid-glass border-t border-slate-200 dark:border-white/10 shadow-2xl">
+                        <div className="flex items-stretch justify-around px-1 pt-1.5 safe-area-bottom">
+                            {bottomNavItems.map((item) => {
+                                const isActive = !item.isMenu && pathname === item.path;
+                                const count = (item as any).liveCount ?? 0;
+                                return item.isMenu ? (
+                                    <button
+                                        key="menu"
+                                        onClick={() => setMobileMenuOpen(true)}
+                                        className={`flex flex-col items-center justify-center gap-0.5 flex-1 py-2 px-1 rounded-xl transition-all active:scale-90 ${mobileMenuOpen ? 'text-primary' : 'text-slate-400'}`}
+                                    >
+                                        <span className="text-xl leading-none">☰</span>
+                                        <span className="text-[9px] font-black uppercase tracking-wider">Menu</span>
+                                    </button>
+                                ) : (
+                                    <Link
+                                        key={item.path}
+                                        href={item.path}
+                                        className={`relative flex flex-col items-center justify-center gap-0.5 flex-1 py-2 px-1 rounded-xl transition-all active:scale-90 ${isActive ? 'text-primary' : 'text-slate-400'}`}
+                                    >
+                                        {isActive && (
+                                            <motion.div layoutId="bottomNavIndicator" className="absolute inset-0 bg-primary/10 rounded-xl" />
+                                        )}
+                                        <span className="text-xl leading-none relative z-10">{item.icon}</span>
+                                        <span className="text-[9px] font-black uppercase tracking-wider relative z-10">{item.label}</span>
+                                        {count > 0 && (
+                                            <span className="absolute top-1 right-2 h-4 w-4 bg-primary text-white text-[8px] font-black rounded-full flex items-center justify-center border border-white dark:border-slate-900">
+                                                {count > 9 ? '9+' : count}
+                                            </span>
+                                        )}
+                                    </Link>
+                                );
+                            })}
+                        </div>
                     </div>
                 </nav>
 
