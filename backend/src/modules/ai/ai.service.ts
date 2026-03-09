@@ -413,7 +413,7 @@ export class AIService {
             let finalModelId = agent.modelId || 'gpt-4o-mini';
 
             // Model routing: downgrade para modelo econômico em queries simples
-            if (agent.allowModelDowngrade && budget.chunkLimit === 2 && this.MODEL_DOWNGRADE[finalModelId]) {
+            if (agent.allowModelDowngrade && budget.chunkLimit <= 10 && this.MODEL_DOWNGRADE[finalModelId]) {
                 const downgraded = this.MODEL_DOWNGRADE[finalModelId];
                 this.logger.debug(`[ModelRouting] Downgrade: ${finalModelId} → ${downgraded} (query simples)`);
                 finalModelId = downgraded;
@@ -511,25 +511,20 @@ export class AIService {
                 systemPrompt += [
                     '',
                     '========================================',
-                    '[BASE DE CONHECIMENTO PARA RAG]',
+                    '[BASE DE CONHECIMENTO]',
                     '========================================',
                     '',
-                    'Você é um assistente especializado que responde EXCLUSIVAMENTE com base na base de conhecimento abaixo.',
-                    'SEUS OBRIGAÇÕES:',
+                    'Você tem acesso a trechos relevantes da base de conhecimento abaixo. Use estas informações como fonte principal.',
                     '',
-                    '1. [OBRIGATÓRIO] Use APENAS as informações contidas nas SOURCEs abaixo para fundamentar sua resposta.',
-                    '2. [OBRIGATÓRIO] Cite a SOURCE específica (ex: "Conforme SOURCE_1") sempre que usar informações do contexto.',
-                    '3. [OBRIGATÓRIO] Se a resposta estiver parcialmente nas SOURCEs, use-a e complemente apenas com conhecimento geral CLARO.',
-                    '4. [OBRIGATÓRIO] Se a informação NÃO estiver em NENHUMA SOURCE, diga: "Não encontrei informações sobre isso na base de conhecimento."',
-                    '5. [NÃO FAÇA] NÃO invente dados, números, URLs ou fatos que não estejam nas SOURCEs.',
-                    '6. [NÃO FAÇA] NÃO adivinhe ou especule sobre informações ausentes.',
+                    'DIRETRIZES:',
+                    '1. Priorize as informações das fontes abaixo em relação ao seu conhecimento geral.',
+                    '2. Sintetize e integre informações de múltiplas fontes para construir respostas completas e coesas.',
+                    '3. Se a informação estiver disponível nas fontes (mesmo parcialmente), use-a e complemente com raciocínio lógico.',
+                    '4. Só diga que não encontrou a informação se as fontes realmente não contiverem nada relevante sobre o tema.',
+                    '5. Não invente dados concretos (números, preços, URLs, datas, nomes específicos) que não estejam nas fontes.',
+                    '6. Responda de forma clara, direta e natural — sem citar mecanicamente "SOURCE_N" no texto.',
                     '',
-                    'FORMATO DE RESPOSTA:',
-                    '- Use parágrafos curtos e objetivos.',
-                    '- Referencie SOURCEs usando [SOURCE_N] dentro do texto quando relevante.',
-                    '- Se múltiplas SOURCEs apoiarem o mesmo ponto, cite todas (ex: [SOURCE_1, SOURCE_3]).',
-                    '',
-                    'FONTES (contexto recuperado via busca semântica):',
+                    'FONTES RECUPERADAS:',
                     formattedContext,
                     '========================================',
                 ].join('\n');
@@ -1134,7 +1129,7 @@ Resposta:`;
                 let finalModelId = agent.modelId || 'gpt-4o-mini';
 
                 // Model routing: downgrade para modelo econômico em queries simples
-                if (agent.allowModelDowngrade && budget.chunkLimit === 2 && this.MODEL_DOWNGRADE[finalModelId]) {
+                if (agent.allowModelDowngrade && budget.chunkLimit <= 10 && this.MODEL_DOWNGRADE[finalModelId]) {
                     finalModelId = this.MODEL_DOWNGRADE[finalModelId];
                 }
 
@@ -1178,6 +1173,43 @@ Resposta:`;
 
                 context = this.guardContextOverflow(agent.prompt || '', context, history, message, finalModelId);
 
+                let streamSystemPrompt = agent.prompt || 'Você é um assistente virtual prestativo.';
+
+                // Monta sistema RAG idêntico ao path não-streaming
+                if (context) {
+                    const sourceChunks = context.split('\n---\n').map((chunk, index) => {
+                        const lines = chunk.split('\n').filter(line => line.trim());
+                        const contentStart = lines[0]?.startsWith('Similaridade') ? 1 : 0;
+                        return { number: index + 1, content: lines.slice(contentStart).join('\n').trim() };
+                    }).filter(c => c.content.length > 50);
+
+                    const formattedStreamContext = sourceChunks
+                        .map(c => `[SOURCE_${c.number}]\n${c.content}\n[END_SOURCE_${c.number}]`)
+                        .join('\n\n');
+
+                    streamSystemPrompt += [
+                        '',
+                        '========================================',
+                        '[BASE DE CONHECIMENTO]',
+                        '========================================',
+                        '',
+                        'Você tem acesso a trechos relevantes da base de conhecimento abaixo. Use estas informações como fonte principal.',
+                        '',
+                        'DIRETRIZES:',
+                        '1. Priorize as informações das fontes abaixo em relação ao seu conhecimento geral.',
+                        '2. Sintetize e integre informações de múltiplas fontes para construir respostas completas e coesas.',
+                        '3. Se a informação estiver disponível nas fontes (mesmo parcialmente), use-a e complemente com raciocínio lógico.',
+                        '4. Só diga que não encontrou a informação se as fontes realmente não contiverem nada relevante sobre o tema.',
+                        '5. Não invente dados concretos (números, preços, URLs, datas, nomes específicos) que não estejam nas fontes.',
+                        '6. Responda de forma clara, direta e natural — sem citar mecanicamente "SOURCE_N" no texto.',
+                        '',
+                        'FONTES RECUPERADAS:',
+                        formattedStreamContext,
+                        '========================================',
+                    ].join('\n');
+                    context = ''; // evita duplicação no llmService
+                }
+
                 const formattedHistory = history.map(h => ({
                     role: (h.role === 'user' || h.role === 'client' ? 'user' : 'assistant') as 'user' | 'assistant',
                     content: h.content,
@@ -1187,7 +1219,7 @@ Resposta:`;
                 let fullResponse = '';
                 for await (const token of this.llmService.streamResponse(
                     finalModelId,
-                    agent.prompt || 'Você é um assistente virtual prestativo.',
+                    streamSystemPrompt,
                     message,
                     formattedHistory,
                     agent.temperature || 0.7,

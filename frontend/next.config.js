@@ -32,21 +32,9 @@ const nextConfig = {
         workerThreads: false,
     },
 
-    async headers() {
-        return [
-            {
-                // Rotas de embed devem ser incorporáveis em qualquer site externo via iframe.
-                // Next.js adiciona X-Frame-Options: SAMEORIGIN por padrão — sobrescrevemos aqui.
-                // CSP frame-ancestors: '*' não cobre 'https:' no Chrome — listar schemes explicitamente.
-                // frame-ancestors toma precedência sobre X-Frame-Options em browsers modernos (Chrome 40+).
-                source: "/embed/:path*",
-                headers: [
-                    { key: "X-Frame-Options", value: "ALLOWALL" },
-                    { key: "Content-Security-Policy", value: "frame-ancestors * https: http:" },
-                ]
-            }
-        ];
-    },
+    // Nota: remoção de headers para /embed/* é feita pelo middleware (src/middleware.ts),
+    // que deleta X-Frame-Options e Content-Security-Policy para permitir iframe em qualquer origem.
+    // Não definir headers aqui para /embed/* evita conflito com o middleware.
 
     async rewrites() {
         // Railway: comunicação interna é HTTP. BACKEND_INTERNAL_URL tem prioridade.

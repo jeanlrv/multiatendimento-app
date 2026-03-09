@@ -22,8 +22,9 @@ import { EmbeddingProviderFactory } from './embedding-provider.factory';
 export class VectorStoreService {
     private readonly logger = new Logger(VectorStoreService.name);
 
-    // Cache RAG para invalidação
-    private ragCache = new Map<string, any[]>();
+    // Cache de chunks por KB (evita re-fetch de embeddings a cada query)
+    private ragCache = new Map<string, { chunks: any[]; timestamp: number }>();
+    private readonly RAG_CHUNK_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutos
 
     constructor(private readonly embeddingFactory: EmbeddingProviderFactory) { }
 
@@ -51,7 +52,7 @@ export class VectorStoreService {
         apiKey?: string,
         baseUrl?: string,
         language: string = 'portuguese',
-        minScore: number = 0.10
+        minScore: number = 0.20
     ): Promise<{ id: string; content: string; score: number; metadata?: any }[]> {
         const loggerPrefix = `[RAG:KB${knowledgeBaseId}]`;
         this.logger.log(`${loggerPrefix} Iniciando busca RAG para query: "${query.substring(0, 50)}..." (company=${companyId}, topK=${topK}, minScore=${minScore})`);
@@ -66,47 +67,56 @@ export class VectorStoreService {
                 baseUrl
             );
 
-            // 2. Buscar chunks no banco com metadados
-            // Document não tem companyId direto — buscar IDs via Document e filtrar por documentId
-            const validDocs = await prisma.document.findMany({
-                where: { knowledgeBaseId, status: 'READY' },
-                select: { id: true },
-            });
-            const validDocIds = validDocs.map((d: any) => d.id);
+            // 2. Buscar chunks no banco com metadados (com cache em memória para evitar re-fetch)
+            const cacheKey = `${companyId}:${knowledgeBaseId}`;
+            const cached = this.ragCache.get(cacheKey);
+            let chunks: any[];
 
-            if (validDocIds.length === 0) {
-                this.logger.warn(`${loggerPrefix} Nenhum documento READY na KB`);
-                return [];
-            }
-
-            // Limite de segurança: KBs com muitos docs podem ter milhares de chunks.
-            // Carregar todos em RAM (embedding JSON = ~8-40KB/chunk) causa OOM em bases grandes.
-            // Estratégia: amostragem aleatória quando exceder MAX_CHUNKS_IN_MEMORY.
-            const MAX_CHUNKS_IN_MEMORY = 2000;
-            const totalChunks = await prisma.documentChunk.count({
-                where: { documentId: { in: validDocIds } },
-            });
-
-            let chunkQuery: any = {
-                where: { documentId: { in: validDocIds } },
-                select: { id: true, content: true, embedding: true, metadata: true, pageNumber: true, section: true },
-            };
-
-            // Se exceder o limite, carrega apenas os chunks mais recentes (docs recentes têm prioridade)
-            if (totalChunks > MAX_CHUNKS_IN_MEMORY) {
-                this.logger.warn(`${loggerPrefix} KB grande: ${totalChunks} chunks (limite ${MAX_CHUNKS_IN_MEMORY}). Carregando amostra por documento mais recente.`);
-                // Pega os docIds ordenados por data de criação (mais recentes primeiro)
-                const recentDocs = await prisma.document.findMany({
-                    where: { id: { in: validDocIds } },
-                    orderBy: { createdAt: 'desc' },
+            if (cached && (Date.now() - cached.timestamp) < this.RAG_CHUNK_CACHE_TTL_MS) {
+                this.logger.debug(`${loggerPrefix} Cache HIT — ${cached.chunks.length} chunks em memória`);
+                chunks = cached.chunks;
+            } else {
+                // Document não tem companyId direto — buscar IDs via Document e filtrar por documentId
+                const validDocs = await prisma.document.findMany({
+                    where: { knowledgeBaseId, status: 'READY' },
                     select: { id: true },
-                    take: Math.ceil(MAX_CHUNKS_IN_MEMORY / 10), // ~10 chunks por doc em média
                 });
-                chunkQuery.where = { documentId: { in: recentDocs.map((d: any) => d.id) } };
-                chunkQuery.take = MAX_CHUNKS_IN_MEMORY;
-            }
+                const validDocIds = validDocs.map((d: any) => d.id);
 
-            const chunks = await prisma.documentChunk.findMany(chunkQuery);
+                if (validDocIds.length === 0) {
+                    this.logger.warn(`${loggerPrefix} Nenhum documento READY na KB`);
+                    return [];
+                }
+
+                // Limite de segurança: KBs com muitos docs podem ter milhares de chunks.
+                // Carregar todos em RAM (embedding JSON = ~8-40KB/chunk) causa OOM em bases grandes.
+                const MAX_CHUNKS_IN_MEMORY = 2000;
+                const totalChunks = await prisma.documentChunk.count({
+                    where: { documentId: { in: validDocIds } },
+                });
+
+                let chunkQuery: any = {
+                    where: { documentId: { in: validDocIds } },
+                    select: { id: true, content: true, embedding: true, metadata: true, pageNumber: true, section: true },
+                };
+
+                // Se exceder o limite, carrega apenas os chunks mais recentes (docs recentes têm prioridade)
+                if (totalChunks > MAX_CHUNKS_IN_MEMORY) {
+                    this.logger.warn(`${loggerPrefix} KB grande: ${totalChunks} chunks (limite ${MAX_CHUNKS_IN_MEMORY}). Carregando amostra por documento mais recente.`);
+                    const recentDocs = await prisma.document.findMany({
+                        where: { id: { in: validDocIds } },
+                        orderBy: { createdAt: 'desc' },
+                        select: { id: true },
+                        take: Math.ceil(MAX_CHUNKS_IN_MEMORY / 10),
+                    });
+                    chunkQuery.where = { documentId: { in: recentDocs.map((d: any) => d.id) } };
+                    chunkQuery.take = MAX_CHUNKS_IN_MEMORY;
+                }
+
+                chunks = await prisma.documentChunk.findMany(chunkQuery);
+                this.ragCache.set(cacheKey, { chunks, timestamp: Date.now() });
+                this.logger.debug(`${loggerPrefix} Cache MISS — ${chunks.length} chunks carregados do banco e cacheados`);
+            }
 
             if (!chunks || chunks.length === 0) {
                 this.logger.warn(`${loggerPrefix} Nenhum chunk encontrado na KB`);
