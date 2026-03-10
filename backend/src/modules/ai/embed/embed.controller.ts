@@ -517,9 +517,12 @@ window.onload = function() {
 
         res.set('Content-Type', 'text/html; charset=utf-8');
         res.set('Cache-Control', 'no-cache, no-store');
-        // Permitir framing de qualquer origem (Helmet sobrescreve com frame-ancestors 'self' — override aqui)
+        // Permitir framing de qualquer origem — incluindo file:// (null origin) para testes locais.
+        // Helmet adiciona frame-ancestors 'self'; removemos o header inteiro para que o browser
+        // não tenha restrições de frame-ancestors. X-Frame-Options: ALLOWALL (valor inválido,
+        // ignorado por todos os browsers modernos = framing liberado). IE aceita ALLOWALL nativamente.
+        (res as any).removeHeader('Content-Security-Policy');
         res.set('X-Frame-Options', 'ALLOWALL');
-        res.set('Content-Security-Policy', "default-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src *; img-src * data:; frame-ancestors *;");
         return res.send(html);
     }
 }
