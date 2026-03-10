@@ -5,8 +5,11 @@ namespace KBAgent;
 public class SettingsForm : Form
 {
     private readonly AgentConfig _config;
+
+    // Inputs
     private TextBox txtUrl = null!;
     private TextBox txtApiKey = null!;
+    private CheckBox chkShowKey = null!;
     private TextBox txtFolder = null!;
     private TextBox txtPattern = null!;
     private ComboBox cmbMode = null!;
@@ -14,9 +17,7 @@ public class SettingsForm : Form
     private TextBox txtDailyTime = null!;
     private CheckBox chkStartup = null!;
     private CheckBox chkUploadOnStart = null!;
-    private Button btnTest = null!;
-    private Label lblStatus = null!;
-    private SyncService? _testService;
+    private Label lblTestStatus = null!;
 
     public AgentConfig ResultConfig { get; private set; } = null!;
 
@@ -30,67 +31,172 @@ public class SettingsForm : Form
     private void BuildUI()
     {
         Text = "KBAgent — Configurações";
-        Size = new Size(520, 560);
-        MinimumSize = new Size(520, 560);
-        MaximumSize = new Size(520, 560);
+        Size = new Size(540, 600);
+        MinimumSize = new Size(540, 500);
         StartPosition = FormStartPosition.CenterScreen;
         Font = new Font("Segoe UI", 9f);
 
-        var panel = new Panel { Dock = DockStyle.Fill, Padding = new Padding(16) };
-        Controls.Add(panel);
+        // ── Footer fixo com botões (DockStyle.Bottom) ─────────────────────
+        var footer = new Panel
+        {
+            Dock = DockStyle.Bottom,
+            Height = 50,
+            BackColor = Color.FromArgb(240, 240, 245),
+            Padding = new Padding(12, 8, 12, 8),
+        };
 
-        int y = 12;
-        int labelHeight = 20;
-        int inputHeight = 28;
-        int gap = 8;
-        int sectionGap = 18;
+        var btnCancel = new Button
+        {
+            Text = "Cancelar",
+            Width = 100,
+            Height = 34,
+            Dock = DockStyle.Right,
+            FlatStyle = FlatStyle.Flat,
+        };
+        btnCancel.Click += (_, __) => { DialogResult = DialogResult.Cancel; Close(); };
+
+        var btnSave = new Button
+        {
+            Text = "Salvar e Aplicar",
+            Width = 130,
+            Height = 34,
+            Dock = DockStyle.Right,
+            FlatStyle = FlatStyle.Flat,
+            BackColor = Color.FromArgb(70, 110, 220),
+            ForeColor = Color.White,
+        };
+        btnSave.FlatAppearance.BorderSize = 0;
+        btnSave.Click += OnSave;
+
+        footer.Controls.Add(btnCancel);
+        footer.Controls.Add(btnSave);
+        Controls.Add(footer);
+
+        // ── Painel de conteúdo rolável (DockStyle.Fill) ───────────────────
+        var scroll = new Panel
+        {
+            Dock = DockStyle.Fill,
+            AutoScroll = true,
+            Padding = new Padding(16, 12, 16, 8),
+        };
+        Controls.Add(scroll);
+
+        // ── Conteúdo dentro do painel rolável ─────────────────────────────
+        var content = new FlowLayoutPanel
+        {
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false,
+            AutoSize = true,
+            Width = 490,
+        };
+        scroll.Controls.Add(content);
 
         void AddSection(string title)
         {
-            var sep = new Label { Text = title, Font = new Font("Segoe UI", 8f, FontStyle.Bold), ForeColor = Color.FromArgb(100, 100, 180), Left = 0, Top = y, Width = 460, Height = labelHeight };
-            panel.Controls.Add(sep);
-            y += labelHeight + 2;
+            var lbl = new Label
+            {
+                Text = title,
+                Font = new Font("Segoe UI", 7.5f, FontStyle.Bold),
+                ForeColor = Color.FromArgb(80, 80, 180),
+                AutoSize = false,
+                Width = 490,
+                Height = 22,
+                Padding = new Padding(0, 6, 0, 0),
+                Margin = new Padding(0, 4, 0, 0),
+            };
+            content.Controls.Add(lbl);
         }
 
-        void AddLabel(string text)
+        Label MakeLabel(string text)
         {
-            var lbl = new Label { Text = text, Left = 0, Top = y, Width = 460, Height = labelHeight, ForeColor = Color.FromArgb(60, 60, 60) };
-            panel.Controls.Add(lbl);
-            y += labelHeight + 2;
+            return new Label
+            {
+                Text = text,
+                AutoSize = false,
+                Width = 490,
+                Height = 18,
+                ForeColor = Color.FromArgb(50, 50, 50),
+                Margin = new Padding(0, 2, 0, 0),
+            };
         }
 
-        TextBox AddInput(bool password = false)
+        TextBox MakeInput(bool isPassword = false)
         {
-            var tb = new TextBox { Left = 0, Top = y, Width = 460, Height = inputHeight, UseSystemPasswordChar = password };
-            panel.Controls.Add(tb);
-            y += inputHeight + gap;
-            return tb;
+            return new TextBox
+            {
+                Width = 490,
+                Height = 26,
+                UseSystemPasswordChar = isPassword,
+                Margin = new Padding(0, 0, 0, 6),
+            };
         }
 
-        // ── KB ──────────────────────────────────────────────────────────────
+        // ─── Secção KB ────────────────────────────────────────────────────
         AddSection("BASE DE CONHECIMENTO");
-        AddLabel("URL Base do Webhook (ex: https://backend.url/api/ai/knowledge/webhook):");
-        txtUrl = AddInput();
 
-        AddLabel("API Key (kwh_...):");
-        txtApiKey = AddInput(password: true);
+        content.Controls.Add(MakeLabel("URL Base do Webhook  (ex: https://seu-backend.com/api/ai/knowledge/webhook)"));
+        txtUrl = MakeInput();
+        content.Controls.Add(txtUrl);
 
-        btnTest = new Button { Text = "Testar Conexão", Left = 0, Top = y, Width = 140, Height = 28, FlatStyle = FlatStyle.Flat };
+        content.Controls.Add(MakeLabel("API Key  (kwh_...)"));
+
+        var keyRow = new FlowLayoutPanel
+        {
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            AutoSize = false,
+            Width = 490,
+            Height = 28,
+            Margin = new Padding(0, 0, 0, 2),
+        };
+        txtApiKey = new TextBox { Width = 350, Height = 26, UseSystemPasswordChar = true };
+        chkShowKey = new CheckBox { Text = "Mostrar", AutoSize = true, Margin = new Padding(6, 4, 0, 0) };
+        chkShowKey.CheckedChanged += (_, __) => txtApiKey.UseSystemPasswordChar = !chkShowKey.Checked;
+        keyRow.Controls.Add(txtApiKey);
+        keyRow.Controls.Add(chkShowKey);
+        content.Controls.Add(keyRow);
+
+        // Botão Testar Conexão
+        var testRow = new FlowLayoutPanel
+        {
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            AutoSize = false,
+            Width = 490,
+            Height = 34,
+            Margin = new Padding(0, 2, 0, 8),
+        };
+        var btnTest = new Button
+        {
+            Text = "Testar Conexão",
+            Width = 130,
+            Height = 28,
+            FlatStyle = FlatStyle.Flat,
+        };
         btnTest.FlatAppearance.BorderColor = Color.FromArgb(100, 100, 200);
         btnTest.ForeColor = Color.FromArgb(80, 80, 180);
-        btnTest.Click += async (_, __) => await OnTestConnection();
-        panel.Controls.Add(btnTest);
+        btnTest.Click += async (_, __) => await OnTestConnection(btnTest);
 
-        lblStatus = new Label { Left = 150, Top = y + 5, Width = 310, Height = 20, Font = new Font("Segoe UI", 8.5f, FontStyle.Bold) };
-        panel.Controls.Add(lblStatus);
-        y += 36 + sectionGap;
+        lblTestStatus = new Label { AutoSize = true, Margin = new Padding(8, 7, 0, 0), Font = new Font("Segoe UI", 8.5f, FontStyle.Bold) };
+        testRow.Controls.Add(btnTest);
+        testRow.Controls.Add(lblTestStatus);
+        content.Controls.Add(testRow);
 
-        // ── Pasta ────────────────────────────────────────────────────────────
-        AddSection("ARQUIVOS");
-        AddLabel("Pasta monitorada:");
-        var folderRow = new Panel { Left = 0, Top = y, Width = 460, Height = inputHeight };
-        txtFolder = new TextBox { Dock = DockStyle.Fill, Padding = new Padding(0, 0, 90, 0) };
-        var btnBrowse = new Button { Text = "Procurar...", Dock = DockStyle.Right, Width = 85, FlatStyle = FlatStyle.Flat };
+        // ─── Secção Arquivos ──────────────────────────────────────────────
+        AddSection("PASTA E ARQUIVOS");
+
+        content.Controls.Add(MakeLabel("Pasta monitorada  (o agente detecta automaticamente novos arquivos)"));
+        var folderRow = new FlowLayoutPanel
+        {
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            AutoSize = false,
+            Width = 490,
+            Height = 28,
+            Margin = new Padding(0, 0, 0, 6),
+        };
+        txtFolder = new TextBox { Width = 370, Height = 26 };
+        var btnBrowse = new Button { Text = "Procurar...", Width = 90, Height = 26, FlatStyle = FlatStyle.Flat, Margin = new Padding(4, 0, 0, 0) };
         btnBrowse.Click += (_, __) =>
         {
             using var dlg = new FolderBrowserDialog { SelectedPath = txtFolder.Text };
@@ -98,61 +204,96 @@ public class SettingsForm : Form
         };
         folderRow.Controls.Add(txtFolder);
         folderRow.Controls.Add(btnBrowse);
-        panel.Controls.Add(folderRow);
-        y += inputHeight + gap;
+        content.Controls.Add(folderRow);
 
-        AddLabel("Filtro de arquivos (separados por ;):");
-        txtPattern = AddInput();
+        content.Controls.Add(MakeLabel("Filtro de extensões  (separados por  ;)"));
+        txtPattern = MakeInput();
+        content.Controls.Add(txtPattern);
 
-        y += sectionGap;
+        // ─── Secção Agendamento ───────────────────────────────────────────
+        AddSection("AGENDAMENTO ADICIONAL");
+        content.Controls.Add(MakeLabel("O monitoramento de mudanças na pasta é SEMPRE ativo (upload em ~2s após salvar o arquivo)."));
+        content.Controls.Add(MakeLabel("Agendamento adicional (re-sync de segurança — opcional):"));
 
-        // ── Agendamento ──────────────────────────────────────────────────────
-        AddSection("AGENDAMENTO ADICIONAL (o monitoramento de mudanças é sempre ativo)");
-        AddLabel("Modo:");
-        cmbMode = new ComboBox { Left = 0, Top = y, Width = 250, DropDownStyle = ComboBoxStyle.DropDownList };
-        cmbMode.Items.AddRange(new object[] { "Apenas ao detectar mudança (onchange)", "A cada intervalo (interval)", "Diário em horário fixo (daily)", "Mudança + Intervalo (both)" });
+        cmbMode = new ComboBox
+        {
+            Width = 490,
+            Height = 26,
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            Margin = new Padding(0, 0, 0, 4),
+        };
+        cmbMode.Items.AddRange(new object[]
+        {
+            "Somente ao detectar mudança na pasta (recomendado)",
+            "A cada intervalo fixo (+ detecção automática)",
+            "Diário em horário fixo  (+ detecção automática)",
+            "Intervalo + Detecção automática",
+        });
         cmbMode.SelectedIndex = 0;
-        cmbMode.SelectedIndexChanged += (_, __) => UpdateScheduleVisibility();
-        panel.Controls.Add(cmbMode);
-        y += inputHeight + gap;
+        cmbMode.SelectedIndexChanged += (_, __) => UpdateScheduleControls();
+        content.Controls.Add(cmbMode);
 
-        var pnlSchedule = new FlowLayoutPanel { Left = 0, Top = y, Width = 460, Height = inputHeight + 4, FlowDirection = FlowDirection.LeftToRight, WrapContents = false };
-        var lblInterval = new Label { Text = "Intervalo (min):", AutoSize = true, Margin = new Padding(0, 6, 4, 0) };
-        numInterval = new NumericUpDown { Width = 60, Minimum = 5, Maximum = 1440, Value = 60, Margin = new Padding(0, 2, 16, 0) };
-        var lblDaily = new Label { Text = "Horário (HH:mm):", AutoSize = true, Margin = new Padding(0, 6, 4, 0) };
+        var schedRow = new FlowLayoutPanel
+        {
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            AutoSize = false,
+            Width = 490,
+            Height = 30,
+            Margin = new Padding(0, 0, 0, 6),
+        };
+        schedRow.Controls.Add(new Label { Text = "Intervalo (min):", AutoSize = true, Margin = new Padding(0, 6, 4, 0) });
+        numInterval = new NumericUpDown { Width = 65, Minimum = 5, Maximum = 1440, Value = 60, Margin = new Padding(0, 3, 16, 0) };
+        schedRow.Controls.Add(numInterval);
+        schedRow.Controls.Add(new Label { Text = "Horário diário (HH:mm):", AutoSize = true, Margin = new Padding(0, 6, 4, 0) });
         txtDailyTime = new TextBox { Width = 60, Text = "18:00" };
-        pnlSchedule.Controls.AddRange(new Control[] { lblInterval, numInterval, lblDaily, txtDailyTime });
-        panel.Controls.Add(pnlSchedule);
-        y += inputHeight + sectionGap;
+        schedRow.Controls.Add(txtDailyTime);
+        content.Controls.Add(schedRow);
 
-        // ── Opções ───────────────────────────────────────────────────────────
-        AddSection("OPÇÕES");
-        chkUploadOnStart = new CheckBox { Text = "Enviar arquivos existentes ao iniciar o agente", Left = 0, Top = y, Width = 460, Checked = true };
-        panel.Controls.Add(chkUploadOnStart);
-        y += 24;
+        // ─── Secção Opções ────────────────────────────────────────────────
+        AddSection("OPÇÕES DE INICIALIZAÇÃO");
 
-        chkStartup = new CheckBox { Text = "Iniciar com o Windows (HKCU Run)", Left = 0, Top = y, Width = 460 };
-        panel.Controls.Add(chkStartup);
-        y += 24 + sectionGap;
+        chkUploadOnStart = new CheckBox
+        {
+            Text = "Enviar todos os arquivos da pasta ao iniciar o agente",
+            AutoSize = false,
+            Width = 490,
+            Height = 22,
+            Checked = true,
+            Margin = new Padding(0, 0, 0, 4),
+        };
+        content.Controls.Add(chkUploadOnStart);
 
-        // ── Botões ───────────────────────────────────────────────────────────
-        var btnSave = new Button { Text = "Salvar", Left = 280, Top = y, Width = 85, Height = 30, FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(80, 120, 220), ForeColor = Color.White };
-        btnSave.Click += OnSave;
-        var btnCancel = new Button { Text = "Cancelar", Left = 375, Top = y, Width = 85, Height = 30, FlatStyle = FlatStyle.Flat };
-        btnCancel.Click += (_, __) => { DialogResult = DialogResult.Cancel; Close(); };
-        panel.Controls.Add(btnSave);
-        panel.Controls.Add(btnCancel);
+        chkStartup = new CheckBox
+        {
+            Text = "Iniciar automaticamente com o Windows  (adiciona entrada no registro HKCU)",
+            AutoSize = false,
+            Width = 490,
+            Height = 22,
+            Margin = new Padding(0, 0, 0, 4),
+        };
+        content.Controls.Add(chkStartup);
 
-        UpdateScheduleVisibility();
+        var infoLbl = new Label
+        {
+            Text = "ℹ  O agente roda na bandeja do sistema (system tray), não como serviço do Windows.",
+            AutoSize = false,
+            Width = 490,
+            Height = 32,
+            ForeColor = Color.FromArgb(100, 100, 130),
+            Font = new Font("Segoe UI", 8f),
+            Margin = new Padding(0, 4, 0, 0),
+        };
+        content.Controls.Add(infoLbl);
+
+        UpdateScheduleControls();
     }
 
-    private void UpdateScheduleVisibility()
+    private void UpdateScheduleControls()
     {
         var mode = GetSelectedMode();
-        var showInterval = mode is "interval" or "both";
-        var showDaily = mode is "daily";
-        numInterval.Enabled = showInterval;
-        txtDailyTime.Enabled = showDaily;
+        numInterval.Enabled = mode is "interval" or "both";
+        txtDailyTime.Enabled = mode is "daily";
     }
 
     private string GetSelectedMode() => cmbMode.SelectedIndex switch
@@ -169,44 +310,53 @@ public class SettingsForm : Form
         txtApiKey.Text = cfg.ApiKey;
         txtFolder.Text = cfg.WatchFolder;
         txtPattern.Text = cfg.FilePattern;
-        numInterval.Value = cfg.Schedule.IntervalMinutes;
+        numInterval.Value = Math.Max(5, Math.Min(1440, cfg.Schedule.IntervalMinutes));
         txtDailyTime.Text = cfg.Schedule.DailyTime;
         chkStartup.Checked = cfg.StartWithWindows;
         chkUploadOnStart.Checked = cfg.UploadOnStartup;
         cmbMode.SelectedIndex = cfg.Schedule.Mode switch
         {
             "interval" => 1,
-            "daily" => 2,
-            "both" => 3,
-            _ => 0,
+            "daily"    => 2,
+            "both"     => 3,
+            _          => 0,
         };
-        UpdateScheduleVisibility();
+        UpdateScheduleControls();
     }
 
     private void OnSave(object? sender, EventArgs e)
     {
-        if (string.IsNullOrWhiteSpace(txtUrl.Text) || string.IsNullOrWhiteSpace(txtApiKey.Text))
+        if (string.IsNullOrWhiteSpace(txtUrl.Text))
         {
-            MessageBox.Show("URL e API Key são obrigatórios.", "Validação", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show("Preencha a URL Base do Webhook.", "Validação", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            txtUrl.Focus();
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(txtApiKey.Text))
+        {
+            MessageBox.Show("Preencha a API Key.", "Validação", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            txtApiKey.Focus();
             return;
         }
 
         ResultConfig = new AgentConfig
         {
-            WebhookUrl = txtUrl.Text.Trim().TrimEnd('/'),
-            ApiKey = txtApiKey.Text.Trim(),
-            WatchFolder = txtFolder.Text.Trim(),
-            FilePattern = txtPattern.Text.Trim(),
-            DebounceMs = _config.DebounceMs,
-            RetryAttempts = _config.RetryAttempts,
+            WebhookUrl      = txtUrl.Text.Trim().TrimEnd('/'),
+            ApiKey          = txtApiKey.Text.Trim(),
+            WatchFolder     = txtFolder.Text.Trim(),
+            FilePattern     = string.IsNullOrWhiteSpace(txtPattern.Text)
+                                ? _config.FilePattern
+                                : txtPattern.Text.Trim(),
+            DebounceMs      = _config.DebounceMs,
+            RetryAttempts   = _config.RetryAttempts,
             RetryDelaySeconds = _config.RetryDelaySeconds,
             UploadOnStartup = chkUploadOnStart.Checked,
             StartWithWindows = chkStartup.Checked,
             Schedule = new ScheduleConfig
             {
-                Mode = GetSelectedMode(),
+                Mode            = GetSelectedMode(),
                 IntervalMinutes = (int)numInterval.Value,
-                DailyTime = txtDailyTime.Text.Trim(),
+                DailyTime       = txtDailyTime.Text.Trim(),
             },
         };
 
@@ -217,32 +367,31 @@ public class SettingsForm : Form
         Close();
     }
 
-    private async Task OnTestConnection()
+    private async Task OnTestConnection(Button btn)
     {
-        btnTest.Enabled = false;
-        lblStatus.Text = "Testando...";
-        lblStatus.ForeColor = Color.Gray;
+        if (string.IsNullOrWhiteSpace(txtUrl.Text) || string.IsNullOrWhiteSpace(txtApiKey.Text))
+        {
+            lblTestStatus.Text = "⚠  Preencha URL e API Key primeiro.";
+            lblTestStatus.ForeColor = Color.DarkOrange;
+            return;
+        }
+
+        btn.Enabled = false;
+        lblTestStatus.Text = "Testando...";
+        lblTestStatus.ForeColor = Color.Gray;
 
         var testCfg = new AgentConfig
         {
-            WebhookUrl = txtUrl.Text.Trim().TrimEnd('/'),
-            ApiKey = txtApiKey.Text.Trim(),
+            WebhookUrl  = txtUrl.Text.Trim().TrimEnd('/'),
+            ApiKey      = txtApiKey.Text.Trim(),
             WatchFolder = ".",
         };
 
-        _testService ??= new SyncService(testCfg);
-        _testService.UpdateConfig(testCfg);
+        using var svc = new SyncService(testCfg);
+        var ok = await svc.TestConnectionAsync();
 
-        var ok = await _testService.TestConnectionAsync();
-
-        lblStatus.Text = ok ? "✓ Conexão OK" : "✕ Falha na conexão";
-        lblStatus.ForeColor = ok ? Color.Green : Color.Red;
-        btnTest.Enabled = true;
-    }
-
-    protected override void OnFormClosed(FormClosedEventArgs e)
-    {
-        _testService?.Dispose();
-        base.OnFormClosed(e);
+        lblTestStatus.Text      = ok ? "✓  Conexão OK" : "✕  Falha — verifique URL e API Key";
+        lblTestStatus.ForeColor = ok ? Color.Green : Color.Red;
+        btn.Enabled = true;
     }
 }
