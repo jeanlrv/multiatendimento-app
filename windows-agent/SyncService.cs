@@ -228,7 +228,7 @@ public class SyncService : IDisposable
             .Any(p => p.TrimStart('*', '.').ToLowerInvariant() == ext);
     }
 
-    private void Log(string message)
+    public void Log(string message)
     {
         var line = $"[{DateTime.Now:HH:mm:ss}] {message}";
         OnLog?.Invoke(line);

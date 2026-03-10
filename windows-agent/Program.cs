@@ -45,7 +45,7 @@ static class Program
                 MessageBox.Show("Configure o agente antes de sincronizar.", "KBAgent", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
-            syncService.OnLog?.Invoke($"[{DateTime.Now:HH:mm:ss}] 🔄 Sincronização manual iniciada");
+            syncService.Log("🔄 Sincronização manual iniciada");
             // Reenvia todos os arquivos da pasta
             if (!string.IsNullOrEmpty(config.WatchFolder))
             {
