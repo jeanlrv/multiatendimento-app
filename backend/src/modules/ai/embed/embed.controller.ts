@@ -259,4 +259,265 @@ export class EmbedController {
         res.set('Cache-Control', 'no-cache, no-store');
         return res.send(scriptContent);
     }
+
+    // ── Legacy embed (IE7+) ────────────────────────────────────────────────
+
+    @Public()
+    @Get(':embedId/script-legacy.js')
+    async getLegacyScript(
+        @Param('embedId') embedId: string,
+        @Req() req: Request,
+        @Res() res: Response,
+    ) {
+        const origin = req.headers.origin;
+        const config = await this.embedService.getPublicConfig(embedId, origin as string).catch(() => null);
+
+        if (!config) {
+            return res.status(404).send('console.error("[KSZap] Widget n\\u00e3o encontrado ou desativado.");');
+        }
+
+        const backendPublicUrl = (
+            process.env.BACKEND_PUBLIC_URL ||
+            `${req.protocol}://${req.get('host')}`
+        ).replace(/\/+$/, '');
+
+        const safeName  = (config.agentName || 'Chat').replace(/['\"\\<>]/g, '');
+        const safeColor = (config.brandColor || '#4F46E5').replace(/['\"\\<>]/g, '');
+        const positionProp = config.position === 'bottom-left' ? 'left:20px;' : 'right:20px;';
+        const chatUrl = `${backendPublicUrl}/api/embed/${embedId}/legacy-chat`;
+
+        const scriptContent = `(function() {
+    if (document.getElementById('kszap-legacy-btn')) return;
+    var agentName  = "${safeName}";
+    var brandColor = "${safeColor}";
+    var chatUrl    = "${chatUrl}";
+    var posStyle   = "${positionProp}";
+    var popupRef   = null;
+
+    var btn = document.createElement('button');
+    btn.id = 'kszap-legacy-btn';
+    btn.style.cssText = 'position:fixed;bottom:20px;' + posStyle +
+        'z-index:999999;padding:12px 20px;background:' + brandColor +
+        ';color:#fff;border:0;cursor:pointer;font-size:14px;' +
+        'font-family:Arial,sans-serif;border-radius:4px;' +
+        'box-shadow:0 2px 8px rgba(0,0,0,0.25);';
+    btn.innerHTML = agentName;
+
+    btn.onclick = function() {
+        if (popupRef && !popupRef.closed) {
+            popupRef.focus();
+        } else {
+            popupRef = window.open(chatUrl, 'kszap_chat',
+                'width=420,height=600,resizable=yes,scrollbars=no,status=no,toolbar=no,menubar=no');
+        }
+        return false;
+    };
+
+    function attach() { document.body.appendChild(btn); }
+    if (document.body) {
+        attach();
+    } else if (window.attachEvent) {
+        window.attachEvent('onload', attach);
+    } else {
+        window.addEventListener('load', attach, false);
+    }
+})();`;
+
+        res.set('Content-Type', 'application/javascript; charset=utf-8');
+        res.set('Cache-Control', 'no-cache, no-store');
+        res.set('Access-Control-Allow-Origin', '*');
+        return res.send(scriptContent);
+    }
+
+    @Public()
+    @Get(':embedId/legacy-chat')
+    async getLegacyChat(
+        @Param('embedId') embedId: string,
+        @Req() req: Request,
+        @Res() res: Response,
+    ) {
+        const origin = req.headers.origin;
+        const config = await this.embedService.getPublicConfig(embedId, origin as string).catch(() => null);
+
+        if (!config) {
+            return res.status(404).type('html').send('<html><body style="font-family:Arial;padding:20px"><p>Chat indispon&#237;vel ou desativado.</p></body></html>');
+        }
+
+        const backendPublicUrl = (
+            process.env.BACKEND_PUBLIC_URL ||
+            `${req.protocol}://${req.get('host')}`
+        ).replace(/\/+$/, '');
+
+        const escJs   = (s: string) => (s || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\r/g, '').replace(/</g, '\\x3C');
+        const escHtml = (s: string) => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        const escColor = (s: string) => (s || '#4F46E5').replace(/[^#a-zA-Z0-9]/g, '');
+
+        const color           = escColor(config.brandColor || '#4F46E5');
+        const nameHtml        = escHtml(config.agentName || 'Chat');
+        const welcomeJs       = escJs(config.welcomeMsg || '');
+        const placeholderHtml = escHtml(config.placeholder || 'Digite sua mensagem...');
+        const apiJs           = escJs(backendPublicUrl);
+        const embedIdJs       = escJs(embedId);
+
+        const html = `<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html><head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>${nameHtml} - Chat</title>
+<style type="text/css">
+* { margin:0; padding:0; }
+html, body { width:100%; height:100%; font-family:Arial,Helvetica,sans-serif; background:#f5f5f5; }
+#hdr { background:${color}; color:#fff; padding:10px 14px; font-size:15px; font-weight:bold; height:44px; overflow:hidden; }
+#msgs { height:440px; overflow-y:auto; padding:8px 10px; background:#fff; border-bottom:1px solid #ddd; }
+#sbar { height:22px; padding:2px 8px; font-size:11px; color:#999; text-align:center; background:#fafafa; }
+#iarea { padding:8px; background:#f7f7f7; border-top:1px solid #ccc; }
+#itbl { width:100%; border-collapse:collapse; }
+#uinput { width:100%; padding:6px 8px; border:1px solid #ccc; font-size:13px; font-family:Arial,Helvetica,sans-serif; }
+#sbtn { padding:6px 14px; background:${color}; color:#fff; border:0; font-size:13px; font-family:Arial,Helvetica,sans-serif; cursor:pointer; white-space:nowrap; }
+.mw { margin:4px 0; overflow:hidden; }
+.mu { text-align:right; } .mb { text-align:left; }
+.mb span { display:inline-block; padding:7px 12px; font-size:13px; line-height:1.4; max-width:80%; word-wrap:break-word; background:#e8e8e8; color:#333; }
+.mu span { display:inline-block; padding:7px 12px; font-size:13px; line-height:1.4; max-width:80%; word-wrap:break-word; background:${color}; color:#fff; }
+</style>
+</head><body>
+<div id="hdr">${nameHtml}</div>
+<div id="msgs"></div>
+<div id="sbar">&nbsp;</div>
+<div id="iarea">
+  <table id="itbl"><tr>
+    <td style="width:100%;padding-right:6px;"><input type="text" id="uinput" placeholder="${placeholderHtml}"></td>
+    <td><button type="button" id="sbtn">Enviar</button></td>
+  </tr></table>
+</div>
+<script type="text/javascript">
+var EID = "${embedIdJs}";
+var API = "${apiJs}";
+var WEL = "${welcomeJs}";
+var SID = '';
+var BSY = false;
+
+function el(id) { return document.getElementById(id); }
+
+function esc(t) {
+    return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function addMsg(role, text) {
+    var d = document.createElement('div');
+    d.className = 'mw m' + role.charAt(0);
+    var s = document.createElement('span');
+    s.innerHTML = esc(text).replace(/\\n/g,'<br>');
+    d.appendChild(s);
+    el('msgs').appendChild(d);
+    el('msgs').scrollTop = 99999;
+}
+
+function setS(t) { el('sbar').innerHTML = t || '&nbsp;'; }
+
+function mkXHR() {
+    if (window.XMLHttpRequest) return new XMLHttpRequest();
+    try { return new ActiveXObject('Msxml2.XMLHTTP.6.0'); } catch(e) {}
+    try { return new ActiveXObject('Msxml2.XMLHTTP.3.0'); } catch(e) {}
+    try { return new ActiveXObject('Microsoft.XMLHTTP'); } catch(e) {}
+    return null;
+}
+
+function jp(s) {
+    if (window.JSON && window.JSON.parse) return window.JSON.parse(s);
+    return eval('(' + s + ')');
+}
+
+function uid() {
+    var t = (new Date()).getTime();
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        var r = (t + Math.random() * 16) % 16 | 0;
+        t = Math.floor(t / 16);
+        return (c === 'x' ? r : (r & 3 | 8)).toString(16);
+    });
+}
+
+function gc(n) {
+    var a = document.cookie.split(';'), i, k, p;
+    for (i = 0; i < a.length; i++) {
+        k = a[i];
+        while (k.length && k.charAt(0) === ' ') k = k.substring(1);
+        p = k.split('=');
+        if (p[0] === n) return decodeURIComponent(p[1] || '');
+    }
+    return '';
+}
+
+function sc(n, v) {
+    var e = new Date();
+    e.setDate(e.getDate() + 30);
+    document.cookie = n + '=' + encodeURIComponent(v) + '; expires=' + e.toUTCString() + '; path=/';
+}
+
+function trimStr(s) {
+    while (s.length && s.charAt(0) === ' ') s = s.substring(1);
+    while (s.length && s.charAt(s.length - 1) === ' ') s = s.substring(0, s.length - 1);
+    return s;
+}
+
+function escMsg(m) {
+    var bs = String.fromCharCode(92);
+    var dq = String.fromCharCode(34);
+    var nl = String.fromCharCode(10);
+    var r = '', i, c;
+    for (i = 0; i < m.length; i++) {
+        c = m.charAt(i);
+        if (c === dq) { r += bs + dq; }
+        else if (c === bs) { r += bs + bs; }
+        else if (c === nl) { r += bs + 'n'; }
+        else if (m.charCodeAt(i) !== 13) { r += c; }
+    }
+    return r;
+}
+
+function send() {
+    if (BSY) return;
+    var inp = el('uinput'), msg = inp.value;
+    if (!trimStr(msg)) return;
+    inp.value = '';
+    BSY = true;
+    setS('Aguardando resposta...');
+    addMsg('u', msg);
+    var x = mkXHR();
+    if (!x) { addMsg('b', 'Navegador sem suporte a requisicoes HTTP.'); BSY = false; setS(''); return; }
+    x.open('POST', API + '/api/embed/' + EID + '/chat', true);
+    x.setRequestHeader('Content-Type', 'application/json');
+    x.onreadystatechange = function() {
+        if (x.readyState === 4) {
+            BSY = false; setS('');
+            if (x.status === 200) {
+                try { addMsg('b', jp(x.responseText).response || ''); }
+                catch(e) { addMsg('b', 'Erro na resposta do servidor.'); }
+            } else if (x.status === 429) {
+                addMsg('b', 'Limite de mensagens atingido. Tente mais tarde.');
+            } else {
+                addMsg('b', 'Erro ao enviar. Tente novamente.');
+            }
+        }
+    };
+    x.send('{"sessionId":"' + SID + '","message":"' + escMsg(msg) + '"}');
+}
+
+window.onload = function() {
+    SID = gc('kszap_s_' + EID);
+    if (!SID) { SID = uid(); sc('kszap_s_' + EID, SID); }
+    if (WEL) addMsg('b', WEL);
+    el('sbtn').onclick = function() { send(); return false; };
+    el('uinput').onkeydown = function(e) {
+        var ev = e || window.event;
+        if (ev.keyCode === 13) { send(); return false; }
+    };
+};
+</script>
+</body></html>`;
+
+        res.set('Content-Type', 'text/html; charset=utf-8');
+        res.set('Cache-Control', 'no-cache, no-store');
+        res.set('X-Frame-Options', 'ALLOWALL');
+        return res.send(html);
+    }
 }

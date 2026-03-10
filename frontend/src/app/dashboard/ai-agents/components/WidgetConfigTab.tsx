@@ -1,6 +1,6 @@
 import { AIAgent } from '@/services/ai-agents'
 import { motion } from 'framer-motion'
-import { Copy, Check, Palette, Type, Layout, ExternalLink, AlertCircle, Globe, Shield } from 'lucide-react'
+import { Copy, Check, Palette, Type, Layout, ExternalLink, AlertCircle, Globe, Shield, Monitor } from 'lucide-react'
 import { useState, useEffect } from 'react'
 
 interface WidgetConfigTabProps {
@@ -125,6 +125,40 @@ export default function WidgetConfigTab({ agent, onChange }: WidgetConfigTabProp
                     </div>
                 )}
             </div>
+
+            {/* Legacy Embed — IE7+ */}
+            {agent.embedEnabled && isAgentSaved && (
+                <div className="bg-amber-50/60 dark:bg-amber-900/10 p-5 rounded-[2rem] border border-amber-200/60 dark:border-amber-700/30">
+                    <div className="flex items-center gap-3 mb-3">
+                        <Monitor size={15} className="text-amber-600 dark:text-amber-400 shrink-0" />
+                        <div>
+                            <h4 className="text-sm font-bold text-slate-900 dark:text-white">Compatibilidade com Navegadores Antigos</h4>
+                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Internet Explorer 7+</p>
+                        </div>
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-3 leading-relaxed">
+                        Para sistemas com navegadores embarcados antigos (IE7+, como aplicações VS2012), use este script alternativo. Abre o chat em uma janela popup — sem dependência do frontend.
+                    </p>
+                    <div className="relative group">
+                        <pre className="bg-slate-950 text-slate-300 p-4 rounded-2xl text-[11px] font-mono overflow-x-auto border border-white/10 leading-relaxed">
+                            {`<script type="text/javascript" src="${backendPublicUrl}/api/embed/${agent.embedId}/script-legacy.js"></` + `script>`}
+                        </pre>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                const snippet = `<script type="text/javascript" src="${backendPublicUrl}/api/embed/${agent.embedId}/script-legacy.js"></` + `script>`
+                                navigator.clipboard.writeText(snippet)
+                                setCopied(true)
+                                setTimeout(() => setCopied(false), 2000)
+                            }}
+                            className="absolute top-3 right-3 p-2 bg-white/10 hover:bg-white/20 rounded-xl transition-all text-white border border-white/10"
+                        >
+                            {copied ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
+                        </button>
+                    </div>
+                    <p className="text-[10px] text-slate-400 italic mt-2">Cole antes da tag &lt;/body&gt;. O chat abre em popup — não requer iframe nem CORS.</p>
+                </div>
+            )}
 
             {/* Visual & Avatar */}
             <div className="space-y-5">
