@@ -517,7 +517,9 @@ window.onload = function() {
 
         res.set('Content-Type', 'text/html; charset=utf-8');
         res.set('Cache-Control', 'no-cache, no-store');
+        // Permitir framing de qualquer origem (Helmet sobrescreve com frame-ancestors 'self' — override aqui)
         res.set('X-Frame-Options', 'ALLOWALL');
+        res.set('Content-Security-Policy', "default-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src *; img-src * data:; frame-ancestors *;");
         return res.send(html);
     }
 }

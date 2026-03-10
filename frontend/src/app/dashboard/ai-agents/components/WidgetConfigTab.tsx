@@ -137,26 +137,54 @@ export default function WidgetConfigTab({ agent, onChange }: WidgetConfigTabProp
                         </div>
                     </div>
                     <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-3 leading-relaxed">
-                        Para sistemas com navegadores embarcados antigos (IE7+, como aplicações VS2012), use este script alternativo. Abre o chat em uma janela popup — sem dependência do frontend.
+                        Para sistemas com navegadores embarcados antigos (IE7+, como aplicações VS2012). O chat é servido diretamente pelo backend — sem React, sem dependências externas.
                     </p>
-                    <div className="relative group">
-                        <pre className="bg-slate-950 text-slate-300 p-4 rounded-2xl text-[11px] font-mono overflow-x-auto border border-white/10 leading-relaxed">
-                            {`<script type="text/javascript" src="${backendPublicUrl}/api/embed/${agent.embedId}/script-legacy.js"></` + `script>`}
-                        </pre>
-                        <button
-                            type="button"
-                            onClick={() => {
-                                const snippet = `<script type="text/javascript" src="${backendPublicUrl}/api/embed/${agent.embedId}/script-legacy.js"></` + `script>`
-                                navigator.clipboard.writeText(snippet)
-                                setCopied(true)
-                                setTimeout(() => setCopied(false), 2000)
-                            }}
-                            className="absolute top-3 right-3 p-2 bg-white/10 hover:bg-white/20 rounded-xl transition-all text-white border border-white/10"
-                        >
-                            {copied ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
-                        </button>
+
+                    {/* Opção 1: Iframe direto */}
+                    <div className="space-y-1.5 mb-4">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Opção 1 — Iframe Direto (recomendado para VS2012)</label>
+                        <div className="relative group">
+                            <pre className="bg-slate-950 text-slate-300 p-4 rounded-2xl text-[11px] font-mono overflow-x-auto border border-white/10 leading-relaxed whitespace-pre-wrap">
+                                {`<iframe src="${backendPublicUrl}/api/embed/${agent.embedId}/legacy-chat"\n  width="400" height="600"\n  frameborder="0" scrolling="no"\n  style="border:none"></iframe>`}
+                            </pre>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    const snippet = `<iframe src="${backendPublicUrl}/api/embed/${agent.embedId}/legacy-chat"\n  width="400" height="600"\n  frameborder="0" scrolling="no"\n  style="border:none"></iframe>`
+                                    navigator.clipboard.writeText(snippet)
+                                    setCopied(true)
+                                    setTimeout(() => setCopied(false), 2000)
+                                }}
+                                className="absolute top-3 right-3 p-2 bg-white/10 hover:bg-white/20 rounded-xl transition-all text-white border border-white/10"
+                            >
+                                {copied ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
+                            </button>
+                        </div>
+                        <p className="text-[10px] text-slate-400 italic ml-1">Incorpora o chat diretamente na sua página. Funciona no WebBrowser control do VS2012.</p>
                     </div>
-                    <p className="text-[10px] text-slate-400 italic mt-2">Cole antes da tag &lt;/body&gt;. O chat abre em popup — não requer iframe nem CORS.</p>
+
+                    {/* Opção 2: Script com popup */}
+                    <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Opção 2 — Script com Botão Flutuante (popup)</label>
+                        <div className="relative group">
+                            <pre className="bg-slate-950 text-slate-300 p-4 rounded-2xl text-[11px] font-mono overflow-x-auto border border-white/10 leading-relaxed">
+                                {`<script type="text/javascript" src="${backendPublicUrl}/api/embed/${agent.embedId}/script-legacy.js"></` + `script>`}
+                            </pre>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    const snippet = `<script type="text/javascript" src="${backendPublicUrl}/api/embed/${agent.embedId}/script-legacy.js"></` + `script>`
+                                    navigator.clipboard.writeText(snippet)
+                                    setCopied(true)
+                                    setTimeout(() => setCopied(false), 2000)
+                                }}
+                                className="absolute top-3 right-3 p-2 bg-white/10 hover:bg-white/20 rounded-xl transition-all text-white border border-white/10"
+                            >
+                                {copied ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
+                            </button>
+                        </div>
+                        <p className="text-[10px] text-slate-400 italic ml-1">Cria um botão flutuante que abre o chat em popup.</p>
+                    </div>
                 </div>
             )}
 
