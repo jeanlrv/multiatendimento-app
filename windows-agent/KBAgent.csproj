@@ -8,7 +8,6 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>KBAgent</AssemblyName>
     <RootNamespace>KBAgent</RootNamespace>
-    <ApplicationIcon>icon.ico</ApplicationIcon>
     <!-- Publicação como single-file executável -->
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
