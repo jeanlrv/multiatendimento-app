@@ -463,15 +463,36 @@ model KnowledgeBase {
   language          String   @default("portuguese")
   embeddingProvider String   @default("qwen")
   embeddingModel    String   @default("text-embedding-v2")
+  webhookEnabled    Boolean  @default(false)
+  webhookApiKey     String?  @unique
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  company   Company    @relation(fields: [companyId], references: [id])
+  company   Company      @relation(fields: [companyId], references: [id])
   agents    AIAgent[]
   documents Document[]
+  syncLogs  KBSyncLog[]
 
   @@index([companyId])
   @@map("knowledge_bases")
+}
+
+model KBSyncLog {
+  id              String   @id @default(uuid())
+  knowledgeBaseId String
+  filename        String
+  fileSize        Int?
+  status          String   // SUCCESS | REPLACED | ERROR
+  errorMessage    String?
+  documentId      String?
+  agentHostname   String?
+  createdAt       DateTime @default(now())
+
+  knowledgeBase KnowledgeBase @relation(fields: [knowledgeBaseId], references: [id], onDelete: Cascade)
+
+  @@index([knowledgeBaseId])
+  @@index([createdAt])
+  @@map("kb_sync_logs")
 }
 
 model Document {

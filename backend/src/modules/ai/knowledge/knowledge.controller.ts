@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Body, Param, Delete, UseGuards, Req, UseInterceptors, UploadedFile, Res } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Param, Delete, UseGuards, Req, UseInterceptors, UploadedFile, Res, Headers, Query } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import * as path from 'path';
@@ -8,6 +8,7 @@ import { CreateKnowledgeBaseDto } from './dto/create-knowledge.dto';
 import { AddDocumentDto } from './dto/add-document.dto';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
+import { Public } from '../../../common/decorators/public.decorator';
 
 const UPLOAD_OPTIONS = {
     storage: diskStorage({
@@ -188,5 +189,58 @@ export class KnowledgeController {
     @ApiOperation({ summary: 'Obter estatísticas da base de conhecimento' })
     getBaseStats(@Req() req: any, @Param('id') id: string) {
         return this.knowledgeService.getBaseStats(req.user.companyId, id);
+    }
+
+    // ========== Integração Local (Agente Windows) ==========
+
+    @Post('bases/:id/webhook')
+    @ApiOperation({ summary: 'Ativar integração local (Agente Windows) — gera ou retorna API key existente' })
+    enableWebhook(@Req() req: any, @Param('id') id: string) {
+        return this.knowledgeService.enableWebhook(id, req.user.companyId);
+    }
+
+    @Delete('bases/:id/webhook')
+    @ApiOperation({ summary: 'Desativar integração local' })
+    async disableWebhook(@Req() req: any, @Param('id') id: string) {
+        await this.knowledgeService.disableWebhook(id, req.user.companyId);
+        return { ok: true };
+    }
+
+    @Post('bases/:id/webhook/rotate')
+    @ApiOperation({ summary: 'Rotacionar API key da integração local (invalida a anterior)' })
+    rotateWebhookKey(@Req() req: any, @Param('id') id: string) {
+        return this.knowledgeService.rotateWebhookKey(id, req.user.companyId);
+    }
+
+    @Get('bases/:id/sync-logs')
+    @ApiOperation({ summary: 'Log de sincronizações do Agente Windows' })
+    getSyncLogs(
+        @Req() req: any,
+        @Param('id') id: string,
+        @Query('limit') limit?: string,
+    ) {
+        return this.knowledgeService.getSyncLogs(id, req.user.companyId, limit ? parseInt(limit) : 50);
+    }
+
+    // Endpoint PÚBLICO — chamado pelo Agente Windows (sem JWT)
+    @Public()
+    @Post('webhook/:apiKey/upload')
+    @ApiOperation({ summary: '[Público] Upload de arquivo via Agente Windows — substitui doc de mesmo nome' })
+    @UseInterceptors(FileInterceptor('file', {
+        storage: diskStorage({
+            destination: os.tmpdir(),
+            filename: (_req: any, file: any, cb: any) => {
+                cb(null, `kwh-${Date.now()}-${file.originalname}`);
+            },
+        }),
+        limits: { fileSize: 50 * 1024 * 1024 },
+    }))
+    async webhookUpload(
+        @Param('apiKey') apiKey: string,
+        @UploadedFile() file: Express.Multer.File,
+        @Headers('x-agent-hostname') agentHostname?: string,
+    ) {
+        const kb = await this.knowledgeService.findKbByWebhookKey(apiKey);
+        return this.knowledgeService.ingestFileFromWebhook(kb, file, agentHostname);
     }
 }

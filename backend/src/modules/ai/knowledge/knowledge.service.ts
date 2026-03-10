@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../../../database/prisma.service';
 import { CreateKnowledgeBaseDto } from './dto/create-knowledge.dto';
@@ -580,6 +580,98 @@ export class KnowledgeService {
         return (this.prisma as any).knowledgeBase.update({
             where: { id },
             data: { language }
+        });
+    }
+
+    // ========== Integração Local (Webhook/Agente Windows) ==========
+
+    async enableWebhook(kbId: string, companyId: string): Promise<{ apiKey: string }> {
+        const kb = await (this.prisma as any).knowledgeBase.findFirst({ where: { id: kbId, companyId } });
+        if (!kb) throw new NotFoundException('Base de conhecimento não encontrada.');
+        const key = kb.webhookApiKey ?? ('kwh_' + randomUUID().replace(/-/g, ''));
+        await (this.prisma as any).knowledgeBase.update({
+            where: { id: kbId },
+            data: { webhookEnabled: true, webhookApiKey: key },
+        });
+        return { apiKey: key };
+    }
+
+    async disableWebhook(kbId: string, companyId: string): Promise<void> {
+        const kb = await (this.prisma as any).knowledgeBase.findFirst({ where: { id: kbId, companyId } });
+        if (!kb) throw new NotFoundException('Base de conhecimento não encontrada.');
+        await (this.prisma as any).knowledgeBase.update({
+            where: { id: kbId },
+            data: { webhookEnabled: false },
+        });
+    }
+
+    async rotateWebhookKey(kbId: string, companyId: string): Promise<{ apiKey: string }> {
+        const kb = await (this.prisma as any).knowledgeBase.findFirst({ where: { id: kbId, companyId } });
+        if (!kb) throw new NotFoundException('Base de conhecimento não encontrada.');
+        const key = 'kwh_' + randomUUID().replace(/-/g, '');
+        await (this.prisma as any).knowledgeBase.update({
+            where: { id: kbId },
+            data: { webhookApiKey: key },
+        });
+        return { apiKey: key };
+    }
+
+    async findKbByWebhookKey(apiKey: string) {
+        const kb = await (this.prisma as any).knowledgeBase.findUnique({
+            where: { webhookApiKey: apiKey },
+        });
+        if (!kb || !kb.webhookEnabled) {
+            throw new UnauthorizedException('API key inválida ou integração desativada.');
+        }
+        return kb;
+    }
+
+    async ingestFileFromWebhook(kb: any, file: Express.Multer.File, agentHostname?: string): Promise<any> {
+        const title = file.originalname;
+        let status = 'SUCCESS';
+        let documentId: string | undefined;
+        let errorMessage: string | undefined;
+        let doc: any;
+
+        try {
+            const existing = await (this.prisma as any).document.findFirst({
+                where: { knowledgeBaseId: kb.id, title },
+            });
+            if (existing) {
+                await this.removeDocument(kb.companyId, existing.id);
+                status = 'REPLACED';
+            }
+            doc = await this.addDocumentFromFile(kb.companyId, kb.id, file, title);
+            documentId = doc.id;
+        } catch (err) {
+            status = 'ERROR';
+            errorMessage = err?.message ?? 'Erro desconhecido';
+            throw err;
+        } finally {
+            await (this.prisma as any).kBSyncLog.create({
+                data: {
+                    id: randomUUID(),
+                    knowledgeBaseId: kb.id,
+                    filename: title,
+                    fileSize: file.size ?? null,
+                    status,
+                    errorMessage: errorMessage ?? null,
+                    documentId: documentId ?? null,
+                    agentHostname: agentHostname ?? null,
+                },
+            });
+        }
+
+        return { documentId, status, title, updatedAt: doc?.updatedAt };
+    }
+
+    async getSyncLogs(kbId: string, companyId: string, limit = 50) {
+        const kb = await (this.prisma as any).knowledgeBase.findFirst({ where: { id: kbId, companyId } });
+        if (!kb) throw new NotFoundException('Base de conhecimento não encontrada.');
+        return (this.prisma as any).kBSyncLog.findMany({
+            where: { knowledgeBaseId: kbId },
+            orderBy: { createdAt: 'desc' },
+            take: limit,
         });
     }
 

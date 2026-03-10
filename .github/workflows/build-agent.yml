@@ -1,0 +1,78 @@
+name: Build KBAgent (Windows)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'windows-agent/**'          # só dispara quando o código do agent muda
+  workflow_dispatch:                 # permite disparar manualmente pelo GitHub UI
+
+jobs:
+  build:
+    name: Compile & Release KBAgent.exe
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore dependencies
+        working-directory: windows-agent
+        run: dotnet restore
+
+      - name: Publish single-file executable
+        working-directory: windows-agent
+        run: |
+          dotnet publish -c Release -r win-x64 `
+            --self-contained true `
+            /p:PublishSingleFile=true `
+            /p:DebugType=None `
+            /p:DebugSymbols=false `
+            -o ./publish
+
+      - name: Verificar artefato gerado
+        run: dir windows-agent\publish
+
+      # ── Upload como artefato de build (disponível na aba Actions) ──────────
+      - name: Upload artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: KBAgent-win-x64
+          path: |
+            windows-agent/publish/KBAgent.exe
+            windows-agent/appsettings.json
+          retention-days: 30
+
+      # ── Criar GitHub Release automático com tag vX.Y.Z ────────────────────
+      # Só cria release quando há uma tag no formato v* (ex: v1.0.0)
+      - name: Get version tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        id: tag
+        run: echo "version=${{ github.ref_name }}" >> $env:GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "KBAgent ${{ steps.tag.outputs.version }}"
+          body: |
+            ## KBAgent — Agente Windows para Upload Automático
+
+            ### Instalação
+            1. Baixe `KBAgent.exe` e `appsettings.json` para a mesma pasta
+            2. Execute `KBAgent.exe` — abre no system tray
+            3. Clique duplo no ícone → configure URL, API Key e pasta do ERP
+            4. Salve — o agente começa a monitorar automaticamente
+
+            ### Atualização
+            Substitua apenas o `KBAgent.exe` mantendo o `appsettings.json` existente.
+          files: |
+            windows-agent/publish/KBAgent.exe
+            windows-agent/appsettings.json
+          draft: false
+          prerelease: false

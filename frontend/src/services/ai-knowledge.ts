@@ -7,11 +7,25 @@ export interface KnowledgeBase {
     companyId: string;
     embeddingProvider?: string;
     embeddingModel?: string;
+    webhookEnabled?: boolean;
+    webhookApiKey?: string;
     createdAt: string;
     updatedAt: string;
     _count?: {
         documents: number;
     };
+}
+
+export interface KBSyncLog {
+    id: string;
+    knowledgeBaseId: string;
+    filename: string;
+    fileSize?: number;
+    status: 'SUCCESS' | 'REPLACED' | 'ERROR';
+    errorMessage?: string;
+    documentId?: string;
+    agentHostname?: string;
+    createdAt: string;
 }
 
 export interface AIDocument {
@@ -116,7 +130,28 @@ export const AIKnowledgeService = {
         document.body.appendChild(link);
         link.click();
         link.remove();
-    }
+    },
+
+    // ── Integração Local (Agente Windows) ──────────────────────────────────
+
+    enableWebhook: async (kbId: string): Promise<{ apiKey: string }> => {
+        const response = await api.post<{ apiKey: string }>(`/ai/knowledge/bases/${kbId}/webhook`);
+        return response.data;
+    },
+
+    disableWebhook: async (kbId: string): Promise<void> => {
+        await api.delete(`/ai/knowledge/bases/${kbId}/webhook`);
+    },
+
+    rotateWebhookKey: async (kbId: string): Promise<{ apiKey: string }> => {
+        const response = await api.post<{ apiKey: string }>(`/ai/knowledge/bases/${kbId}/webhook/rotate`);
+        return response.data;
+    },
+
+    getSyncLogs: async (kbId: string, limit = 50): Promise<KBSyncLog[]> => {
+        const response = await api.get<KBSyncLog[]>(`/ai/knowledge/bases/${kbId}/sync-logs?limit=${limit}`);
+        return response.data;
+    },
 };
 
 
