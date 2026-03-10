@@ -1033,24 +1033,37 @@ export default function AIKnowledgePage() {
 
                             {/* ── Card Integração Local (Agente Windows) ── */}
                             <div className="px-8 pb-8">
-                                <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/3 overflow-hidden">
-                                    {/* Header do card */}
-                                    <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-white/10">
+                                <div className={`rounded-2xl border overflow-hidden transition-colors ${webhookEnabled ? 'border-primary/40 bg-primary/5 dark:bg-primary/10' : 'border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5'}`}>
+                                    {/* Header do card — clicável inteiro */}
+                                    <button
+                                        onClick={handleToggleWebhook}
+                                        disabled={!!webhookTogglingId}
+                                        className="w-full flex items-center justify-between px-6 py-4 hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+                                    >
                                         <div className="flex items-center gap-3">
-                                            <MonitorSmartphone size={18} className="text-primary" />
-                                            <div>
-                                                <p className="text-xs font-black uppercase tracking-widest text-slate-700 dark:text-white">Integração Local</p>
-                                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Agente Windows — upload automático de arquivos</p>
+                                            <div className={`p-2 rounded-xl ${webhookEnabled ? 'bg-primary text-white' : 'bg-slate-200 dark:bg-white/10 text-slate-500 dark:text-slate-400'}`}>
+                                                <MonitorSmartphone size={16} />
+                                            </div>
+                                            <div className="text-left">
+                                                <p className="text-xs font-black uppercase tracking-widest text-slate-800 dark:text-white">Integração Local (Agente Windows)</p>
+                                                <p className="text-[9px] font-bold uppercase tracking-widest mt-0.5 text-slate-400">Upload automático de arquivos para esta base</p>
                                             </div>
                                         </div>
-                                        <button
-                                            onClick={handleToggleWebhook}
-                                            disabled={!!webhookTogglingId}
-                                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${webhookEnabled ? 'bg-primary' : 'bg-slate-300 dark:bg-white/20'} ${webhookTogglingId ? 'opacity-50' : ''}`}
-                                        >
-                                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${webhookEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
-                                        </button>
-                                    </div>
+                                        <div className="flex items-center gap-2 flex-shrink-0 ml-4">
+                                            {webhookTogglingId ? (
+                                                <Loader2 size={16} className="animate-spin text-primary" />
+                                            ) : (
+                                                <>
+                                                    <span className={`text-[9px] font-black uppercase tracking-widest ${webhookEnabled ? 'text-primary' : 'text-slate-400'}`}>
+                                                        {webhookEnabled ? 'Ativo' : 'Inativo'}
+                                                    </span>
+                                                    <div className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${webhookEnabled ? 'bg-primary' : 'bg-slate-400 dark:bg-slate-600'}`}>
+                                                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${webhookEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
+                                    </button>
 
                                     {webhookEnabled && (
                                         <div className="px-6 py-4 space-y-4">
