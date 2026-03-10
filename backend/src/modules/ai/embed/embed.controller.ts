@@ -284,7 +284,8 @@ export class EmbedController {
         const safeName  = (config.agentName || 'Chat').replace(/['\"\\<>]/g, '');
         const safeColor = (config.brandColor || '#4F46E5').replace(/['\"\\<>]/g, '');
         const positionProp = config.position === 'bottom-left' ? 'left:20px;' : 'right:20px;';
-        const chatUrl = `${backendPublicUrl}/api/embed/${embedId}/legacy-chat`;
+        // Passa backendUrl como query param para que legacy-chat saiba a URL pública correta
+        const chatUrl = `${backendPublicUrl}/api/embed/${embedId}/legacy-chat?backendUrl=${encodeURIComponent(backendPublicUrl)}`;
 
         const scriptContent = `(function() {
     if (document.getElementById('kszap-legacy-btn')) return;
@@ -343,7 +344,10 @@ export class EmbedController {
             return res.status(404).type('html').send('<html><body style="font-family:Arial;padding:20px"><p>Chat indispon&#237;vel ou desativado.</p></body></html>');
         }
 
+        // Prioridade: ?backendUrl param (passado pelo iframe/script) > env var > req.host (pode ser URL interna via proxy)
+        const queryBackendUrl = (req.query as any)?.backendUrl as string;
         const backendPublicUrl = (
+            (queryBackendUrl?.startsWith('http') ? queryBackendUrl : '') ||
             process.env.BACKEND_PUBLIC_URL ||
             `${req.protocol}://${req.get('host')}`
         ).replace(/\/+$/, '');

@@ -145,12 +145,12 @@ export default function WidgetConfigTab({ agent, onChange }: WidgetConfigTabProp
                         <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Opção 1 — Iframe Direto (recomendado para VS2012)</label>
                         <div className="relative group">
                             <pre className="bg-slate-950 text-slate-300 p-4 rounded-2xl text-[11px] font-mono overflow-x-auto border border-white/10 leading-relaxed whitespace-pre-wrap">
-                                {`<iframe src="${backendPublicUrl}/api/embed/${agent.embedId}/legacy-chat"\n  width="400" height="600"\n  frameborder="0" scrolling="no"\n  style="border:none"></iframe>`}
+                                {`<iframe src="${backendPublicUrl}/api/embed/${agent.embedId}/legacy-chat?backendUrl=${encodeURIComponent(backendPublicUrl)}"\n  width="400" height="600"\n  frameborder="0" scrolling="no"\n  style="border:none"></iframe>`}
                             </pre>
                             <button
                                 type="button"
                                 onClick={() => {
-                                    const snippet = `<iframe src="${backendPublicUrl}/api/embed/${agent.embedId}/legacy-chat"\n  width="400" height="600"\n  frameborder="0" scrolling="no"\n  style="border:none"></iframe>`
+                                    const snippet = `<iframe src="${backendPublicUrl}/api/embed/${agent.embedId}/legacy-chat?backendUrl=${encodeURIComponent(backendPublicUrl)}"\n  width="400" height="600"\n  frameborder="0" scrolling="no"\n  style="border:none"></iframe>`
                                     navigator.clipboard.writeText(snippet)
                                     setCopied(true)
                                     setTimeout(() => setCopied(false), 2000)
