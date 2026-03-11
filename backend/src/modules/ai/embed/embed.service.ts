@@ -178,6 +178,8 @@ export class EmbedService implements OnModuleDestroy {
 
         } catch (error) {
             this.logger.error(`Erro no chat embed (Agent ${agent.id}): ${error.message}`);
+            // Preserva status code original de HttpException (ex: 400 BadRequest de provider não configurado)
+            if (error instanceof HttpException) throw error;
             throw new HttpException(error.message || 'Erro ao processar mensagem.', HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }

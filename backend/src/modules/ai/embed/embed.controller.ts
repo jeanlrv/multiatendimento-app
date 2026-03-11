@@ -1,8 +1,10 @@
 import { Controller, Get, Post, Body, Param, Headers, Req, Res } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import { EmbedService } from './embed.service';
 import { Response, Request } from 'express';
 import { Public } from '../../../common/decorators/public.decorator';
 
+@SkipThrottle()
 @Controller('embed')
 export class EmbedController {
     constructor(private readonly embedService: EmbedService) { }
@@ -499,7 +501,9 @@ function send() {
             } else if (x.status === 429) {
                 addMsg('b', 'Limite de mensagens atingido. Tente mais tarde.');
             } else {
-                addMsg('b', 'Erro ao enviar. Tente novamente.');
+                var errMsg = 'Erro ao enviar. Tente novamente.';
+                try { var ed = jp(x.responseText); if (ed && ed.message) errMsg = ed.message; } catch(e2) {}
+                addMsg('b', errMsg);
             }
         }
     };
