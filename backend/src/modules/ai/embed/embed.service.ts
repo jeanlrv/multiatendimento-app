@@ -259,4 +259,62 @@ export class EmbedService implements OnModuleDestroy {
 
         return { messages: session.messages };
     }
+
+    async chatWithAttachment(
+        embedId: string,
+        sessionId: string,
+        message: string,
+        file: Express.Multer.File,
+        origin?: string,
+    ): Promise<{ response: string }> {
+        if (!sessionId) throw new BadRequestException('SessionId é obrigatório.');
+
+        const agent = await (this.prisma as any).aIAgent.findUnique({
+            where: { embedId },
+            select: { id: true, companyId: true, embedEnabled: true, isActive: true, embedRateLimit: true, embedAllowedDomains: true }
+        });
+
+        if (!agent || !agent.isActive || !agent.embedEnabled) {
+            throw new NotFoundException('Agente de IA indisponível.');
+        }
+
+        if (origin && agent.embedAllowedDomains?.length > 0 && !this.validateDomain(origin, agent.embedAllowedDomains)) {
+            throw new HttpException('Domínio não autorizado.', HttpStatus.FORBIDDEN);
+        }
+
+        this.checkRateLimit(sessionId, agent.embedRateLimit);
+
+        try {
+            let session = await (this.prisma as any).embedChatSession.findUnique({
+                where: { embedId_sessionId: { embedId, sessionId } }
+            });
+            if (!session) {
+                session = await (this.prisma as any).embedChatSession.create({
+                    data: { embedId, sessionId, messages: [] }
+                });
+            }
+
+            const currentMessages: any[] = Array.isArray(session.messages) ? [...session.messages] : [];
+            const historyForLLM = currentMessages.map((m: any) => ({ role: m.role, content: m.content }));
+
+            // Salva a mensagem do usuário com indicador de arquivo
+            currentMessages.push({ role: 'user', content: `📎 ${file.originalname}\n${message}`, ts: Date.now() });
+
+            const response = await this.aiService.chatWithAttachment(agent.companyId, agent.id, message, file, historyForLLM);
+
+            currentMessages.push({ role: 'assistant', content: response, ts: Date.now() });
+
+            // Fire-and-forget
+            (this.prisma as any).embedChatSession.update({
+                where: { id: session.id },
+                data: { messages: currentMessages },
+            }).catch((e: Error) => this.logger.warn(`[Embed] Falha ao salvar sessão: ${e.message}`));
+
+            return { response };
+        } catch (error: any) {
+            this.logger.error(`Erro no chat embed com anexo (${embedId}): ${error?.message}`);
+            if (error instanceof HttpException) throw error;
+            throw new HttpException(error?.message || 'Erro interno ao processar mensagem.', HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
 }

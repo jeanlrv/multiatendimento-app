@@ -1,4 +1,6 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, Res, Sse, UnauthorizedException, Logger } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, Res, Sse, UnauthorizedException, Logger, UseInterceptors, UploadedFile, BadRequestException } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { AIService } from './ai.service';
 import { CreateAIAgentDto } from './dto/create-ai-agent.dto';
 import { UpdateAIAgentDto } from './dto/update-ai-agent.dto';
@@ -225,6 +227,26 @@ export class AIController {
         history?: { role: 'user' | 'assistant' | 'system', content: string }[];
     }) {
         return this.aiService.chatMultimodal(req.user.companyId, id, body.message, body.imageUrls, body.history || []);
+    }
+
+    @Post('agents/:id/chat-with-attachment')
+    @RequirePermission(Permission.AI_CHAT)
+    @ApiOperation({ summary: 'Interagir com o agente de IA enviando um arquivo (PDF, DOCX, XLSX, XML, TXT, imagens)' })
+    @UseInterceptors(FileInterceptor('file', {
+        storage: memoryStorage(),
+        limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
+    }))
+    async chatWithAttachment(
+        @Param('id') id: string,
+        @Body('message') message: string,
+        @Body('history') historyRaw: string,
+        @UploadedFile() file: Express.Multer.File,
+        @Req() req: any,
+    ) {
+        if (!file) throw new BadRequestException('Arquivo obrigatório.');
+        const history = historyRaw ? JSON.parse(historyRaw) : [];
+        const response = await this.aiService.chatWithAttachment(req.user.companyId, id, message ?? '', file, history);
+        return { response };
     }
 
     // ========== Histórico de Conversas ==========

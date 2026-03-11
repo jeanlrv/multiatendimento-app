@@ -73,9 +73,11 @@ export default function EmbedChatPage() {
     const [config, setConfig] = useState<EmbedConfig | null>(null)
     const [error, setError] = useState<string | null>(null)
     const [sessionId, setSessionId] = useState<string | null>(null)
+    const [attachedFile, setAttachedFile] = useState<File | null>(null)
 
     const scrollRef = useRef<HTMLDivElement>(null)
     const textareaRef = useRef<HTMLTextAreaElement>(null)
+    const fileInputRef = useRef<HTMLInputElement>(null)
 
     // Determine API URL — priority: ?api= query param > build-time env vars
     const buildTimeApiUrl = (
@@ -139,14 +141,46 @@ export default function EmbedChatPage() {
     }, [inputValue])
 
     const handleSend = useCallback(async () => {
-        if (!inputValue.trim() || isLoading || !sessionId) return
+        if ((!inputValue.trim() && !attachedFile) || isLoading || !sessionId) return
 
-        const userMsg: Message = { role: 'user', content: inputValue.trim(), ts: Date.now() }
+        const file = attachedFile
+        const displayContent = file ? `📎 ${file.name}${inputValue.trim() ? '\n' + inputValue.trim() : ''}` : inputValue.trim()
+        const userMsg: Message = { role: 'user', content: displayContent, ts: Date.now() }
         setMessages(prev => [...prev, userMsg, { role: 'assistant', content: '', ts: Date.now() }])
         setInputValue('')
+        setAttachedFile(null)
         setIsLoading(true)
         setIsStreaming(false)
 
+        // Com arquivo: usa endpoint síncrono (sem streaming)
+        if (file) {
+            try {
+                const fd = new FormData()
+                fd.append('file', file)
+                fd.append('message', inputValue.trim())
+                fd.append('sessionId', sessionId)
+                const res = await fetch(`${apiUrl}/embed/${embedId}/chat-with-attachment`, { method: 'POST', body: fd })
+                const data = await res.json()
+                if (!res.ok) throw new Error(data.message || 'Erro ao processar arquivo.')
+                setMessages(prev => {
+                    const updated = [...prev]
+                    updated[updated.length - 1] = { role: 'assistant', content: data.response, ts: Date.now() }
+                    return updated
+                })
+            } catch (err: any) {
+                setMessages(prev => {
+                    const updated = [...prev]
+                    updated[updated.length - 1] = { role: 'assistant', content: `Desculpe, ocorreu um erro: ${err.message}`, ts: Date.now() }
+                    return updated
+                })
+            } finally {
+                setIsLoading(false)
+                setIsStreaming(false)
+            }
+            return
+        }
+
+        // Sem arquivo: streaming normal
         try {
             const res = await fetch(`${apiUrl}/embed/${embedId}/chat-stream`, {
                 method: 'POST',
@@ -202,7 +236,7 @@ export default function EmbedChatPage() {
             setIsLoading(false)
             setIsStreaming(false)
         }
-    }, [inputValue, isLoading, sessionId, embedId, apiUrl])
+    }, [inputValue, attachedFile, isLoading, sessionId, embedId, apiUrl])
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
         if (e.key === 'Enter' && !e.shiftKey) {
@@ -381,11 +415,44 @@ export default function EmbedChatPage() {
 
             {/* ── Área de input ───────────────────────────────────── */}
             <footer style={{ padding: '8px 10px 10px', background: 'white', borderTop: '1px solid #eef0f2', flexShrink: 0 }}>
+                {/* Preview do arquivo anexado */}
+                {attachedFile && (
+                    <div style={{
+                        display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6,
+                        padding: '4px 10px', background: '#f0f4ff', borderRadius: 10,
+                        border: `1px solid ${config.brandColor}33`, fontSize: 11
+                    }}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={config.brandColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                            <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+                        </svg>
+                        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#374151', fontWeight: 600 }}>
+                            {attachedFile.name}
+                        </span>
+                        <span style={{ color: '#9ca3af', flexShrink: 0 }}>({(attachedFile.size / 1024).toFixed(0)} KB)</span>
+                        <button
+                            type="button"
+                            onClick={() => setAttachedFile(null)}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: '#9ca3af', flexShrink: 0, lineHeight: 0 }}
+                        >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                            </svg>
+                        </button>
+                    </div>
+                )}
+                {/* Input oculto para seleção de arquivo */}
+                <input
+                    ref={fileInputRef}
+                    type="file"
+                    style={{ display: 'none' }}
+                    accept=".pdf,.docx,.xlsx,.xls,.txt,.xml,.csv,.json,.png,.jpg,.jpeg,.gif,.webp"
+                    onChange={e => { if (e.target.files?.[0]) setAttachedFile(e.target.files[0]); e.currentTarget.value = '' }}
+                />
                 <form
                     onSubmit={e => { e.preventDefault(); handleSend() }}
                     style={{
-                        display: 'flex', alignItems: 'flex-end', gap: 8,
-                        background: '#f3f4f6', borderRadius: 20, padding: '6px 8px 6px 14px',
+                        display: 'flex', alignItems: 'flex-end', gap: 6,
+                        background: '#f3f4f6', borderRadius: 20, padding: '6px 8px 6px 10px',
                         border: `1.5px solid transparent`, transition: 'border-color 0.2s'
                     }}
                     onFocusCapture={e => {
@@ -399,12 +466,29 @@ export default function EmbedChatPage() {
                         form.style.background = '#f3f4f6'
                     }}
                 >
+                    {/* Botão anexar arquivo */}
+                    <button
+                        type="button"
+                        title="Anexar arquivo (PDF, DOCX, XLSX, XML, TXT, imagens — máx 10 MB)"
+                        disabled={isLoading}
+                        onClick={() => fileInputRef.current?.click()}
+                        style={{
+                            background: 'none', border: 'none', cursor: isLoading ? 'not-allowed' : 'pointer',
+                            padding: 4, color: attachedFile ? config.brandColor : '#9ca3af',
+                            flexShrink: 0, lineHeight: 0, opacity: isLoading ? 0.5 : 1,
+                            transition: 'color 0.2s'
+                        }}
+                    >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+                        </svg>
+                    </button>
                     <textarea
                         ref={textareaRef}
                         value={inputValue}
                         onChange={e => setInputValue(e.target.value)}
                         onKeyDown={handleKeyDown}
-                        placeholder={config.placeholder || 'Digite sua mensagem...'}
+                        placeholder={attachedFile ? 'Adicione uma mensagem (opcional)...' : (config.placeholder || 'Digite sua mensagem...')}
                         disabled={isLoading}
                         rows={1}
                         style={{
@@ -416,15 +500,15 @@ export default function EmbedChatPage() {
                     />
                     <button
                         type="submit"
-                        disabled={isLoading || !inputValue.trim()}
+                        disabled={isLoading || (!inputValue.trim() && !attachedFile)}
                         style={{
                             width: 32, height: 32, borderRadius: '50%', border: 'none', flexShrink: 0,
-                            background: inputValue.trim() && !isLoading ? config.brandColor : '#d1d5db',
+                            background: (inputValue.trim() || attachedFile) && !isLoading ? config.brandColor : '#d1d5db',
                             color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            cursor: inputValue.trim() && !isLoading ? 'pointer' : 'not-allowed',
+                            cursor: (inputValue.trim() || attachedFile) && !isLoading ? 'pointer' : 'not-allowed',
                             transition: 'background 0.2s, transform 0.1s',
                         }}
-                        onMouseDown={e => { if (inputValue.trim()) e.currentTarget.style.transform = 'scale(0.9)' }}
+                        onMouseDown={e => { if (inputValue.trim() || attachedFile) e.currentTarget.style.transform = 'scale(0.9)' }}
                         onMouseUp={e => { e.currentTarget.style.transform = 'scale(1)' }}
                     >
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

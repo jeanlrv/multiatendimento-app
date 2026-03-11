@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { AIAgentsService, AIAgent, AIProviderModels } from '@/services/ai-agents';
 import { AIKnowledgeService, KnowledgeBase } from '@/services/ai-knowledge';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bot, Plus, Trash2, CheckCircle, Settings, X, RefreshCcw, Save, Shield, Activity, Brain, Database, MessageSquare, Zap, Cpu, Globe, Key, ChevronLeft } from 'lucide-react';
+import { Bot, Plus, Trash2, CheckCircle, Settings, X, RefreshCcw, Save, Shield, Activity, Brain, Database, MessageSquare, Zap, Cpu, Globe, Key, ChevronLeft, Paperclip } from 'lucide-react';
 import { toast } from 'sonner';
 import WidgetConfigTab from './components/WidgetConfigTab';
 import ApiKeysSection from './components/ApiKeysSection';
@@ -23,7 +23,9 @@ export default function AIAgentsPage() {
     const [chatMessage, setChatMessage] = useState('');
     const [chatHistory, setChatHistory] = useState<{ role: string; content: string }[]>([]);
     const [chatLoading, setChatLoading] = useState(false);
+    const [attachedFile, setAttachedFile] = useState<File | null>(null);
     const chatEndRef = useRef<HTMLDivElement>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const isDirty = JSON.stringify(currentAgent) !== JSON.stringify(originalAgent);
 
@@ -91,7 +93,8 @@ export default function AIAgentsPage() {
     const isSavedProviderConfigured = !savedModelId || availableModels.some(p => p.models.some(m => m.id === savedModelId));
 
     const handleChatTest = async () => {
-        if (!chatMessage || !currentAgent?.id) return;
+        if (!chatMessage && !attachedFile) return;
+        if (!currentAgent?.id) return;
 
         // Bloqueia teste se o provider do modelo SALVO não estiver configurado
         if (!isSavedProviderConfigured) {
@@ -106,14 +109,43 @@ export default function AIAgentsPage() {
         }
 
         setChatLoading(true);
-        const userMsg = { role: 'user', content: chatMessage };
-        const updatedHistory = [...chatHistory, userMsg];
-        // Adiciona placeholder vazio que será preenchido token a token
-        setChatHistory([...updatedHistory, { role: 'assistant', content: '' }]);
+        const file = attachedFile;
+        const displayContent = file ? `📎 ${file.name}\n${chatMessage}` : chatMessage;
+        const userMsg = { role: 'user', content: displayContent };
+        const prevHistory = [...chatHistory];
+        setChatHistory([...chatHistory, userMsg, { role: 'assistant', content: '' }]);
         setChatMessage('');
+        setAttachedFile(null);
 
+        // Com arquivo anexado: usa endpoint síncrono (sem streaming)
+        if (file) {
+            try {
+                const { response } = await AIAgentsService.chatWithAttachment(
+                    currentAgent.id, chatMessage, file,
+                    prevHistory.map(m => ({ role: m.role, content: m.content }))
+                );
+                setChatHistory(prev => {
+                    const updated = [...prev];
+                    updated[updated.length - 1] = { role: 'assistant', content: response };
+                    return updated;
+                });
+            } catch (error: any) {
+                const errorMsg = error.response?.data?.message || error.message || 'Erro ao processar arquivo.';
+                setChatHistory(prev => {
+                    const updated = [...prev];
+                    updated[updated.length - 1] = { role: 'assistant', content: `⚠️ ${errorMsg}` };
+                    return updated;
+                });
+                toast.error(errorMsg, { duration: 6000 });
+            } finally {
+                setChatLoading(false);
+            }
+            return;
+        }
+
+        // Sem arquivo: streaming normal
         try {
-            for await (const event of AIAgentsService.streamChat(currentAgent.id, userMsg.content, updatedHistory.slice(0, -1))) {
+            for await (const event of AIAgentsService.streamChat(currentAgent.id, chatMessage, prevHistory.map(m => ({ role: m.role, content: m.content })))) {
                 if (event.type === 'chunk') {
                     setChatHistory(prev => {
                         const updated = [...prev];
@@ -686,7 +718,35 @@ export default function AIAgentsPage() {
                                     )}
                                     <div ref={chatEndRef} />
                                 </div>
+                                {/* Preview do arquivo anexado */}
+                                {attachedFile && (
+                                    <div className="flex items-center gap-2 px-3 py-1.5 mb-2 bg-primary/5 border border-primary/20 rounded-xl text-xs">
+                                        <Paperclip size={12} className="text-primary flex-shrink-0" />
+                                        <span className="truncate font-semibold text-slate-700 dark:text-slate-200">{attachedFile.name}</span>
+                                        <span className="text-slate-400 flex-shrink-0">({(attachedFile.size / 1024).toFixed(0)} KB)</span>
+                                        <button type="button" onClick={() => setAttachedFile(null)} className="ml-auto text-slate-400 hover:text-red-500 transition-colors flex-shrink-0">
+                                            <X size={12} />
+                                        </button>
+                                    </div>
+                                )}
+                                {/* Input oculto para seleção de arquivo */}
+                                <input
+                                    ref={fileInputRef}
+                                    type="file"
+                                    className="hidden"
+                                    accept=".pdf,.docx,.xlsx,.xls,.txt,.xml,.csv,.json,.png,.jpg,.jpeg,.gif,.webp"
+                                    onChange={e => { if (e.target.files?.[0]) setAttachedFile(e.target.files[0]); e.target.value = ''; }}
+                                />
                                 <div className="flex gap-2">
+                                    <button
+                                        type="button"
+                                        title="Anexar arquivo (PDF, DOCX, XLSX, XML, TXT, imagens — máx 10 MB)"
+                                        disabled={!currentAgent?.id || isDirty || !isSavedProviderConfigured}
+                                        onClick={() => fileInputRef.current?.click()}
+                                        className={`p-4 rounded-2xl border transition-all flex-shrink-0 disabled:opacity-50 ${attachedFile ? 'border-primary bg-primary/10 text-primary' : 'border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-white/5 text-slate-500 dark:text-slate-300'}`}
+                                    >
+                                        <Paperclip size={18} />
+                                    </button>
                                     <input
                                         value={chatMessage}
                                         onChange={e => setChatMessage(e.target.value)}
@@ -695,6 +755,7 @@ export default function AIAgentsPage() {
                                             !currentAgent?.id ? 'Salve o agente antes de testar...' :
                                             isDirty ? 'Salve as alterações antes de testar...' :
                                             !isSavedProviderConfigured ? 'Provider não configurado...' :
+                                            attachedFile ? 'Adicione uma mensagem (opcional) e envie...' :
                                             'Envie uma mensagem para testar...'
                                         }
                                         disabled={!currentAgent?.id || isDirty || !isSavedProviderConfigured}
@@ -702,7 +763,7 @@ export default function AIAgentsPage() {
                                     />
                                     <button
                                         type="button"
-                                        disabled={chatLoading || !currentAgent?.id || isDirty || !isSavedProviderConfigured}
+                                        disabled={chatLoading || !currentAgent?.id || isDirty || !isSavedProviderConfigured || (!chatMessage && !attachedFile)}
                                         onClick={handleChatTest}
                                         className="p-4 bg-primary text-white rounded-2xl hover:scale-105 active:scale-95 transition-all shadow-lg disabled:opacity-50"
                                     >

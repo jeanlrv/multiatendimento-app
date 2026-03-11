@@ -1,4 +1,6 @@
-import { Controller, Get, Post, Body, Param, Headers, Req, Res } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Headers, Req, Res, UseInterceptors, UploadedFile, BadRequestException } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { SkipThrottle } from '@nestjs/throttler';
 import { EmbedService } from './embed.service';
 import { Response, Request } from 'express';
@@ -57,6 +59,23 @@ export class EmbedController {
             r.write(`data: ${JSON.stringify({ type: 'error', message: err.message })}\n\n`);
             r.end();
         }
+    }
+
+    @Public()
+    @Post(':embedId/chat-with-attachment')
+    @UseInterceptors(FileInterceptor('file', {
+        storage: memoryStorage(),
+        limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
+    }))
+    async chatWithAttachment(
+        @Param('embedId') embedId: string,
+        @Body('message') message: string,
+        @Body('sessionId') sessionId: string,
+        @UploadedFile() file: Express.Multer.File,
+        @Headers('origin') origin: string,
+    ) {
+        if (!file) throw new BadRequestException('Arquivo obrigatório.');
+        return this.embedService.chatWithAttachment(embedId, sessionId, message ?? '', file, origin);
     }
 
     @Public()

@@ -107,6 +107,15 @@ export const AIAgentsService = {
         }
     },
 
+    chatWithAttachment: async (agentId: string, message: string, file: File, history: { role: string; content: string }[] = []) => {
+        const fd = new FormData();
+        fd.append('file', file);
+        fd.append('message', message);
+        fd.append('history', JSON.stringify(history));
+        const response = await api.post(`/ai/agents/${agentId}/chat-with-attachment`, fd);
+        return response.data as { response: string };
+    },
+
     getUsage: async () => {
         const response = await api.get('/ai/usage');
         return response.data;

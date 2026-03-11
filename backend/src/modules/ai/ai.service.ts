@@ -1,4 +1,4 @@
-import { Injectable, Logger, ForbiddenException, NotFoundException, BadRequestException, ServiceUnavailableException } from '@nestjs/common';
+import { Injectable, Logger, ForbiddenException, NotFoundException, BadRequestException, ServiceUnavailableException, HttpException, HttpStatus } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../../database/prisma.service';
@@ -1255,5 +1255,80 @@ Resposta:`;
                 observer.complete();
             });
         });
+    }
+
+    // ── Extração de texto de arquivo anexado ──────────────────────────────────
+
+    private async extractTextFromFile(buffer: Buffer, filename: string): Promise<string> {
+        const ext = (filename.split('.').pop() ?? '').toLowerCase();
+        const MAX = 15000;
+        let text = '';
+
+        try {
+            if (ext === 'pdf') {
+                const pdfParse = require('pdf-parse');
+                const data = await pdfParse(buffer);
+                text = data.text ?? '';
+            } else if (ext === 'docx') {
+                const mammoth = require('mammoth');
+                const result = await mammoth.extractRawText({ buffer });
+                text = result.value ?? '';
+            } else if (ext === 'xlsx' || ext === 'xls') {
+                const XLSX = require('xlsx');
+                const wb = XLSX.read(buffer, { type: 'buffer' });
+                const parts: string[] = [];
+                for (const name of wb.SheetNames) {
+                    const rows: any[][] = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: '' });
+                    if (!rows.length) continue;
+                    const [header, ...data] = rows;
+                    parts.push(`=== ${name} ===`);
+                    parts.push(...data.map((r: any[]) =>
+                        (header as any[]).map((h, i) => `${h || 'Col' + (i + 1)}: ${r[i] ?? ''}`).join(' | ')
+                    ));
+                }
+                text = parts.join('\n');
+            } else {
+                // TXT, XML, CSV, JSON, etc.
+                text = buffer.toString('utf-8');
+            }
+        } catch (e: any) {
+            throw new HttpException(
+                `Não foi possível ler o arquivo: ${e.message}`,
+                HttpStatus.UNPROCESSABLE_ENTITY,
+            );
+        }
+
+        text = text.replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+        if (text.length > MAX) {
+            text = text.substring(0, MAX) + '\n[... texto truncado — arquivo muito grande ...]';
+        }
+        return text;
+    }
+
+    /** Chat com arquivo anexado — sem persistência de arquivo, processado em memória. */
+    async chatWithAttachment(
+        companyId: string,
+        agentId: string,
+        message: string,
+        file: Express.Multer.File,
+        history: any[] = [],
+    ): Promise<string> {
+        const IMAGES = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp']);
+        const ext = (file.originalname.split('.').pop() ?? '').toLowerCase();
+
+        if (IMAGES.has(ext)) {
+            const mime = file.mimetype || `image/${ext}`;
+            const dataUri = `data:${mime};base64,${file.buffer.toString('base64')}`;
+            return this.chatMultimodal(
+                companyId, agentId,
+                message || 'Analise esta imagem.',
+                [dataUri],
+                history,
+            );
+        }
+
+        const text = await this.extractTextFromFile(file.buffer, file.originalname);
+        const augmented = `[ARQUIVO ANEXADO: ${file.originalname}]\n${text}\n\n${message || 'Analise o arquivo acima.'}`;
+        return this.chat(companyId, agentId, augmented, history);
     }
 }
