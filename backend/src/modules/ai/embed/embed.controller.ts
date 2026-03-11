@@ -347,12 +347,16 @@ export class EmbedController {
         }
 
         // Prioridade: ?backendUrl param (passado pelo iframe/script) > env var > req.host (pode ser URL interna via proxy)
+        // Usa new URL() para extrair só a origin limpa (evita %22 ou outros caracteres inválidos no hostname)
+        const extractOrigin = (raw: string): string => {
+            try { return new URL(raw).origin; } catch { return ''; }
+        };
         const queryBackendUrl = (req.query as any)?.backendUrl as string;
         const backendPublicUrl = (
-            (queryBackendUrl?.startsWith('http') ? queryBackendUrl : '') ||
-            process.env.BACKEND_PUBLIC_URL ||
+            (queryBackendUrl?.startsWith('http') ? extractOrigin(queryBackendUrl) : '') ||
+            (process.env.BACKEND_PUBLIC_URL ? extractOrigin(process.env.BACKEND_PUBLIC_URL) : '') ||
             `${req.protocol}://${req.get('host')}`
-        ).replace(/\/+$/, '');
+        );
 
         const escJs   = (s: string) => (s || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\r/g, '').replace(/</g, '\\x3C');
         const escHtml = (s: string) => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
