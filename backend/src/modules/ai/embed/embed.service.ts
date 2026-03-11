@@ -132,33 +132,23 @@ export class EmbedService implements OnModuleDestroy {
         // Apply Rate Limit
         this.checkRateLimit(sessionId, agent.embedRateLimit);
 
-        // Fetch or Create Session
-        let session = await (this.prisma as any).embedChatSession.findUnique({
-            where: { embedId_sessionId: { embedId, sessionId } }
-        });
-
-        if (!session) {
-            session = await (this.prisma as any).embedChatSession.create({
-                data: {
-                    embedId,
-                    sessionId,
-                    messages: []
-                }
-            });
-        }
-
-        let currentMessages = Array.isArray(session.messages) ? session.messages : [];
-
-        // Formatar history para o formato esperado pelo AIService
-        const historyForLLM = currentMessages.map((m: any) => ({
-            role: m.role,
-            content: m.content
-        }));
-
-        currentMessages.push({ role: 'user', content: message, ts: Date.now() });
-
         try {
-            // Chamar AI nativa (usando id real do agente)
+            // Fetch or Create Session
+            let session = await (this.prisma as any).embedChatSession.findUnique({
+                where: { embedId_sessionId: { embedId, sessionId } }
+            });
+
+            if (!session) {
+                session = await (this.prisma as any).embedChatSession.create({
+                    data: { embedId, sessionId, messages: [] }
+                });
+            }
+
+            const currentMessages: any[] = Array.isArray(session.messages) ? [...session.messages] : [];
+            const historyForLLM = currentMessages.map((m: any) => ({ role: m.role, content: m.content }));
+            currentMessages.push({ role: 'user', content: message, ts: Date.now() });
+
+            // Chamar AI nativa
             const response = await this.aiService.chat(
                 agent.companyId,
                 agent.id,
@@ -168,19 +158,23 @@ export class EmbedService implements OnModuleDestroy {
 
             currentMessages.push({ role: 'assistant', content: response, ts: Date.now() });
 
-            // Atualizar banco
-            await (this.prisma as any).embedChatSession.update({
+            // Salvar sessão (fire-and-forget — não bloqueia a resposta se falhar)
+            (this.prisma as any).embedChatSession.update({
                 where: { id: session.id },
                 data: { messages: currentMessages }
-            });
+            }).catch((e: Error) => this.logger.warn(`[Embed] Falha ao salvar sessão: ${e.message}`));
 
             return { response };
 
         } catch (error) {
-            this.logger.error(`Erro no chat embed (Agent ${agent.id}): ${error.message}`);
-            // Preserva status code original de HttpException (ex: 400 BadRequest de provider não configurado)
+            this.logger.error(`Erro no chat embed (${embedId}): ${error?.message}`);
+            // Preserva status code original de HttpException (ex: 400 de provider não configurado)
             if (error instanceof HttpException) throw error;
-            throw new HttpException(error.message || 'Erro ao processar mensagem.', HttpStatus.INTERNAL_SERVER_ERROR);
+            // Erros de Prisma ou outros: retorna 500 com mensagem legível
+            throw new HttpException(
+                error?.message || 'Erro interno ao processar mensagem.',
+                HttpStatus.INTERNAL_SERVER_ERROR
+            );
         }
     }
 
