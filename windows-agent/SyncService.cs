@@ -195,22 +195,26 @@ public class SyncService : IDisposable
         Log($"❌ Falha definitiva: {filename}");
     }
 
-    /// <summary>Testa a conexão enviando um payload mínimo.</summary>
+    /// <summary>
+    /// Testa a conexão chamando GET .../ping no backend.
+    /// Retorna true se a resposta for 200 (chave válida) ou 401 (servidor acessível, mas chave inválida/webhook desativado).
+    /// Retorna false para erros de rede (timeout, DNS, SSL) ou rota não encontrada (404).
+    /// </summary>
     public async Task<bool> TestConnectionAsync()
     {
         try
         {
-            using var form = new MultipartFormDataContent();
-            var content = new ByteArrayContent(new byte[] { 0 });
-            content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
-            form.Add(content, "file", "_test_connection_.bin");
+            // Deriva a URL de ping a partir da URL de upload: .../webhook/{key}/upload → .../webhook/{key}/ping
+            var uploadUrl = _config.UploadUrl.TrimEnd('/');
+            var pingUrl = uploadUrl.EndsWith("/upload", StringComparison.OrdinalIgnoreCase)
+                ? uploadUrl[..^7] + "/ping"
+                : uploadUrl + "/ping";
 
-            _http.DefaultRequestHeaders.Remove("x-agent-hostname");
-            _http.DefaultRequestHeaders.Add("x-agent-hostname", Environment.MachineName);
-
-            var resp = await _http.PostAsync(_config.UploadUrl, form);
-            // 200/201 = OK, 401 = key inválida (conexão chegou)
-            return resp.IsSuccessStatusCode || resp.StatusCode == System.Net.HttpStatusCode.Unauthorized;
+            var resp = await _http.GetAsync(pingUrl);
+            // 200 = chave válida; 401/403 = servidor OK mas chave inválida — ambos confirmam conectividade
+            return resp.IsSuccessStatusCode
+                || resp.StatusCode == System.Net.HttpStatusCode.Unauthorized
+                || resp.StatusCode == System.Net.HttpStatusCode.Forbidden;
         }
         catch
         {

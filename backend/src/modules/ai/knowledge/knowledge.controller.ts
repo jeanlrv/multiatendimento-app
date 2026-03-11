@@ -222,6 +222,14 @@ export class KnowledgeController {
         return this.knowledgeService.getSyncLogs(id, req.user.companyId, limit ? parseInt(limit) : 50);
     }
 
+    // Ping: valida a chave sem processar nenhum arquivo (usado pelo agente para testar conexão)
+    @Public()
+    @Get('webhook/:apiKey/ping')
+    async webhookPing(@Param('apiKey') apiKey: string) {
+        await this.knowledgeService.findKbByWebhookKey(apiKey);
+        return { ok: true, message: 'Integração ativa e chave válida.' };
+    }
+
     // Endpoint PÚBLICO — chamado pelo Agente Windows (sem JWT)
     @Public()
     @Post('webhook/:apiKey/upload')

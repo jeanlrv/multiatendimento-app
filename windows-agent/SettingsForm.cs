@@ -96,6 +96,8 @@ public class SettingsForm : Form
             Width = contentW,
         };
         scroll.Controls.Add(content);
+        // Garante margem esquerda visível (o Padding do scroll não posiciona automaticamente)
+        content.Location = new Point(18, 12);
 
         // ─── Helpers ──────────────────────────────────────────────────────────
 
