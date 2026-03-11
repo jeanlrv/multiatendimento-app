@@ -2,8 +2,11 @@ namespace KBAgent;
 
 public class AgentConfig
 {
-    public string WebhookUrl { get; set; } = "";
-    public string ApiKey { get; set; } = "";
+    /// <summary>
+    /// URL completa de upload — copie diretamente do painel da Base de Conhecimento.
+    /// Formato: https://seu-backend.com/api/ai/knowledge/webhook/kwh_.../upload
+    /// </summary>
+    public string UploadUrl { get; set; } = "";
     public string WatchFolder { get; set; } = "";
     public string FilePattern { get; set; } = "*.pdf;*.xlsx;*.xls;*.csv;*.txt;*.docx;*.json;*.xml";
     public int DebounceMs { get; set; } = 2000;
@@ -13,11 +16,7 @@ public class AgentConfig
     public ScheduleConfig Schedule { get; set; } = new();
     public bool StartWithWindows { get; set; } = false;
 
-    public string UploadUrl => $"{WebhookUrl.TrimEnd('/')}/{ApiKey}/upload"
-        .Replace("/upload/upload", "/upload"); // guard
-
-    public bool IsConfigured => !string.IsNullOrWhiteSpace(WebhookUrl) &&
-                                !string.IsNullOrWhiteSpace(ApiKey) &&
+    public bool IsConfigured => !string.IsNullOrWhiteSpace(UploadUrl) &&
                                 !string.IsNullOrWhiteSpace(WatchFolder);
 }
 

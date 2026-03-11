@@ -33,7 +33,7 @@ static class Program
         var trayIcon = new NotifyIcon
         {
             Text = "KBAgent — Upload Automático para KB",
-            Icon = SystemIcons.Application,
+            Icon = AppIcon.Get32(),
             Visible = true,
             ContextMenuStrip = trayMenu,
         };
@@ -114,7 +114,7 @@ static class Program
 
     private static void UpdateTrayIcon(NotifyIcon icon, ToolStripMenuItem label, bool isConfigured)
     {
-        icon.Icon = isConfigured ? SystemIcons.Application : SystemIcons.Warning;
+        icon.Icon = AppIcon.Get32();
         label.Text = isConfigured ? "● KBAgent — Ativo" : "⚠ KBAgent — Não configurado";
     }
 }
