@@ -10,15 +10,11 @@ export function middleware(request: NextRequest) {
     // funcione em qualquer site externo (https://, http://, file://).
     if (pathname.startsWith('/embed/')) {
         const response = NextResponse.next();
-        // Remover restrições de framing para que o iframe funcione em qualquer origem
-        // (http://, https://, file://, etc).
-        // Next.js adiciona X-Frame-Options: SAMEORIGIN por padrão — precisamos sobrescrever.
-        // Usamos set('') como belt-and-suspenders além do delete(), pois o comportamento
-        // de delete() em NextResponse.next() pode variar entre versões do Next.js.
+        // Remover restrições de framing para que o iframe funcione em qualquer origem.
+        // Next.js adiciona X-Frame-Options: SAMEORIGIN por padrão — precisamos remover.
+        // Não usamos frame-ancestors pois valores wildcard bloqueiam file:// (null origin).
         response.headers.delete('X-Frame-Options');
-        response.headers.set('X-Frame-Options', 'ALLOWALL');
         response.headers.delete('Content-Security-Policy');
-        // Não setamos frame-ancestors — qualquer valor wildcard bloqueia file:// (null origin).
         return response;
     }
 

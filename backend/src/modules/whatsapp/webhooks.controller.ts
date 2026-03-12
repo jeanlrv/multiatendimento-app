@@ -73,9 +73,61 @@ export class WebhooksController {
                 this.logger.warn(`Webhook Z-API rejeitado: token inválido para instanceId=${instanceId}`);
                 return false;
             }
+        } else {
+            // ALERTA DE SEGURANÇA: webhook sem Client-Token é vulnerável a payloads forjados
+            this.logger.warn(
+                `⚠️ SEGURANÇA: Webhook recebido SEM Client-Token para instanceId=${instanceId}. ` +
+                `Configure o Security Token na Z-API e no sistema para proteger contra requisições não autorizadas.`
+            );
         }
 
         return true;
+    }
+
+    /**
+     * Verifica se o horário atual está dentro do horário comercial do departamento.
+     * Retorna a mensagem de fora do expediente se estiver fora, ou null se dentro.
+     *
+     * Formato esperado de businessHours (JSON):
+     * { "0": { "start": "08:00", "end": "18:00" }, ... "6": { ... } }
+     * Dias: 0=Domingo, 1=Segunda, ..., 6=Sábado
+     * Se um dia não existir no objeto, considera fechado nesse dia.
+     */
+    private checkBusinessHours(department: any): string | null {
+        if (!department.businessHours || !department.outOfHoursMessage) {
+            return null; // Sem horário comercial configurado, sempre disponível
+        }
+
+        try {
+            const bh = typeof department.businessHours === 'string'
+                ? JSON.parse(department.businessHours)
+                : department.businessHours;
+
+            const now = new Date();
+            const dayOfWeek = now.getDay().toString(); // 0=Dom, 6=Sáb
+            const dayConfig = bh[dayOfWeek];
+
+            if (!dayConfig || !dayConfig.start || !dayConfig.end) {
+                // Dia não configurado = fechado
+                return department.outOfHoursMessage;
+            }
+
+            const [startH, startM] = dayConfig.start.split(':').map(Number);
+            const [endH, endM] = dayConfig.end.split(':').map(Number);
+
+            const currentMinutes = now.getHours() * 60 + now.getMinutes();
+            const startMinutes = startH * 60 + startM;
+            const endMinutes = endH * 60 + endM;
+
+            if (currentMinutes < startMinutes || currentMinutes >= endMinutes) {
+                return department.outOfHoursMessage;
+            }
+
+            return null; // Dentro do horário comercial
+        } catch (err) {
+            this.logger.warn(`Erro ao verificar horário comercial: ${err.message}`);
+            return null; // Em caso de erro de parsing, permite atendimento
+        }
     }
 
     /**
@@ -311,7 +363,7 @@ export class WebhooksController {
                 return;
             }
 
-            const { content } = this.extractMessageContent(payload);
+            const { content, messageType: firstMsgType, mediaUrl: firstMsgMedia } = this.extractMessageContent(payload);
 
             ticket = await (this.prisma as any).ticket.create({
                 data: {
@@ -325,14 +377,39 @@ export class WebhooksController {
                 include: { department: true },
             });
 
-            const greeting = department.greetingMessage
-                || `Olá! Seu atendimento foi iniciado no setor ${department.name}. Aguarde, em breve alguém irá te ajudar.`;
-
-            await this.whatsappService.sendMessage(connection.id, phoneNumber, greeting, companyId);
-            await this.chatService.sendMessage(ticket.id, greeting, true, 'TEXT', undefined, companyId);
-
             this.logger.log(`Novo ticket criado: ${ticket.id} — Contato: ${phoneNumber}`);
-            return; // A primeira mensagem já foi a de boas-vindas; aguardar próxima mensagem do cliente
+
+            // Verificar horário comercial do departamento
+            const outOfHoursMsg = this.checkBusinessHours(department);
+
+            if (outOfHoursMsg) {
+                // Fora do horário comercial: enviar mensagem específica
+                await this.whatsappService.sendMessage(connection.id, phoneNumber, outOfHoursMsg, companyId);
+                await this.chatService.sendMessage(ticket.id, outOfHoursMsg, true, 'TEXT', undefined, companyId, 'AGENT');
+            } else {
+                // Dentro do horário: enviar greeting padrão
+                const greeting = department.greetingMessage
+                    || `Olá! Seu atendimento foi iniciado no setor ${department.name}. Aguarde, em breve alguém irá te ajudar.`;
+                await this.whatsappService.sendMessage(connection.id, phoneNumber, greeting, companyId);
+                await this.chatService.sendMessage(ticket.id, greeting, true, 'TEXT', undefined, companyId, 'AGENT');
+            }
+
+            // CORREÇÃO BUG 1: Salvar a primeira mensagem do cliente no ticket
+            if (content || firstMsgMedia) {
+                await this.chatService.sendMessage(
+                    ticket.id,
+                    content,
+                    false,           // fromMe = false (mensagem do cliente)
+                    firstMsgType,
+                    firstMsgMedia,
+                    companyId,
+                    'CLIENT',        // origin correto
+                    undefined,       // quotedMessageId
+                    payload.messageId, // externalId para rastreamento
+                );
+            }
+
+            return;
         }
 
         // Salvar a mensagem recebida no ticket existente
@@ -350,6 +427,8 @@ export class WebhooksController {
             messageType,
             mediaUrl,
             companyId,
+            'CLIENT',           // origin correto (BUG 2 corrigido)
+            undefined,          // quotedMessageId
             payload.messageId,  // externalId para rastreamento de status
         );
 

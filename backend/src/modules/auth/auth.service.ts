@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, Logger } from '@nestjs/common';
+import { Injectable, UnauthorizedException, Logger, OnModuleInit } from '@nestjs/common';
 import { UsersService } from '../users/users.service';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -7,8 +7,9 @@ import * as bcrypt from 'bcryptjs';
 import { randomBytes } from 'crypto';
 
 @Injectable()
-export class AuthService {
+export class AuthService implements OnModuleInit {
     private readonly logger = new Logger(AuthService.name);
+    private cleanupInterval: NodeJS.Timeout | null = null;
 
     constructor(
         private usersService: UsersService,
@@ -16,6 +17,32 @@ export class AuthService {
         private config: ConfigService,
         private prisma: PrismaService,
     ) { }
+
+    /**
+     * Limpa refresh tokens expirados a cada 6 horas.
+     * Evita crescimento infinito da tabela refresh_tokens.
+     */
+    onModuleInit() {
+        const SIX_HOURS = 6 * 60 * 60 * 1000;
+        this.cleanupInterval = setInterval(() => {
+            this.cleanupExpiredTokens();
+        }, SIX_HOURS);
+        // Executar uma vez no boot (após 30s para não bloquear startup)
+        setTimeout(() => this.cleanupExpiredTokens(), 30_000);
+    }
+
+    private async cleanupExpiredTokens() {
+        try {
+            const result = await this.prisma.refreshToken.deleteMany({
+                where: { expiresAt: { lt: new Date() } },
+            });
+            if (result.count > 0) {
+                this.logger.log(`Limpeza automática: ${result.count} refresh tokens expirados removidos`);
+            }
+        } catch (err) {
+            this.logger.error(`Erro na limpeza de refresh tokens: ${err.message}`);
+        }
+    }
 
     async validateUser(email: string, pass: string): Promise<any> {
         const cleanEmail = email?.trim().toLowerCase();

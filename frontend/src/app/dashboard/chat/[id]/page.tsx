@@ -20,7 +20,7 @@ interface Message {
     sentAt: string;
     messageType: 'TEXT' | 'IMAGE' | 'AUDIO' | 'VIDEO' | 'DOCUMENT' | 'STICKER';
     mediaUrl?: string;
-    status?: string;
+    status?: 'PENDING' | 'SENT' | 'DELIVERED' | 'READ' | 'FAILED';
     origin?: 'AGENT' | 'CLIENT' | 'AI';
 }
 
@@ -111,6 +111,13 @@ export default function ChatPage() {
             });
         });
 
+        // Listener de atualização de status de entrega (✓ enviado, ✓✓ entregue, azul lido)
+        socket.on('messageStatusUpdate', (data: { messageId: string; status: string }) => {
+            setMessages(prev => prev.map(m =>
+                m.id === data.messageId ? { ...m, status: data.status as Message['status'] } : m
+            ));
+        });
+
 
         socket.on('typing', (data: { userId: string; userName: string; isTyping: boolean }) => {
             if (data.userId !== user?.id) {
@@ -122,6 +129,7 @@ export default function ChatPage() {
             socket.emit('leaveTicket', ticketId);
             socket.off('newMessage');
             socket.off('typing');
+            socket.off('messageStatusUpdate');
         };
     }, [ticketId]);
 
@@ -201,9 +209,8 @@ export default function ChatPage() {
         } catch {
             toast.error('Falha ao enviar áudio gravado.');
         } finally {
-            setUploading(true);
+            setUploading(false);
         }
-        setUploading(false);
     };
 
     const handleTransferSuccess = () => {

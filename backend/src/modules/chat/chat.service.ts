@@ -35,7 +35,7 @@ export class ChatService {
         return ticket;
     }
 
-    async sendMessage(ticketId: string, content: string, fromMe: boolean, type: string = 'TEXT', mediaUrl?: string, companyId?: string, origin: 'AGENT' | 'CLIENT' | 'AI' = 'AGENT', quotedMessageId?: string) {
+    async sendMessage(ticketId: string, content: string, fromMe: boolean, type: string = 'TEXT', mediaUrl?: string, companyId?: string, origin: 'AGENT' | 'CLIENT' | 'AI' = 'AGENT', quotedMessageId?: string, externalId?: string) {
         this.logger.log(`Processando mensagem para o ticket: ${ticketId} (${origin})`);
 
         return await this.prisma.$transaction(async (tx) => {
@@ -50,6 +50,7 @@ export class ChatService {
                     status: 'PENDING',
                     sentAt: new Date(),
                     quotedMessageId,
+                    externalId: externalId || undefined,
                 },
             });
 
@@ -62,6 +63,7 @@ export class ChatService {
 
             const updateData: any = {
                 updatedAt: new Date(),
+                lastMessageAt: new Date(),
             };
 
             if (!fromMe) {

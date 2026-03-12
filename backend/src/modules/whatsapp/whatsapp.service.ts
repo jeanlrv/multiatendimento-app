@@ -5,6 +5,7 @@ import axios from 'axios';
 import { CreateWhatsAppDto } from './dto/create-whatsapp.dto';
 import { UpdateWhatsAppDto } from './dto/update-whatsapp.dto';
 import { IntegrationsService } from '../settings/integrations.service';
+import { CryptoService } from '../../common/services/crypto.service';
 
 @Injectable()
 export class WhatsAppService {
@@ -15,6 +16,7 @@ export class WhatsAppService {
         private prisma: PrismaService,
         private configService: ConfigService,
         private integrationsService: IntegrationsService,
+        private cryptoService: CryptoService,
     ) {
         // Sanitiza ZAPI_BASE_URL: extrai só a origin para evitar que o usuário cole
         // uma URL de endpoint completa (ex: .../instances/{id}/token/{tok}/send-text)
@@ -64,10 +66,11 @@ export class WhatsAppService {
     }
 
     private maskConnection(connection: any) {
+        const plainToken = connection.zapiToken ? this.cryptoService.decrypt(connection.zapiToken) : null;
         return {
             ...connection,
-            zapiToken: connection.zapiToken
-                ? `${connection.zapiToken.substring(0, 4)}${'*'.repeat(Math.min(12, Math.max(4, connection.zapiToken.length - 4)))}`
+            zapiToken: plainToken
+                ? `${plainToken.substring(0, 4)}${'*'.repeat(Math.min(12, Math.max(4, plainToken.length - 4)))}`
                 : null,
             zapiClientToken: connection.zapiClientToken ? '***CONFIGURADO***' : null,
         };
@@ -75,8 +78,10 @@ export class WhatsAppService {
 
     private async resolveCredentials(connection: any, companyId: string) {
         let instanceId = connection.zapiInstanceId;
-        let token = connection.zapiToken;
-        let clientToken: string | undefined = connection.zapiClientToken ?? undefined;
+        let token = connection.zapiToken ? this.cryptoService.decrypt(connection.zapiToken) : null;
+        let clientToken: string | undefined = connection.zapiClientToken
+            ? this.cryptoService.decrypt(connection.zapiClientToken)
+            : undefined;
 
         // Fallback granular: preenche apenas os campos ausentes com a config global
         // NUNCA sobrescreve instanceId ou token já definidos na conexão
@@ -125,6 +130,8 @@ export class WhatsAppService {
         const connection = await (this.prisma as any).whatsAppInstance.create({
             data: {
                 ...data,
+                zapiToken: data.zapiToken ? this.cryptoService.encrypt(data.zapiToken) : undefined,
+                zapiClientToken: data.zapiClientToken ? this.cryptoService.encrypt(data.zapiClientToken) : undefined,
                 companyId,
                 status: 'DISCONNECTED',
                 isActive: true,
@@ -152,6 +159,9 @@ export class WhatsAppService {
             updateData.departmentIds = departmentIds;
             updateData.departmentId = departmentIds.length > 0 ? departmentIds[0] : null;
         }
+        // Criptografar tokens ao atualizar
+        if (updateData.zapiToken) updateData.zapiToken = this.cryptoService.encrypt(updateData.zapiToken);
+        if (updateData.zapiClientToken) updateData.zapiClientToken = this.cryptoService.encrypt(updateData.zapiClientToken);
 
         return (this.prisma as any).whatsAppInstance.update({
             where: { id },

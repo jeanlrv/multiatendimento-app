@@ -29,6 +29,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect, On
     // Rate limiting: controla o tempo do último evento por client+evento
     private readonly rateLimitMap = new Map<string, number>();
     private readonly RATE_LIMIT_MS = 2000; // mínimo 2s entre eventos de typing
+    private jwtRevalidationInterval: NodeJS.Timeout | null = null;
 
     constructor(
         private readonly jwtService: JwtService,
@@ -66,6 +67,11 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect, On
         } catch (error) {
             this.logger.error('Erro ao configurar Redis Adapter:', error.message);
         }
+
+        // Revalidar JWTs a cada 5 minutos para desconectar sessões com token expirado
+        this.jwtRevalidationInterval = setInterval(() => {
+            this.revalidateConnectedClients();
+        }, 5 * 60 * 1000);
     }
 
     async handleConnection(client: Socket) {
@@ -102,6 +108,28 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect, On
             if (key.startsWith(client.id)) this.rateLimitMap.delete(key);
         }
         this.logger.log(`Cliente desconectado: ${client.id}`);
+    }
+
+    /**
+     * Revalida JWTs de todos os clientes conectados.
+     * Desconecta clientes cujo token expirou.
+     */
+    private revalidateConnectedClients() {
+        if (!this.server) return;
+        const sockets = this.server.sockets?.sockets;
+        if (!sockets) return;
+
+        for (const [, socket] of sockets) {
+            const token = socket.handshake?.auth?.token || socket.handshake?.headers?.authorization;
+            if (!token) { socket.disconnect(); continue; }
+            try {
+                this.jwtService.verify(token.replace('Bearer ', ''));
+            } catch {
+                this.logger.debug(`JWT expirado — desconectando socket ${socket.id}`);
+                socket.emit('error', 'Sessão expirada. Reconecte-se.');
+                socket.disconnect();
+            }
+        }
     }
 
     private isRateLimited(clientId: string, event: string): boolean {
