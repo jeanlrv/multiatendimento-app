@@ -195,7 +195,16 @@ export class WhatsAppService {
                 headers: this.buildHeaders(clientToken),
             });
 
-            const isConnected = response.data.connected === true;
+            const data = response.data;
+            this.logger.log(`Z-API /status raw response [${instanceId}]: ${JSON.stringify(data)}`);
+
+            // Z-API pode retornar connected como boolean, número ou string
+            // Também pode envolver em data.value (padrão de alguns endpoints Z-API)
+            const raw = data?.value ?? data?.connected ?? data?.status ?? data;
+            const isConnected =
+                raw === true || raw === 1 || raw === 'connected' || raw === 'CONNECTED' ||
+                (typeof raw === 'object' && (raw?.connected === true || raw?.connected === 1));
+
             const newStatus = isConnected ? 'CONNECTED' : 'DISCONNECTED';
 
             // Sincronizar status com o banco de dados
@@ -206,13 +215,14 @@ export class WhatsAppService {
 
             return {
                 connected: isConnected,
-                smartphoneConnected: response.data.smartphoneConnected ?? null,
-                error: response.data.error || null,
+                smartphoneConnected: data.smartphoneConnected ?? null,
+                error: data.error || null,
                 status: newStatus,
+                _raw: data,   // expõe resposta bruta para debug no frontend
             };
-        } catch (error) {
-            this.logger.error(`Erro ao verificar status na Z-API: ${error.message}`);
-            return { connected: false, status: 'ERROR', error: error.message };
+        } catch (error: any) {
+            this.logger.error(`Erro ao verificar status na Z-API: ${error.message}. Response: ${JSON.stringify(error.response?.data)}`);
+            return { connected: false, status: 'ERROR', error: error.message, _raw: error.response?.data };
         }
     }
 

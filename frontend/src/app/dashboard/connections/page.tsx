@@ -152,12 +152,13 @@ export default function ConnectionsPage() {
     const handleCheckStatus = async (conn: Connection) => {
         try {
             const res = await api.get(`/whatsapp/${conn.id}/status`);
-            const status = res.data.status;
+            const { status, _raw } = res.data;
             const label = status === "CONNECTED" ? "Conectado ✅" : status === "DISCONNECTED" ? "Desconectado ❌" : status;
-            toast.info(`Status: ${label}`);
+            const rawInfo = _raw ? `\nResposta Z-API: ${JSON.stringify(_raw)}` : "";
+            toast.info(`Status: ${label}${rawInfo}`, { duration: 8000 });
             setConnections(prev => prev.map(c => c.id === conn.id ? { ...c, status: res.data.status } : c));
-        } catch {
-            toast.error("Erro ao verificar status");
+        } catch (err: any) {
+            toast.error("Erro ao verificar status: " + (err.response?.data?.message || err.message));
         }
     };
 
