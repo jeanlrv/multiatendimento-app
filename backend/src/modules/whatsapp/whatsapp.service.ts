@@ -68,21 +68,27 @@ export class WhatsAppService {
     private async resolveCredentials(connection: any, companyId: string) {
         let instanceId = connection.zapiInstanceId;
         let token = connection.zapiToken;
-        let clientToken: string | undefined;
+        let clientToken: string | undefined = connection.zapiClientToken ?? undefined;
 
-        // Se não houver chaves na conexão, busca o provedor global da empresa
+        // Fallback granular: preenche apenas os campos ausentes com a config global
+        // NUNCA sobrescreve instanceId ou token já definidos na conexão
         if (!instanceId || !token) {
             const globalConfig = await this.integrationsService.findZapiConfig(companyId);
             if (globalConfig) {
-                instanceId = (globalConfig as any).zapiInstanceId;
-                token = (globalConfig as any).zapiToken;
-                clientToken = (globalConfig as any).zapiClientToken ?? undefined;
+                if (!instanceId) instanceId = (globalConfig as any).zapiInstanceId;
+                if (!token)      token      = (globalConfig as any).zapiToken;
+                if (!clientToken) clientToken = (globalConfig as any).zapiClientToken ?? undefined;
             }
         }
 
-        if (!instanceId || !token) {
+        if (!instanceId) {
             throw new NotFoundException(
-                'Credenciais Z-API não encontradas. Configure em Configurações → Integrações.',
+                'ID da instância Z-API não configurado. Edite a conexão e preencha o Instance ID.',
+            );
+        }
+        if (!token) {
+            throw new NotFoundException(
+                'Token Z-API não configurado. Edite a conexão e preencha o Token da Instância.',
             );
         }
 
