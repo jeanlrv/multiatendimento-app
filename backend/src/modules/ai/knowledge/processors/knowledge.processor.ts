@@ -554,35 +554,118 @@ export class KnowledgeProcessor extends WorkerHost {
     }
 
     /**
-     * Extrai pares "tagLocal: valor" de nós folha de XML de dados (NFe, CTe, MDFe, etc.).
-     * Preserva o nome do campo, o que é essencial para documentos fiscais brasileiros.
+     * Extrai campos de XML de dados (NFe, CTe, MDFe, etc.) usando parser de pilha.
+     *
+     * Agrupa por container (seção), inclui path-prefix nos campos internos e
+     * numera elementos repetidos (ex: [det], [det 2], [det 3]...).
+     *
+     * Saída esperada para uma NF-e:
+     *   [ide]
+     *   nNF: 123 | natOp: VENDA DE MERCADORIA
+     *   [emit]
+     *   CNPJ: 12345678000190 | xNome: Empresa A
+     *   [dest]
+     *   CNPJ: 98765432000190 | xNome: Cliente B
+     *   [det]
+     *   prod/xProd: PRODUTO A | prod/vProd: 250.00
+     *   [det 2]
+     *   prod/xProd: PRODUTO B | prod/vProd: 125.00
      */
     private extractXmlLeafPairs(xml: string): string {
-        // Expande CDATA e remove cabeçalhos/comentários
         let src = xml
             .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
             .replace(/<\?xml[^>]*\?>/g, '')
             .replace(/<!--[\s\S]*?-->/g, '');
 
-        const pairs: string[] = [];
-        // Nós folha: <ns:Tag ...>texto</ns:Tag> — texto sem tags filhas
-        const leafRe = /<(?:[A-Za-z_][\w.]*:)?([A-Za-z_][\w.]*)(?:\s[^>]*)?>([^<]+)<\/(?:[A-Za-z_][\w.]*:)?[A-Za-z_][\w.]*>/g;
+        const getLocal = (tag: string) => tag.includes(':') ? tag.split(':').pop()! : tag;
+        const decode = (s: string) => s
+            .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+            .replace(/&quot;/g, '"').replace(/&apos;/g, "'");
+
+        // Seções criadas nas profundidades 2 e 3.
+        // Profundidade 2 → XML simples (root → section → leaf).
+        // Profundidade 3 → NFe/CTe (NFe → infNFe → ide/emit/dest/det → ...).
+        const SECTION_DEPTHS = new Set([2, 3]);
+
+        const stack: string[] = [];
+        const sibCount = new Map<string, number>(); // "parentTag:childTag" → ocorrências
+
+        // Cada seção recebe linhas dos nós folha sob ela
+        const sections: Array<{ label: string; lines: string[]; depth: number }> = [];
+        // Índice em sections[] para a seção ativa em cada profundidade
+        const activeSectionAtDepth = new Map<number, number>();
+        let curSectionIdx = -1;
+
+        const re = /<(\/?)(?:[A-Za-z_][\w.]*:)?([A-Za-z_][\w.]*)([^>]*)>|([^<]+)/g;
         let m: RegExpExecArray | null;
-        while ((m = leafRe.exec(src)) !== null) {
-            const name = m[1];
-            const val = m[2]
-                .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
-                .replace(/&quot;/g, '"').replace(/&apos;/g, "'")
-                .trim();
-            if (val && name) pairs.push(`${name}: ${val}`);
+
+        while ((m = re.exec(src)) !== null) {
+            if (m[4] !== undefined) {
+                // ── Nó de texto ──────────────────────────────────────────────────
+                const text = m[4].replace(/\s+/g, ' ').trim();
+                if (!text || curSectionIdx < 0) continue;
+                const val = decode(text);
+                const curSec = sections[curSectionIdx];
+
+                // Label: path dos ancestrais entre o elemento de seção e a folha
+                // (excluindo o próprio elemento de seção e a folha em si), até 2 níveis.
+                const pathAfterRoot = stack.slice(1);                     // pula root
+                const leaf = pathAfterRoot[pathAfterRoot.length - 1];
+                const ancestorsAfterSection = pathAfterRoot.slice(curSec.depth - 1, -1);
+                const prefix = ancestorsAfterSection.slice(-2).join('/');
+                curSec.lines.push(`${prefix ? prefix + '/' : ''}${leaf}: ${val}`);
+
+            } else {
+                // ── Tag de abertura ou fechamento ─────────────────────────────────
+                const isClose = m[1] === '/';
+                const name = getLocal(m[2]);
+                const attrs = m[3].trim();
+                const selfClose = attrs.endsWith('/');
+
+                if (!isClose) {
+                    const depth = stack.length + 1;
+                    const parentTag = stack[stack.length - 1] ?? '_';
+                    const sk = `${parentTag}:${name}`;
+                    const idx = (sibCount.get(sk) || 0) + 1;
+                    sibCount.set(sk, idx);
+
+                    if (SECTION_DEPTHS.has(depth)) {
+                        const label = idx > 1 ? `${name} ${idx}` : name;
+                        curSectionIdx = sections.length;
+                        sections.push({ label, lines: [], depth });
+                        activeSectionAtDepth.set(depth, curSectionIdx);
+                    }
+                    if (!selfClose) stack.push(name);
+                } else {
+                    stack.pop();
+                    // Restaura seção ativa: percorre do parentDepth até 1 buscando
+                    // a seção mais próxima (cobre fechamento de tags não-seção em profundidade arbitrária)
+                    const parentDepth = stack.length;
+                    let found = -1;
+                    for (let d = parentDepth; d >= 1; d--) {
+                        const si = activeSectionAtDepth.get(d);
+                        if (si !== undefined) { found = si; break; }
+                    }
+                    curSectionIdx = found;
+                }
+            }
         }
 
-        // Deduplicar entradas consecutivas idênticas
-        const unique: string[] = [];
-        for (const p of pairs) {
-            if (unique[unique.length - 1] !== p) unique.push(p);
+        // Monta saída agrupada, filtrando seções sem conteúdo
+        const outputLines: string[] = [];
+        for (const sec of sections) {
+            if (!sec.lines.length) continue;
+            outputLines.push(`\n[${sec.label}]`);
+            const deduped: string[] = [];
+            for (const l of sec.lines) {
+                if (deduped[deduped.length - 1] !== l) deduped.push(l);
+            }
+            outputLines.push(...deduped);
         }
-        return unique.join('\n');
+
+        const result = outputLines.join('\n').trim();
+        // Fallback para XML muito plano sem seções detectáveis
+        return result || src.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
     }
 
     /**

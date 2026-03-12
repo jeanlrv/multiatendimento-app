@@ -1287,8 +1287,11 @@ Resposta:`;
                     ));
                 }
                 text = parts.join('\n');
+            } else if (ext === 'xml' || ext === 'xsd') {
+                // Extração semântica: converte para pares "path/campo: valor" legíveis pelo LLM
+                text = this.xmlToReadableText(buffer.toString('utf-8'), ext === 'xsd');
             } else {
-                // TXT, XML, CSV, JSON, etc.
+                // TXT, CSV, JSON, etc.
                 text = buffer.toString('utf-8');
             }
         } catch (e: any) {
@@ -1303,6 +1306,110 @@ Resposta:`;
             text = text.substring(0, MAX) + '\n[... texto truncado — arquivo muito grande ...]';
         }
         return text;
+    }
+
+    /**
+     * Converte XML/XSD para texto legível pelo LLM usando path-prefix nos campos.
+     * Ex: `emit/CNPJ: 12345678000190` em vez de `<emit><CNPJ>12345678000190</CNPJ></emit>`
+     * Distingue claramente emit vs dest, campos de itens repetidos, etc.
+     */
+    private xmlToReadableText(xml: string, isSchema = false): string {
+        let src = xml
+            .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+            .replace(/<\?xml[^>]*\?>/g, '')
+            .replace(/<!--[\s\S]*?-->/g, '');
+
+        const getLocal = (tag: string) => tag.includes(':') ? tag.split(':').pop()! : tag;
+        const decode = (s: string) => s
+            .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+            .replace(/&quot;/g, '"').replace(/&apos;/g, "'");
+
+        if (isSchema) {
+            // Para XSD: extrair elementos e documentação
+            const pairs: string[] = ['=== Schema XSD ==='];
+            const nameRe = /<xsd?:element\s[^>]*\bname="([^"]+)"/gi;
+            const annotRe = /<xsd?:annotation>([\s\S]*?)<\/xsd?:annotation>/gi;
+            const found = new Set<string>();
+            let m: RegExpExecArray | null;
+            while ((m = nameRe.exec(src)) !== null) {
+                const name = m[1].trim();
+                if (!found.has(name)) { found.add(name); pairs.push(name); }
+            }
+            while ((m = annotRe.exec(src)) !== null) {
+                const docMatch = m[1].match(/<xsd?:documentation[^>]*>([\s\S]*?)<\/xsd?:documentation>/i);
+                if (!docMatch) continue;
+                const doc = decode(docMatch[1].replace(/\s+/g, ' ').trim());
+                const before = src.substring(Math.max(0, m.index - 400), m.index);
+                const prev = [...before.matchAll(/<xsd?:element\s[^>]*\bname="([^"]+)"/gi)].pop();
+                if (prev && doc) pairs.push(`${prev[1]}: ${doc}`);
+            }
+            return pairs.join('\n');
+        }
+
+        // Para XML de dados: parser de pilha com path-prefix até 2 níveis
+        const SECTION_DEPTHS = new Set([2, 3]);
+        const stack: string[] = [];
+        const sibCount = new Map<string, number>();
+        const sections: Array<{ label: string; lines: string[]; depth: number }> = [];
+        const activeSectionAtDepth = new Map<number, number>();
+        let curSectionIdx = -1;
+
+        const re2 = /<(\/?)(?:[A-Za-z_][\w.]*:)?([A-Za-z_][\w.]*)([^>]*)>|([^<]+)/g;
+        let m: RegExpExecArray | null;
+
+        while ((m = re2.exec(src)) !== null) {
+            if (m[4] !== undefined) {
+                const text = m[4].replace(/\s+/g, ' ').trim();
+                if (!text || curSectionIdx < 0) continue;
+                const val = decode(text);
+                const curSec = sections[curSectionIdx];
+                const pathAfterRoot = stack.slice(1);
+                const leaf = pathAfterRoot[pathAfterRoot.length - 1];
+                const ancestorsAfterSection = pathAfterRoot.slice(curSec.depth - 1, -1);
+                const prefix = ancestorsAfterSection.slice(-2).join('/');
+                curSec.lines.push(`${prefix ? prefix + '/' : ''}${leaf}: ${val}`);
+            } else {
+                const isClose = m[1] === '/';
+                const name = getLocal(m[2]);
+                const selfClose = m[3].trim().endsWith('/');
+                if (!isClose) {
+                    const depth = stack.length + 1;
+                    const parentTag = stack[stack.length - 1] ?? '_';
+                    const sk = `${parentTag}:${name}`;
+                    const idx = (sibCount.get(sk) || 0) + 1;
+                    sibCount.set(sk, idx);
+                    if (SECTION_DEPTHS.has(depth)) {
+                        const label = idx > 1 ? `${name} ${idx}` : name;
+                        curSectionIdx = sections.length;
+                        sections.push({ label, lines: [], depth });
+                        activeSectionAtDepth.set(depth, curSectionIdx);
+                    }
+                    if (!selfClose) stack.push(name);
+                } else {
+                    stack.pop();
+                    const parentDepth = stack.length;
+                    let found = -1;
+                    for (let d = parentDepth; d >= 1; d--) {
+                        const si = activeSectionAtDepth.get(d);
+                        if (si !== undefined) { found = si; break; }
+                    }
+                    curSectionIdx = found;
+                }
+            }
+        }
+
+        const outputLines: string[] = [];
+        for (const sec of sections) {
+            if (!sec.lines.length) continue;
+            outputLines.push(`\n[${sec.label}]`);
+            const deduped: string[] = [];
+            for (const l of sec.lines) {
+                if (deduped[deduped.length - 1] !== l) deduped.push(l);
+            }
+            outputLines.push(...deduped);
+        }
+        return outputLines.join('\n').trim()
+            || src.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
     }
 
     /** Chat com arquivo anexado — sem persistência de arquivo, processado em memória. */
