@@ -63,6 +63,9 @@ export class WhatsAppController {
         return this.whatsAppService.remove(id, req.user.companyId);
     }
 
-    // Webhook endpoint will be implemented in a separate WebhookController
-    // to handle incoming messages from Z-API
+    @Post(':id/register-webhook')
+    @ApiOperation({ summary: 'Registrar/atualizar URL de webhook na Z-API' })
+    async registerWebhook(@Param('id') id: string, @Req() req) {
+        return this.whatsAppService.registerWebhook(id, req.user.companyId);
+    }
 }

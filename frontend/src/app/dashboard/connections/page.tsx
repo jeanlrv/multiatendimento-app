@@ -23,6 +23,7 @@ import {
     Hash,
     Phone,
     Shield,
+    Link2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -63,8 +64,20 @@ export default function ConnectionsPage() {
             api.get("/whatsapp"),
             api.get("/departments"),
         ]);
-        if (connResult.status === "fulfilled") setConnections(connResult.value.data);
-        else toast.error("Erro ao carregar conexões.");
+        if (connResult.status === "fulfilled") {
+            const conns: Connection[] = connResult.value.data;
+            setConnections(conns);
+            // Auto-check status silently para conexões com credenciais configuradas
+            conns.forEach((conn) => {
+                if (conn.zapiInstanceId) {
+                    api.get(`/whatsapp/${conn.id}/status`)
+                        .then(res => setConnections(prev => prev.map(c => c.id === conn.id ? { ...c, status: res.data.status } : c)))
+                        .catch(() => {});
+                }
+            });
+        } else {
+            toast.error("Erro ao carregar conexões.");
+        }
         if (deptResult.status === "fulfilled") {
             const raw = deptResult.value.data;
             setDepartments(Array.isArray(raw) ? raw : (raw?.data ?? []));
@@ -140,10 +153,25 @@ export default function ConnectionsPage() {
         try {
             const res = await api.get(`/whatsapp/${conn.id}/status`);
             const status = res.data.status;
-            toast.info(`Status: ${status === "CONNECTED" ? "Conectado ✅" : "Desconectado ❌"}`);
-            fetchData();
+            const label = status === "CONNECTED" ? "Conectado ✅" : status === "DISCONNECTED" ? "Desconectado ❌" : status;
+            toast.info(`Status: ${label}`);
+            setConnections(prev => prev.map(c => c.id === conn.id ? { ...c, status: res.data.status } : c));
         } catch {
             toast.error("Erro ao verificar status");
+        }
+    };
+
+    const handleRegisterWebhook = async (conn: Connection) => {
+        if (!conn.zapiInstanceId) {
+            toast.error("Configure o ID da Instância Z-API antes de registrar o webhook.");
+            return;
+        }
+        try {
+            await api.post(`/whatsapp/${conn.id}/register-webhook`);
+            toast.success("URL de webhook registrada na Z-API!");
+        } catch (err: any) {
+            const msg = err.response?.data?.message || "Erro ao registrar webhook";
+            toast.error(Array.isArray(msg) ? msg.join(", ") : msg);
         }
     };
 
@@ -319,32 +347,42 @@ export default function ConnectionsPage() {
 
                                 <div className="grid grid-cols-3 gap-2 mt-4">
                                     <button
-                                        onClick={() => handleOpenQr(conn)}
-                                        title="Escanear QR Code para vincular WhatsApp"
+                                        onClick={() => handleCheckStatus(conn)}
+                                        title="Verificar status da conexão na Z-API"
                                         className="py-3 px-2 bg-slate-900 dark:bg-white dark:text-slate-900 text-white text-xs font-bold uppercase tracking-wide rounded-xl hover:bg-primary hover:text-white transition-all flex flex-col items-center justify-center gap-1 shadow-md active:scale-95"
                                     >
-                                        <QrCode size={16} />
-                                        <span>QR</span>
+                                        <RefreshCcw size={16} />
+                                        <span>STATUS</span>
                                     </button>
                                     <button
-                                        onClick={() => handleCheckStatus(conn)}
+                                        onClick={() => handleOpenQr(conn)}
+                                        title="Vincular WhatsApp via QR Code"
                                         className="py-3 px-2 bg-white dark:bg-white/5 text-slate-500 rounded-xl hover:bg-primary hover:text-white transition-all border border-slate-200 dark:border-white/10 shadow-sm active:scale-95 flex flex-col items-center justify-center gap-1"
                                     >
-                                        <RefreshCcw size={16} />
-                                        <span className="text-xs font-bold">STATUS</span>
+                                        <QrCode size={16} />
+                                        <span className="text-xs font-bold">QR</span>
                                     </button>
-                                    <div className="flex flex-col gap-2">
+                                    <div className="flex flex-col gap-1.5">
                                         <button
                                             onClick={() => setSelectedConn(conn)}
-                                            className="flex-1 py-2 bg-white dark:bg-white/5 text-slate-500 rounded-xl hover:bg-primary hover:text-white transition-all border border-slate-200 dark:border-white/10 shadow-sm active:scale-95 flex items-center justify-center"
+                                            title="Editar conexão"
+                                            className="flex-1 py-1.5 bg-white dark:bg-white/5 text-slate-500 rounded-xl hover:bg-primary hover:text-white transition-all border border-slate-200 dark:border-white/10 shadow-sm active:scale-95 flex items-center justify-center"
                                         >
-                                            <Settings2 size={16} />
+                                            <Settings2 size={14} />
+                                        </button>
+                                        <button
+                                            onClick={() => handleRegisterWebhook(conn)}
+                                            title="Registrar URL de webhook na Z-API"
+                                            className="flex-1 py-1.5 bg-white dark:bg-white/5 text-slate-500 rounded-xl hover:bg-emerald-500 hover:text-white transition-all border border-slate-200 dark:border-white/10 shadow-sm active:scale-95 flex items-center justify-center"
+                                        >
+                                            <Link2 size={14} />
                                         </button>
                                         <button
                                             onClick={() => handleDelete(conn.id)}
-                                            className="flex-1 py-2 bg-white dark:bg-white/5 text-rose-500 rounded-xl hover:bg-rose-500 hover:text-white transition-all border border-slate-200 dark:border-white/10 shadow-sm active:scale-95 flex items-center justify-center"
+                                            title="Excluir conexão"
+                                            className="flex-1 py-1.5 bg-white dark:bg-white/5 text-rose-500 rounded-xl hover:bg-rose-500 hover:text-white transition-all border border-slate-200 dark:border-white/10 shadow-sm active:scale-95 flex items-center justify-center"
                                         >
-                                            <Trash2 size={16} />
+                                            <Trash2 size={14} />
                                         </button>
                                     </div>
                                 </div>

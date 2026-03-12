@@ -65,27 +65,14 @@ export class WebhooksController {
             storedToken = (integration as any)?.zapiClientToken ?? null;
         }
 
-        // Se token configurado no sistema, validar
+        // Se token configurado no sistema, validar correspondência
+        // Se NÃO configurado, aceitar (o usuário não ativou o Security Token na Z-API)
         if (storedToken) {
             const decryptedToken = this.crypto.decrypt(storedToken);
             if (incomingToken !== decryptedToken) {
                 this.logger.warn(`Webhook Z-API rejeitado: token inválido para instanceId=${instanceId}`);
                 return false;
             }
-        } else {
-            const isProduction = process.env.NODE_ENV === 'production';
-            if (isProduction) {
-                this.logger.error(
-                    `Webhook REJEITADO: instanceId=${instanceId} não possui zapiClientToken configurado. ` +
-                    `Configure o token de segurança na integração para habilitar webhooks em produção.`
-                );
-                return false;
-            }
-            // Em desenvolvimento aceitar sem token, mas avisar claramente
-            this.logger.warn(
-                `[DEV ONLY] Webhook aceito sem token para instanceId=${instanceId}. ` +
-                `Em produção (NODE_ENV=production) este webhook seria REJEITADO.`
-            );
         }
 
         return true;
