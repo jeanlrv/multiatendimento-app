@@ -17,6 +17,7 @@ const SOURCE_TYPE_META: Record<string, { icon: React.ElementType; color: string;
     JSON: { icon: Braces, color: 'bg-yellow-100 text-yellow-600', label: 'JSON' },
     YAML: { icon: Braces, color: 'bg-yellow-100 text-yellow-600', label: 'YAML' },
     XML: { icon: Braces, color: 'bg-yellow-100 text-yellow-600', label: 'XML' },
+    XSD: { icon: FileCode, color: 'bg-amber-100 text-amber-700', label: 'XSD' },
     RTF: { icon: AlignLeft, color: 'bg-slate-100 text-slate-600', label: 'RTF' },
     PDF: { icon: FileUp, color: 'bg-rose-100 text-rose-600', label: 'PDF' },
     DOCX: { icon: FileText, color: 'bg-blue-100 text-blue-600', label: 'Word' },
@@ -41,7 +42,7 @@ function DocTypeIcon({ sourceType, size = 20 }: { sourceType: string; size?: num
 const URL_INPUT_TYPES = new Set(['URL', 'YOUTUBE', 'GITHUB']);
 
 // Accept string cobrindo todos os tipos de arquivo suportados
-const ALL_FILE_ACCEPT = '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.epub,.txt,.md,.mdx,.markdown,.rtf,.csv,.json,.yaml,.yml,.xml,.html,.htm,.js,.ts,.jsx,.tsx,.py,.java,.go,.rb,.php,.cs,.cpp,.c,.rs,.swift,.kt,.sh,.sql,.mp3,.wav,.mp4,.ogg,.webm,.m4a,.opus,.oga,.aac,.amr,.3gp,.3gpp';
+const ALL_FILE_ACCEPT = '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.epub,.txt,.md,.mdx,.markdown,.rtf,.csv,.json,.yaml,.yml,.xml,.xsd,.html,.htm,.js,.ts,.jsx,.tsx,.py,.java,.go,.rb,.php,.cs,.cpp,.c,.rs,.swift,.kt,.sh,.sql,.mp3,.wav,.mp4,.ogg,.webm,.m4a,.opus,.oga,.aac,.amr,.3gp,.3gpp';
 
 // Tipos que exigem entrada de URL ou texto (não upload de arquivo)
 const WEB_TYPES = [
@@ -58,7 +59,7 @@ function autoDetectSourceType(filename: string): string {
         pdf: 'PDF', doc: 'DOCX', docx: 'DOCX',
         xls: 'XLSX', xlsx: 'XLSX', ppt: 'PPTX', pptx: 'PPTX', epub: 'EPUB',
         txt: 'TXT', md: 'MD', mdx: 'MD', markdown: 'MD', rtf: 'RTF',
-        csv: 'CSV', json: 'JSON', yaml: 'YAML', yml: 'YAML', xml: 'XML',
+        csv: 'CSV', json: 'JSON', yaml: 'YAML', yml: 'YAML', xml: 'XML', xsd: 'XSD',
         html: 'HTML', htm: 'HTML',
         js: 'CODE', ts: 'CODE', jsx: 'CODE', tsx: 'CODE', py: 'CODE',
         java: 'CODE', go: 'CODE', rb: 'CODE', php: 'CODE', cs: 'CODE',

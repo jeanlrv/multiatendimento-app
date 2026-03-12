@@ -242,13 +242,16 @@ export class KnowledgeProcessor extends WorkerHost {
 
             case 'XML': {
                 const src = rawContent || (contentUrl ? (await this.getContentBuffer(contentUrl)).toString('utf-8') : '');
-                // Strip XML tags, preservar conteúdo de texto
-                const text = src
-                    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
-                    .replace(/<[^>]+>/g, ' ')
-                    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'")
-                    .replace(/\s+/g, ' ').trim();
-                return { text };
+                // Extrai pares tag:valor para preservar contexto semântico (ideal para NFe/CTe/MDFe)
+                const text = this.extractXmlLeafPairs(src);
+                return { text: text || '[XML sem conteúdo extraível]' };
+            }
+
+            case 'XSD': {
+                const src = rawContent || (contentUrl ? (await this.getContentBuffer(contentUrl)).toString('utf-8') : '');
+                // Extrai dicionário de elementos do schema (ideal para schemas fiscais brasileiros)
+                const text = this.extractXsdSummary(src);
+                return { text: text || '[XSD sem elementos encontrados]' };
             }
 
             case 'CSV': {
@@ -548,6 +551,111 @@ export class KnowledgeProcessor extends WorkerHost {
             // Remover caracteres de controle (exceto \n e \t)
             .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
             .trim();
+    }
+
+    /**
+     * Extrai pares "tagLocal: valor" de nós folha de XML de dados (NFe, CTe, MDFe, etc.).
+     * Preserva o nome do campo, o que é essencial para documentos fiscais brasileiros.
+     */
+    private extractXmlLeafPairs(xml: string): string {
+        // Expande CDATA e remove cabeçalhos/comentários
+        let src = xml
+            .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+            .replace(/<\?xml[^>]*\?>/g, '')
+            .replace(/<!--[\s\S]*?-->/g, '');
+
+        const pairs: string[] = [];
+        // Nós folha: <ns:Tag ...>texto</ns:Tag> — texto sem tags filhas
+        const leafRe = /<(?:[A-Za-z_][\w.]*:)?([A-Za-z_][\w.]*)(?:\s[^>]*)?>([^<]+)<\/(?:[A-Za-z_][\w.]*:)?[A-Za-z_][\w.]*>/g;
+        let m: RegExpExecArray | null;
+        while ((m = leafRe.exec(src)) !== null) {
+            const name = m[1];
+            const val = m[2]
+                .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+                .replace(/&quot;/g, '"').replace(/&apos;/g, "'")
+                .trim();
+            if (val && name) pairs.push(`${name}: ${val}`);
+        }
+
+        // Deduplicar entradas consecutivas idênticas
+        const unique: string[] = [];
+        for (const p of pairs) {
+            if (unique[unique.length - 1] !== p) unique.push(p);
+        }
+        return unique.join('\n');
+    }
+
+    /**
+     * Extrai dicionário de elementos de um XSD (XML Schema Definition).
+     * Ideal para schemas de documentos fiscais brasileiros (NFe, CTe, MDFe, NFCe, etc.).
+     * Resultado: "nomeElemento: descrição (xs:documentation)" ou apenas "nomeElemento".
+     */
+    private extractXsdSummary(xsd: string): string {
+        // Remove declaração XML e comentários
+        const src = xsd
+            .replace(/<\?xml[^>]*\?>/g, '')
+            .replace(/<!--[\s\S]*?-->/g, '');
+
+        // Mapeia nome → documentação
+        const nameOrder: string[] = [];
+        const nameToDoc = new Map<string, string>();
+
+        // Coleta todos os nomes de xs:element / xsd:element
+        const nameRe = /<xsd?:element\s[^>]*\bname="([^"]+)"/gi;
+        let m: RegExpExecArray | null;
+        while ((m = nameRe.exec(src)) !== null) {
+            const name = m[1].trim();
+            if (!nameToDoc.has(name)) {
+                nameToDoc.set(name, '');
+                nameOrder.push(name);
+            }
+        }
+
+        // Associa xs:annotation/xs:documentation ao elemento mais próximo anterior
+        const annotRe = /<xsd?:annotation>([\s\S]*?)<\/xsd?:annotation>/gi;
+        while ((m = annotRe.exec(src)) !== null) {
+            const annotContent = m[1];
+            const docMatch = annotContent.match(/<xsd?:documentation[^>]*>([\s\S]*?)<\/xsd?:documentation>/i);
+            if (!docMatch) continue;
+            const doc = docMatch[1].replace(/\s+/g, ' ').trim();
+            if (!doc) continue;
+
+            // Elemento declarado logo antes desta anotação (janela de 600 chars)
+            const before = src.substring(Math.max(0, m.index - 600), m.index);
+            const prevElem = [...before.matchAll(/<xsd?:element\s[^>]*\bname="([^"]+)"/gi)].pop();
+            if (prevElem) {
+                const name = prevElem[1].trim();
+                if (nameToDoc.has(name) && !nameToDoc.get(name)) {
+                    nameToDoc.set(name, doc);
+                }
+            }
+        }
+
+        const lines: string[] = ['=== Schema XSD — Elementos ==='];
+        for (const name of nameOrder) {
+            const doc = nameToDoc.get(name);
+            lines.push(doc ? `${name}: ${doc}` : name);
+        }
+
+        // Tipos simples / complexos nomeados
+        const typeRe = /<xsd?:(?:simpleType|complexType)\s[^>]*\bname="([^"]+)"/gi;
+        const types: string[] = [];
+        while ((m = typeRe.exec(src)) !== null) types.push(m[1].trim());
+        if (types.length > 0) {
+            lines.push('\n=== Tipos Definidos ===');
+            lines.push(types.join(', '));
+        }
+
+        // Enumerações (até 100 valores)
+        const enumRe = /<xsd?:enumeration\s[^>]*\bvalue="([^"]+)"/gi;
+        const enums: string[] = [];
+        while ((m = enumRe.exec(src)) !== null) enums.push(m[1].trim());
+        if (enums.length > 0 && enums.length <= 100) {
+            lines.push('\n=== Valores Enumerados ===');
+            lines.push(enums.join(', '));
+        }
+
+        return lines.join('\n');
     }
 
     /**

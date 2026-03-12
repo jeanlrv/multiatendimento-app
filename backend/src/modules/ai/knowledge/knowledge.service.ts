@@ -276,7 +276,7 @@ export class KnowledgeService {
             'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'epub',
             'txt', 'md', 'mdx', 'markdown', 'rtf',
             'html', 'htm',
-            'csv', 'json', 'yaml', 'yml', 'xml',
+            'csv', 'json', 'yaml', 'yml', 'xml', 'xsd',
             'js', 'ts', 'jsx', 'tsx', 'py', 'java', 'go', 'rb', 'php', 'cs', 'cpp', 'c', 'rs', 'swift', 'kt', 'sh', 'bash', 'sql',
             'mp3', 'wav', 'mp4', 'ogg', 'webm', 'm4a', 'mpeg',
             'opus', 'aac', 'amr', '3gp', '3gpp', 'oga'  // formatos WhatsApp
@@ -738,7 +738,8 @@ const EXT_TO_SOURCE_TYPE: Record<string, string> = {
     yaml: 'YAML',
     yml: 'YAML',
     xml: 'XML',
-    
+    xsd: 'XSD',
+
     // Código
     js: 'CODE',
     ts: 'CODE',
@@ -796,6 +797,7 @@ const EXT_TO_MIME: Record<string, string> = {
     csv: 'text/csv',
     json: 'application/json',
     xml: 'application/xml',
+    xsd: 'application/xml',
     yaml: 'application/yaml',
     yml: 'application/yaml',
     mp3: 'audio/mpeg',
