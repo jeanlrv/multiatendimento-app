@@ -166,10 +166,13 @@ export class WebhooksController {
             const type: string = payload.type || '';
             const instanceId: string = payload.instanceId || '';
 
+            this.logger.log(`[WEBHOOK] tipo=${type || '(sem type)'} instanceId=${instanceId || '(vazio)'} fromMe=${payload.fromMe} phone=${payload.phone || '-'}`);
+
             // Validar token de segurança antes de processar qualquer payload
             if (instanceId) {
                 const isValid = await this.validateZApiToken(instanceId, payload.clientToken);
                 if (!isValid) {
+                    this.logger.warn(`[WEBHOOK] Rejeitado por token inválido: instanceId=${instanceId}`);
                     return { success: false, error: 'Token de segurança inválido' };
                 }
             }
@@ -219,11 +222,13 @@ export class WebhooksController {
     private async handleIncomingMessage(payload: any) {
         // CRÍTICO: ignorar próprias mensagens para evitar loop infinito
         if (payload.fromMe === true) {
+            this.logger.debug(`[MSG] Ignorada (fromMe=true): ${payload.messageId}`);
             return;
         }
 
         // Ignorar mensagens de grupos e newsletters
         if (payload.isGroup === true || payload.isNewsletter === true) {
+            this.logger.debug(`[MSG] Ignorada (grupo/newsletter): ${payload.phone}`);
             return;
         }
 
@@ -231,13 +236,15 @@ export class WebhooksController {
         const instanceId: string = payload.instanceId;
 
         if (!phoneNumber || !instanceId) {
-            this.logger.warn('Webhook sem phone ou instanceId');
+            this.logger.warn('[MSG] Webhook sem phone ou instanceId');
             return;
         }
 
+        this.logger.log(`[MSG] Processando mensagem de ${phoneNumber} (instanceId: ${instanceId})`);
+
         const companyId = await this.resolveCompanyId(instanceId);
         if (!companyId) {
-            this.logger.warn(`Empresa não encontrada para instanceId: ${instanceId}`);
+            this.logger.warn(`[MSG] Empresa não encontrada para instanceId: ${instanceId}`);
             return;
         }
 
