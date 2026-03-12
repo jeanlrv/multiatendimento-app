@@ -231,6 +231,7 @@ export class WebhooksController {
 
             switch (type) {
                 case 'MessageCallback':
+                case 'ReceivedCallback': // alias usado por algumas versões da Z-API
                     await this.handleIncomingMessage(payload);
                     break;
 

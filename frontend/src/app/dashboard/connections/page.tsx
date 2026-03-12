@@ -421,6 +421,9 @@ function ConnectionFormView({ connection, departments, onClose, onSave }: {
     const [showToken, setShowToken] = useState(false);
     const [showClientToken, setShowClientToken] = useState(false);
     const [submitting, setSubmitting] = useState(false);
+    const [clearClientToken, setClearClientToken] = useState(false);
+    const [editingClientToken, setEditingClientToken] = useState(false);
+    const hasStoredClientToken = connection.zapiClientToken === '***CONFIGURADO***';
 
     const toggleDept = (deptId: string) => {
         setForm(f => ({
@@ -443,7 +446,11 @@ function ConnectionFormView({ connection, departments, onClose, onSave }: {
             };
             // Só envia tokens se o usuário preencheu (não sobrescreve com vazio)
             if (form.zapiToken.trim()) payload.zapiToken = form.zapiToken.trim();
-            if (form.zapiClientToken.trim()) payload.zapiClientToken = form.zapiClientToken.trim();
+            if (form.zapiClientToken.trim()) {
+                payload.zapiClientToken = form.zapiClientToken.trim();
+            } else if (clearClientToken) {
+                payload.zapiClientToken = ''; // string vazia = sinal para limpar no backend
+            }
 
             if (isNew) {
                 await api.post("/whatsapp", payload);
@@ -561,19 +568,62 @@ function ConnectionFormView({ connection, departments, onClose, onSave }: {
                     <div className="space-y-2">
                         <label className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1 flex items-center gap-2">
                             <Shield size={12} /> Client-Token (Security Token) <span className="text-slate-400 font-normal normal-case tracking-normal">— opcional</span>
+                            {hasStoredClientToken && !clearClientToken && (
+                                <span className="ml-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 uppercase tracking-wider">Configurado</span>
+                            )}
+                            {clearClientToken && (
+                                <span className="ml-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 uppercase tracking-wider">Será removido</span>
+                            )}
                         </label>
-                        <div className="relative">
-                            <input
-                                type={showClientToken ? "text" : "password"}
-                                value={form.zapiClientToken}
-                                onChange={e => setForm({ ...form, zapiClientToken: e.target.value })}
-                                className="w-full bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-5 py-3 pr-12 focus:ring-4 focus:ring-primary/10 outline-none transition-all dark:text-white font-mono text-sm"
-                                placeholder="Necessário apenas se ativado em Security no portal Z-API"
-                            />
-                            <button type="button" onClick={() => setShowClientToken(!showClientToken)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-primary transition-colors">
-                                {showClientToken ? <EyeOff size={16} /> : <Eye size={16} />}
-                            </button>
-                        </div>
+                        {hasStoredClientToken && !clearClientToken && !editingClientToken ? (
+                            <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-green-200 dark:border-green-800/30 bg-green-50 dark:bg-green-900/10">
+                                <Shield size={14} className="text-green-600 dark:text-green-400 shrink-0" />
+                                <span className="text-sm text-green-700 dark:text-green-400 font-medium flex-1">Token de segurança configurado</span>
+                                <button
+                                    type="button"
+                                    onClick={() => setClearClientToken(true)}
+                                    className="text-xs font-bold text-red-600 dark:text-red-400 hover:underline"
+                                >
+                                    Remover
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setEditingClientToken(true)}
+                                    className="text-xs font-bold text-primary hover:underline"
+                                >
+                                    Alterar
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="relative">
+                                <input
+                                    type={showClientToken ? "text" : "password"}
+                                    value={clearClientToken ? '' : form.zapiClientToken}
+                                    onChange={e => {
+                                        setClearClientToken(false);
+                                        setEditingClientToken(true);
+                                        setForm({ ...form, zapiClientToken: e.target.value });
+                                    }}
+                                    disabled={clearClientToken}
+                                    className="w-full bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-5 py-3 pr-12 focus:ring-4 focus:ring-primary/10 outline-none transition-all dark:text-white font-mono text-sm disabled:opacity-40"
+                                    placeholder={clearClientToken ? 'Token será removido ao salvar' : 'Necessário apenas se ativado em Security no portal Z-API'}
+                                />
+                                {!clearClientToken && (
+                                    <button type="button" onClick={() => setShowClientToken(!showClientToken)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-primary transition-colors">
+                                        {showClientToken ? <EyeOff size={16} /> : <Eye size={16} />}
+                                    </button>
+                                )}
+                                {clearClientToken && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setClearClientToken(false)}
+                                        className="text-xs font-bold text-slate-500 hover:text-primary transition-colors mt-1"
+                                    >
+                                        Cancelar remoção
+                                    </button>
+                                )}
+                            </div>
+                        )}
                     </div>
 
                     <div className="text-[10px] text-slate-400 bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800/20 rounded-xl p-3 leading-relaxed">

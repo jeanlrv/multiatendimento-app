@@ -159,9 +159,13 @@ export class WhatsAppService {
             updateData.departmentIds = departmentIds;
             updateData.departmentId = departmentIds.length > 0 ? departmentIds[0] : null;
         }
-        // Criptografar tokens ao atualizar
+        // Criptografar tokens ao atualizar; string vazia = limpar o campo (null)
         if (updateData.zapiToken) updateData.zapiToken = this.cryptoService.encrypt(updateData.zapiToken);
-        if (updateData.zapiClientToken) updateData.zapiClientToken = this.cryptoService.encrypt(updateData.zapiClientToken);
+        if (updateData.zapiClientToken === '') {
+            updateData.zapiClientToken = null; // limpar token de segurança
+        } else if (updateData.zapiClientToken) {
+            updateData.zapiClientToken = this.cryptoService.encrypt(updateData.zapiClientToken);
+        }
 
         return (this.prisma as any).whatsAppInstance.update({
             where: { id },
