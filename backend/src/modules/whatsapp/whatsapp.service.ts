@@ -16,7 +16,15 @@ export class WhatsAppService {
         private configService: ConfigService,
         private integrationsService: IntegrationsService,
     ) {
-        this.zapiBaseUrl = this.configService.get<string>('ZAPI_BASE_URL', 'https://api.z-api.io');
+        // Sanitiza ZAPI_BASE_URL: extrai só a origin para evitar que o usuário cole
+        // uma URL de endpoint completa (ex: .../instances/{id}/token/{tok}/send-text)
+        const rawUrl = this.configService.get<string>('ZAPI_BASE_URL', 'https://api.z-api.io');
+        try {
+            this.zapiBaseUrl = new URL(rawUrl).origin;
+        } catch {
+            this.zapiBaseUrl = 'https://api.z-api.io';
+        }
+        this.logger.log(`Z-API base URL (sanitized): ${this.zapiBaseUrl}`);
     }
 
     async findAll(companyId: string) {
