@@ -287,7 +287,17 @@ export class WebhooksController {
 
         // Se não há ticket ativo, criar um
         if (!ticket) {
-            const department = connection.department;
+            let department = connection.department;
+
+            // Fallback: buscar primeiro departamento do array departmentIds se FK legado estiver nulo
+            if (!department && connection.departmentIds?.length > 0) {
+                department = await (this.prisma as any).department.findUnique({
+                    where: { id: connection.departmentIds[0] },
+                });
+                if (department) {
+                    this.logger.debug(`Departamento resolvido via departmentIds[0]: ${department.id}`);
+                }
+            }
 
             if (!department) {
                 this.logger.warn(`Conexão ${connection.id} não possui departamento vinculado`);
