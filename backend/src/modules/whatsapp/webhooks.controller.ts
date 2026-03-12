@@ -69,8 +69,13 @@ export class WebhooksController {
         // Se NÃO configurado, aceitar (o usuário não ativou o Security Token na Z-API)
         if (storedToken) {
             const decryptedToken = this.crypto.decrypt(storedToken);
+            const incomingPreview = incomingToken
+                ? `"${incomingToken.substring(0, 4)}..."(len=${incomingToken.length})`
+                : '(ausente/undefined)';
+            const expectedPreview = `"${decryptedToken.substring(0, 4)}..."(len=${decryptedToken.length})`;
+            this.logger.warn(`[TOKEN-DIAG] instanceId=${instanceId} incoming=${incomingPreview} expected=${expectedPreview}`);
             if (incomingToken !== decryptedToken) {
-                this.logger.warn(`Webhook Z-API rejeitado: token inválido para instanceId=${instanceId}`);
+                this.logger.warn(`Webhook Z-API rejeitado: token inválido para instanceId=${instanceId} | incoming=${incomingPreview} expected=${expectedPreview}`);
                 return false;
             }
         } else {
