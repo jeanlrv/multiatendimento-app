@@ -167,8 +167,14 @@ export default function ConnectionsPage() {
             return;
         }
         try {
-            await api.post(`/whatsapp/${conn.id}/register-webhook`);
-            toast.success("URL de webhook registrada na Z-API!");
+            const res = await api.post(`/whatsapp/${conn.id}/register-webhook`);
+            const webhookUrl: string = res.data?.webhookUrl ?? "";
+            if (webhookUrl) {
+                navigator.clipboard.writeText(webhookUrl).catch(() => {});
+                toast.success(`Webhook registrado na Z-API!\nURL: ${webhookUrl}\n(copiada para a área de transferência)`, { duration: 8000 });
+            } else {
+                toast.success("URL de webhook registrada na Z-API!");
+            }
         } catch (err: any) {
             const msg = err.response?.data?.message || "Erro ao registrar webhook";
             toast.error(Array.isArray(msg) ? msg.join(", ") : msg);

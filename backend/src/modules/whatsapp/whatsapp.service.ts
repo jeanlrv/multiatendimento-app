@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
@@ -223,8 +223,7 @@ export class WhatsAppService {
     async registerWebhook(connectionId: string, companyId: string) {
         const backendUrl = this.configService.get<string>('BACKEND_PUBLIC_URL', '');
         if (!backendUrl) {
-            this.logger.warn('BACKEND_PUBLIC_URL não configurado — webhook não registrado na Z-API.');
-            return;
+            throw new BadRequestException('BACKEND_PUBLIC_URL não configurado. Adicione esta variável de ambiente no servidor.');
         }
 
         const connection = await this.getInternal(connectionId, companyId);
@@ -240,7 +239,7 @@ export class WhatsAppService {
         );
 
         this.logger.log(`Webhook registrado na Z-API [${instanceId}]: ${webhookUrl}`);
-        return response.data;
+        return { ok: true, webhookUrl, instanceId };
     }
 
     async sendMessage(connectionId: string, phoneNumber: string, message: string, companyId: string) {
