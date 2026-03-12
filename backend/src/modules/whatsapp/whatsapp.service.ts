@@ -104,7 +104,9 @@ export class WhatsAppService {
     }
 
     async create(createWhatsAppDto: CreateWhatsAppDto, companyId: string) {
-        const { departmentId, ...data } = createWhatsAppDto as any;
+        const { departmentIds = [], ...data } = createWhatsAppDto as any;
+        // Usa o primeiro departamento selecionado como departmentId (FK legada para roteamento)
+        const primaryDeptId = departmentIds.length > 0 ? departmentIds[0] : undefined;
 
         const connection = await (this.prisma as any).whatsAppInstance.create({
             data: {
@@ -112,7 +114,8 @@ export class WhatsAppService {
                 companyId,
                 status: 'DISCONNECTED',
                 isActive: true,
-                departmentId: departmentId || undefined,
+                departmentIds,
+                departmentId: primaryDeptId,
             },
             include: { department: true },
         });
@@ -127,14 +130,18 @@ export class WhatsAppService {
 
     async update(id: string, updateWhatsAppDto: UpdateWhatsAppDto, companyId: string) {
         await this.findOne(id, companyId);
-        const { departmentId, ...data } = updateWhatsAppDto as any;
+        const { departmentIds, ...data } = updateWhatsAppDto as any;
+
+        const updateData: any = { ...data };
+        if (departmentIds !== undefined) {
+            // Sincroniza departmentId (FK legada) com o primeiro do array
+            updateData.departmentIds = departmentIds;
+            updateData.departmentId = departmentIds.length > 0 ? departmentIds[0] : null;
+        }
 
         return (this.prisma as any).whatsAppInstance.update({
             where: { id },
-            data: {
-                ...data,
-                departmentId: departmentId || undefined,
-            },
+            data: updateData,
             include: { department: true },
         });
     }

@@ -161,19 +161,21 @@ model DepartmentFlow {
 // ============================================
 
 model WhatsAppInstance {
-  id             String    @id @default(uuid())
-  name           String
-  phoneNumber    String?   @unique
-  zapiInstanceId String?   @unique
-  zapiToken      String?
-  status         String    @default("DESCONECTADO")
-  qrCode         String?
-  lastSeenAt     DateTime?
-  isActive       Boolean   @default(true)
-  companyId      String
-  departmentId   String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  id              String    @id @default(uuid())
+  name            String
+  phoneNumber     String?   @unique
+  zapiInstanceId  String?   @unique
+  zapiToken       String?
+  zapiClientToken String?   // Client-Token de segurança Z-API (Security Token)
+  status          String    @default("DESCONECTADO")
+  qrCode          String?
+  lastSeenAt      DateTime?
+  isActive        Boolean   @default(true)
+  companyId       String
+  departmentId    String?   // Departamento principal (mantido para roteamento legado e FK)
+  departmentIds   String[]  @default([]) // Múltiplos departamentos vinculados
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   company    Company     @relation(fields: [companyId], references: [id])
   department Department? @relation(fields: [departmentId], references: [id])

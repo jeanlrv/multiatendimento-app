@@ -176,9 +176,10 @@ export function IntegrationsManager() {
                     <Zap size={24} />
                 </div>
                 <div>
-                    <h3 className="text-xl font-bold text-gray-900 dark:text-white">Integrações Z-API</h3>
+                    <h3 className="text-xl font-bold text-gray-900 dark:text-white">Integração Global Z-API</h3>
                     <p className="text-sm text-gray-500">
-                        Configure as credenciais globais. As conexões WhatsApp as usarão automaticamente.
+                        Credenciais de fallback: quando uma conexão WhatsApp não tiver ID/Token próprios, o sistema usará estas credenciais.
+                        Prefira configurar as credenciais <strong>diretamente em cada conexão</strong> (menu Conexões).
                     </p>
                 </div>
             </div>
@@ -238,14 +239,15 @@ export function IntegrationsManager() {
                 </div>
 
                 <h4 className="text-xl font-black text-slate-900 dark:text-white mb-2 italic tracking-tighter">
-                    {editing ? 'Editar Integração' : 'Nova Integração Z-API'}
+                    {editing ? 'Editar Credencial Global' : 'Nova Credencial Global Z-API'}
                 </h4>
                 <p className="text-xs text-slate-500 mb-8">
-                    Obtenha o Instance ID e Token no painel da{' '}
+                    Configure aqui apenas se quiser um <strong>fallback global</strong> para conexões sem credenciais próprias.
+                    Para uso normal, configure o ID e Token <strong>diretamente na conexão</strong> (menu Conexões WhatsApp).
+                    Obtenha as credenciais no painel{' '}
                     <a href="https://developer.z-api.io" target="_blank" rel="noreferrer" className="text-primary underline font-bold">
-                        Z-API
+                        z-api.io → Suas Instâncias
                     </a>.
-                    O Client-Token é opcional — configure em Security no painel Z-API.
                 </p>
 
                 <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-8 relative z-10">
@@ -262,20 +264,6 @@ export function IntegrationsManager() {
                             placeholder="Ex: Z-API Principal"
                             required
                         />
-                    </div>
-
-                    {/* Plataforma */}
-                    <div className="space-y-2">
-                        <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">
-                            Plataforma
-                        </label>
-                        <select
-                            value={formData.provider}
-                            onChange={(e) => setFormData({ ...formData, provider: e.target.value })}
-                            className="w-full bg-white dark:bg-white/5 border border-slate-100 dark:border-white/10 rounded-2xl px-6 py-4 focus:ring-4 focus:ring-primary/10 outline-none dark:text-white font-bold"
-                        >
-                            <option value="ZAPI">Z-API (WhatsApp)</option>
-                        </select>
                     </div>
 
                     {/* Instance ID */}
