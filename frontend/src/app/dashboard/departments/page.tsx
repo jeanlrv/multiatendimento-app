@@ -43,11 +43,7 @@ const departmentSchema = z.object({
     workflowId: z.string().optional().nullable(),
     defaultMode: z.enum(['AI', 'HUMANO', 'HIBRIDO']).default('AI'),
     isActive: z.boolean().default(true),
-    businessHours: z.record(z.object({
-        active: z.boolean(),
-        start: z.string(),
-        end: z.string(),
-    })).optional(),
+    businessHours: z.any().optional(),
 });
 
 type DepartmentForm = z.infer<typeof departmentSchema>;
@@ -329,9 +325,16 @@ function DepartmentFormView({ department, agents, workflows, onClose, onSave }: 
         >
             {/* Form envolve todo o conteúdo para que o botão Sincronizar (type=submit) funcione corretamente */}
             <form onSubmit={handleSubmit(onSubmit, (errors) => {
-                const firstError = Object.values(errors)[0];
-                const msg = (firstError as any)?.message || 'Corrija os campos obrigatórios';
-                toast.error(msg);
+                const findMsg = (obj: any): string | undefined => {
+                    if (!obj || typeof obj !== 'object') return undefined;
+                    if (typeof obj.message === 'string') return obj.message;
+                    for (const v of Object.values(obj)) {
+                        const found = findMsg(v);
+                        if (found) return found;
+                    }
+                    return undefined;
+                };
+                toast.error(findMsg(errors) || 'Corrija os campos obrigatórios');
             })} className="flex flex-col gap-0">
 
             {/* Header */}
