@@ -5,3 +5,9 @@ docker-compose.yml
 *.log
 .env
 .env.local
+.env.*
+node_modules
+next-build
+.next
+README.md
+*.md

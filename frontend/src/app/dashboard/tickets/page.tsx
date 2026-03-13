@@ -7,7 +7,7 @@ import { getSocket } from '@/lib/socket';
 import { api } from '@/services/api';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trash2, Send, Phone, User, Clock, CheckCheck, Paperclip, MoreVertical, ArrowRightLeft, Smile, Search, SlidersHorizontal, MessageSquare, Bot, Sparkles, AlertTriangle, Plus, X, Mic, Tag as TagIcon, Info, Calendar, ArrowLeft, Copy, Edit3, CornerUpLeft, UploadCloud, ChevronDown, Keyboard, Wand2, PhoneCall, Volume2 } from 'lucide-react';
+import { Trash2, Send, Phone, User, Clock, CheckCheck, Check, Paperclip, MoreVertical, ArrowRightLeft, Smile, Search, SlidersHorizontal, MessageSquare, Bot, Sparkles, AlertTriangle, Plus, X, Mic, Tag as TagIcon, Info, Calendar, ArrowLeft, Copy, Edit3, CornerUpLeft, UploadCloud, ChevronDown, Keyboard, Wand2, PhoneCall, Volume2, Palette } from 'lucide-react';
 import { AudioRecorder } from '@/components/chat/AudioRecorder';
 import { toast } from 'sonner';
 import { io, Socket } from 'socket.io-client';
@@ -130,6 +130,23 @@ export default function TicketsPage() {
     const emojiPickerRef = useRef<HTMLDivElement>(null);
     const [showShortcutsModal, setShowShortcutsModal] = useState(false);
     const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
+
+    // Cores personalizáveis dos balões
+    const [bubbleColors, setBubbleColors] = useState<{ sent: string; received: string }>(() => {
+        try {
+            const saved = localStorage.getItem('kszap_bubble_colors');
+            return saved ? JSON.parse(saved) : { sent: '#2563eb', received: '' };
+        } catch { return { sent: '#2563eb', received: '' }; }
+    });
+    const [showColorPicker, setShowColorPicker] = useState(false);
+    const colorPickerRef = useRef<HTMLDivElement>(null);
+    const updateBubbleColor = (key: 'sent' | 'received', value: string) => {
+        setBubbleColors(prev => {
+            const next = { ...prev, [key]: value };
+            localStorage.setItem('kszap_bubble_colors', JSON.stringify(next));
+            return next;
+        });
+    };
 
     // Anexos
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -400,6 +417,19 @@ export default function TicketsPage() {
             toast.error('Erro ao enviar o arquivo.');
         } finally {
             setUploadingFile(false);
+        }
+    };
+
+    const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+        const items = Array.from(e.clipboardData.items);
+        const imageItem = items.find(item => item.type.startsWith('image/'));
+        if (imageItem) {
+            e.preventDefault();
+            const file = imageItem.getAsFile();
+            if (file) {
+                toast.info('Enviando imagem colada...');
+                uploadAndSendFile(file);
+            }
         }
     };
 
@@ -726,6 +756,18 @@ export default function TicketsPage() {
         return () => document.removeEventListener('mousedown', handler);
     }, [showOptionsMenu]);
 
+    // Fecha color picker ao clicar fora
+    useEffect(() => {
+        if (!showColorPicker) return;
+        const handler = (e: MouseEvent) => {
+            if (colorPickerRef.current && !colorPickerRef.current.contains(e.target as Node)) {
+                setShowColorPicker(false);
+            }
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [showColorPicker]);
+
     useEffect(() => {
         scrollToBottom();
     }, [messages]);
@@ -1046,7 +1088,7 @@ export default function TicketsPage() {
                                                 </p>
                                             )}
 
-                                            <div className="flex flex-wrap gap-1 overflow-hidden max-h-5">
+                                            <div className="flex flex-nowrap gap-1">
                                                 {ticket.tags?.slice(0, 2).map((t: any) => (
                                                     <span
                                                         key={t.tag.id}
@@ -1474,6 +1516,7 @@ export default function TicketsPage() {
                                                                                 const updated = await ticketsService.update(selectedTicket.id, { tagIds: newTagIds });
                                                                                 setSelectedTicket((prev: any) => prev ? { ...prev, tags: updated.tags ?? prev.tags } : prev);
                                                                                 setTickets((prev: any[]) => prev.map((t: any) => t.id === selectedTicket.id ? { ...t, tags: updated.tags ?? t.tags } : t));
+                                                                                toast.success(isApplied ? 'Tag removida' : 'Tag adicionada');
                                                                             } catch {
                                                                                 toast.error('Erro ao atualizar tags');
                                                                             }
@@ -1506,6 +1549,60 @@ export default function TicketsPage() {
                                         >
                                             <Keyboard className="h-4 w-4" />
                                         </button>
+
+                                        {/* Personalizar Cores dos Balões */}
+                                        <div className="relative" ref={colorPickerRef}>
+                                            <button
+                                                onClick={() => setShowColorPicker(!showColorPicker)}
+                                                className={`p-2 rounded-xl transition-all ${showColorPicker ? 'bg-primary text-white' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5'}`}
+                                                title="Personalizar cores dos balões"
+                                            >
+                                                <Palette className="h-4 w-4" />
+                                            </button>
+                                            <AnimatePresence>
+                                                {showColorPicker && (
+                                                    <motion.div
+                                                        initial={{ opacity: 0, y: 8, scale: 0.95 }}
+                                                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                        exit={{ opacity: 0, y: 8, scale: 0.95 }}
+                                                        transition={{ duration: 0.15 }}
+                                                        className="absolute bottom-full right-0 mb-2 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-white/10 p-4 z-50 w-52"
+                                                    >
+                                                        <p className="text-[10px] font-black uppercase tracking-widest text-primary mb-3">Cores dos balões</p>
+                                                        <div className="space-y-3">
+                                                            <div className="flex items-center justify-between gap-3">
+                                                                <label className="text-xs font-semibold text-slate-600 dark:text-slate-400">Enviadas</label>
+                                                                <input
+                                                                    type="color"
+                                                                    value={bubbleColors.sent}
+                                                                    onChange={e => updateBubbleColor('sent', e.target.value)}
+                                                                    className="w-8 h-8 rounded-lg border border-slate-200 dark:border-white/10 cursor-pointer bg-transparent"
+                                                                />
+                                                            </div>
+                                                            <div className="flex items-center justify-between gap-3">
+                                                                <label className="text-xs font-semibold text-slate-600 dark:text-slate-400">Recebidas</label>
+                                                                <input
+                                                                    type="color"
+                                                                    value={bubbleColors.received || '#f1f5f9'}
+                                                                    onChange={e => updateBubbleColor('received', e.target.value)}
+                                                                    className="w-8 h-8 rounded-lg border border-slate-200 dark:border-white/10 cursor-pointer bg-transparent"
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                        <button
+                                                            onClick={() => {
+                                                                const reset = { sent: '#2563eb', received: '' };
+                                                                setBubbleColors(reset);
+                                                                localStorage.setItem('kszap_bubble_colors', JSON.stringify(reset));
+                                                            }}
+                                                            className="mt-3 w-full text-[10px] font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 uppercase tracking-widest transition-colors"
+                                                        >
+                                                            Restaurar padrão
+                                                        </button>
+                                                    </motion.div>
+                                                )}
+                                            </AnimatePresence>
+                                        </div>
 
                                         {/* Copilot IA */}
                                         <button
@@ -1646,15 +1743,22 @@ export default function TicketsPage() {
                                                         key={msg.id}
                                                         initial={{ opacity: 0, x: msg.fromMe ? 20 : -20 }}
                                                         animate={{ opacity: 1, x: 0 }}
-                                                        transition={{ delay: idx > messages.length - 6 ? (idx - Math.max(0, messages.length - 6)) * 0.05 : 0 }}
+                                                        transition={{ duration: 0.2 }}
                                                         className={`flex ${msg.fromMe ? 'justify-end' : 'justify-start'}`}
                                                     >
-                                                        <div className={`max-w-[70%] ${msg.messageType === 'INTERNAL'
-                                                            ? 'bg-amber-100 dark:bg-amber-900/40 border-2 border-dashed border-amber-300 dark:border-amber-700/50 text-amber-900 dark:text-amber-100 rounded-3xl'
-                                                            : msg.fromMe
-                                                                ? 'bg-primary text-white rounded-[1.5rem] rounded-br-[0.2rem] shadow-[0_10px_30px_-10px_rgba(56,189,248,0.5)]'
-                                                                : 'liquid-glass rounded-[1.5rem] rounded-bl-[0.2rem] border border-slate-200 dark:border-white/5'
-                                                            } px-6 py-4 relative group`}>
+                                                        <div
+                                                            className={`max-w-[70%] ${msg.messageType === 'INTERNAL'
+                                                                ? 'bg-amber-100 dark:bg-amber-900/40 border-2 border-dashed border-amber-300 dark:border-amber-700/50 text-amber-900 dark:text-amber-100 rounded-3xl'
+                                                                : msg.fromMe
+                                                                    ? 'bg-primary text-white rounded-[1.5rem] rounded-br-[0.2rem] shadow-[0_10px_30px_-10px_rgba(56,189,248,0.5)]'
+                                                                    : 'liquid-glass rounded-[1.5rem] rounded-bl-[0.2rem] border border-slate-200 dark:border-white/5'
+                                                                } px-6 py-4 relative group`}
+                                                            style={msg.messageType !== 'INTERNAL' ? (
+                                                                msg.fromMe
+                                                                    ? { backgroundColor: bubbleColors.sent }
+                                                                    : (bubbleColors.received ? { backgroundColor: bubbleColors.received } : undefined)
+                                                            ) : undefined}
+                                                        >
 
                                                             {msg.messageType === 'INTERNAL' && (
                                                                 <div className="flex items-center gap-2 mb-2 pb-2 border-b border-amber-200 dark:border-amber-700/30">
@@ -1724,7 +1828,13 @@ export default function TicketsPage() {
                                                                     {new Date(msg.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                                                 </span>
                                                                 {msg.fromMe && (
-                                                                    <CheckCheck className={`h-3 w-3 flex-shrink-0 ${msg.status === 'READ' ? 'text-sky-400' : (msg.status === 'DELIVERED' ? 'text-white/80' : 'text-white/40')}`} />
+                                                                    msg.status === 'READ'
+                                                                        ? <CheckCheck className="h-3 w-3 flex-shrink-0 text-sky-400" />
+                                                                        : msg.status === 'DELIVERED'
+                                                                            ? <CheckCheck className="h-3 w-3 flex-shrink-0 text-white/80" />
+                                                                            : msg.status === 'FAILED'
+                                                                                ? <X className="h-3 w-3 flex-shrink-0 text-red-400" />
+                                                                                : <Check className="h-3 w-3 flex-shrink-0 text-white/40" />
                                                                 )}
                                                                 {(msg.messageType === 'TEXT' || msg.messageType === 'INTERNAL') && (
                                                                     <button
@@ -2069,6 +2179,7 @@ export default function TicketsPage() {
                                                                         // Tab key behavior can be standard now
                                                                     }
                                                                 }}
+                                                                onPaste={handlePaste}
                                                                 placeholder={isInternal ? "Sua nota privada (interna)..." : "Digite sua mensagem..."}
                                                                 className={`w-full bg-transparent outline-none resize-none text-sm font-medium tracking-normal ${isInternal ? 'text-amber-700 dark:text-amber-300' : 'text-slate-900 dark:text-white'} placeholder:text-slate-400/60 min-h-[44px] py-3`}
                                                                 rows={1}

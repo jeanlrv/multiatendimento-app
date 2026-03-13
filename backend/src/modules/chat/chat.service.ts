@@ -142,7 +142,7 @@ export class ChatService {
                     externalResult = await this.whatsappService.sendImage(ticket.connectionId, ticket.contact.phoneNumber, message.mediaUrl, ticket.companyId, message.content);
                     break;
                 case 'AUDIO':
-                    externalResult = await this.whatsappService.sendAudio(ticket.connectionId, ticket.contact.phoneNumber, message.mediaUrl, ticket.companyId);
+                    externalResult = await this.whatsappService.sendPttAudio(ticket.connectionId, ticket.contact.phoneNumber, message.mediaUrl, ticket.companyId);
                     break;
                 case 'VIDEO':
                     externalResult = await this.whatsappService.sendVideo(ticket.connectionId, ticket.contact.phoneNumber, message.mediaUrl, ticket.companyId, message.content);
@@ -160,12 +160,14 @@ export class ChatService {
                 where: { id: message.id },
                 data: { status: 'SENT', externalId: externalResult?.zaapId || externalResult?.id }
             });
+            this.chatGateway.emitMessageStatusUpdate(ticket.id, message.id, 'SENT');
         } catch (error) {
             this.logger.error(`Falha no envio WhatsApp: ${error.message}`);
             await this.prisma.message.update({
                 where: { id: message.id },
                 data: { status: 'FAILED' }
             });
+            this.chatGateway.emitMessageStatusUpdate(ticket.id, message.id, 'FAILED');
         }
     }
 
@@ -190,12 +192,13 @@ export class ChatService {
             });
 
             if (!ticket?.department?.aiAgentId) {
+                this.logger.warn(`IA desabilitada para ticket ${ticketId}: departamento ${ticket?.department?.id} sem aiAgentId configurado`);
                 return;
             }
 
             // VALIDAR MODO: Só responde automaticamente se estiver em modo IA ou HIBRIDO
             const ticketMode = (ticket as any).mode || 'MANUAL';
-            if (ticketMode === 'MANUAL' || ticketMode === 'HUMAN') {
+            if (ticketMode !== 'AI' && ticketMode !== 'HIBRIDO') {
                 this.logger.log(`IA ignorada para o ticket ${ticketId}: Modo ${ticketMode}`);
                 return;
             }

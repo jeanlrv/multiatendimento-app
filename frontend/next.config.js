@@ -13,6 +13,7 @@ const withPWA = withPWAInit({
 
 const nextConfig = {
     reactStrictMode: true,
+    output: 'standalone',
     distDir: 'next-build',
 
     images: {

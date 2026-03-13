@@ -16,7 +16,7 @@ COPY package*.json ./
 
 # Instalar todas as dependências (dev + prod)
 # node:20-slim usa glibc — fastembed e onnxruntime-node têm binários para linux-x64-gnu
-RUN npm install --legacy-peer-deps
+RUN npm ci --legacy-peer-deps
 
 # Copiar código fonte e schema Prisma
 COPY prisma ./prisma

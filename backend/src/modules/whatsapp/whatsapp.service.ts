@@ -338,6 +338,25 @@ export class WhatsAppService {
         }
     }
 
+    async sendPttAudio(connectionId: string, phoneNumber: string, audioUrl: string, companyId: string) {
+        const connection = await this.getInternal(connectionId, companyId);
+        const { instanceId, token, clientToken } = await this.resolveCredentials(connection, companyId);
+
+        const url = `${this.zapiBaseUrl}/instances/${instanceId}/token/${token}/send-ptt-audio`;
+
+        try {
+            const response = await axios.post(
+                url,
+                { phone: phoneNumber, audio: audioUrl },
+                { headers: this.buildHeaders(clientToken) },
+            );
+            return response.data;
+        } catch (error) {
+            this.logger.error(`Erro ao enviar PTT áudio via Z-API: ${error.message}`);
+            throw error;
+        }
+    }
+
     async sendDocument(connectionId: string, phoneNumber: string, documentUrl: string, fileName: string, extension: string, companyId: string) {
         const connection = await this.getInternal(connectionId, companyId);
         const { instanceId, token, clientToken } = await this.resolveCredentials(connection, companyId);
