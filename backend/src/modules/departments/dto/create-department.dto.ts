@@ -53,6 +53,11 @@ export class CreateDepartmentDto {
     @IsOptional()
     slaResolutionMin?: number;
 
+    @ApiProperty({ description: 'Mensagem fora do expediente', required: false })
+    @IsString()
+    @IsOptional()
+    outOfHoursMessage?: string;
+
     @ApiProperty({ description: 'Horário de funcionamento (JSON)', required: false })
     @IsOptional()
     businessHours?: any;
