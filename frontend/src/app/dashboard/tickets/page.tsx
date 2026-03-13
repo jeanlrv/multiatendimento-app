@@ -160,6 +160,9 @@ export default function TicketsPage() {
     const [macroSelectedIndex, setMacroSelectedIndex] = useState(0);
 
     const [availableTags, setAvailableTags] = useState<{ id: string, name: string, color: string }[]>([]);
+    const [tagBarSearch, setTagBarSearch] = useState('');
+    const [showTagBarDropdown, setShowTagBarDropdown] = useState(false);
+    const tagBarRef = useRef<HTMLDivElement>(null);
     const [mentionableUsers, setMentionableUsers] = useState<{ id: string, name: string, email: string, avatar?: string }[]>([]);
     const [showMentionMenu, setShowMentionMenu] = useState(false);
     const [mentionFilter, setMentionFilter] = useState('');
@@ -768,6 +771,19 @@ export default function TicketsPage() {
         return () => document.removeEventListener('mousedown', handler);
     }, [showColorPicker]);
 
+    // Fecha tag bar dropdown ao clicar fora
+    useEffect(() => {
+        if (!showTagBarDropdown) return;
+        const handler = (e: MouseEvent) => {
+            if (tagBarRef.current && !tagBarRef.current.contains(e.target as Node)) {
+                setShowTagBarDropdown(false);
+                setTagBarSearch('');
+            }
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [showTagBarDropdown]);
+
     useEffect(() => {
         scrollToBottom();
     }, [messages]);
@@ -1105,16 +1121,16 @@ export default function TicketsPage() {
                                                 )}
                                             </div>
 
-                                            <div className="flex items-center justify-between mt-auto">
-                                                <div className="flex items-center gap-2">
+                                            <div className="flex items-center justify-between mt-auto overflow-hidden gap-1">
+                                                <div className="flex items-center gap-1 min-w-0 overflow-hidden">
                                                     <p
-                                                        className="text-[10px] font-black uppercase tracking-widest italic"
+                                                        className="text-[10px] font-black uppercase tracking-widest italic truncate max-w-[90px]"
                                                         style={{ color: ticket.department.color || undefined, opacity: selectedTicket?.id === ticket.id ? 1 : 0.6 }}
                                                     >
                                                         {ticket.department.name}
                                                     </p>
-                                                    <div className="h-1 w-1 bg-slate-300 rounded-full" />
-                                                    <p className="text-[10px] font-bold opacity-40">
+                                                    <div className="h-1 w-1 shrink-0 bg-slate-300 rounded-full" />
+                                                    <p className="text-[10px] font-bold opacity-40 shrink-0">
                                                         {new Date(ticket.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                                     </p>
                                                 </div>
@@ -1566,7 +1582,7 @@ export default function TicketsPage() {
                                                         animate={{ opacity: 1, y: 0, scale: 1 }}
                                                         exit={{ opacity: 0, y: 8, scale: 0.95 }}
                                                         transition={{ duration: 0.15 }}
-                                                        className="absolute bottom-full right-0 mb-2 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-white/10 p-4 z-50 w-52"
+                                                        className="absolute top-full right-0 mt-2 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-white/10 p-4 z-50 w-52"
                                                     >
                                                         <p className="text-[10px] font-black uppercase tracking-widest text-primary mb-3">Cores dos balões</p>
                                                         <div className="space-y-3">
@@ -1679,32 +1695,90 @@ export default function TicketsPage() {
                             </div>
 
                             {/* Barra de Tags do Cabeçalho */}
-                            <div className="px-4 py-2 border-b border-white/40 dark:border-white/5 bg-white/20 dark:bg-black/10 backdrop-blur-md flex flex-wrap gap-1.5 items-center min-h-[36px] border-x border-slate-200 dark:border-white/10">
-                                <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 mr-2">Tags:</span>
-                                {selectedTicket.tags && selectedTicket.tags.length > 0 ? (
-                                    selectedTicket.tags.map((t: any) => (
-                                        <button
-                                            key={t.tag.id}
-                                            onClick={async () => {
-                                                const currentTagIds = (selectedTicket.tags ?? []).map((tg: any) => tg.tag?.id || tg.id);
-                                                const newTagIds = currentTagIds.filter((id: string) => id !== (t.tag?.id || t.id));
-                                                try {
-                                                    const updated = await ticketsService.update(selectedTicket.id, { tagIds: newTagIds });
-                                                    setSelectedTicket((prev: any) => prev ? { ...prev, tags: updated.tags ?? prev.tags } : prev);
-                                                    setTickets((prev: any[]) => prev.map((tk: any) => tk.id === selectedTicket.id ? { ...tk, tags: updated.tags ?? tk.tags } : tk));
-                                                } catch { toast.error('Erro ao remover tag'); }
-                                            }}
-                                            className="group/tag flex items-center gap-1 px-2 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-widest border border-white/20 transition-all hover:opacity-80"
-                                            style={{ backgroundColor: `${t.tag.color}20`, color: t.tag.color }}
-                                            title={`Remover tag "${t.tag.name}"`}
-                                        >
-                                            {t.tag.name}
-                                            <X size={8} className="opacity-0 group-hover/tag:opacity-100 transition-opacity" />
-                                        </button>
-                                    ))
-                                ) : (
-                                    <span className="text-[9px] text-slate-400 italic">Nenhuma tag atribuída</span>
-                                )}
+                            <div ref={tagBarRef} className="px-4 py-1.5 border-b border-white/40 dark:border-white/5 bg-white/20 dark:bg-black/10 backdrop-blur-md flex flex-wrap gap-1.5 items-center min-h-[36px] border-x border-slate-200 dark:border-white/10 relative">
+                                <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 mr-1">Tags:</span>
+
+                                {/* Tags existentes (clique para remover) */}
+                                {selectedTicket.tags?.map((t: any) => (
+                                    <button
+                                        key={t.tag.id}
+                                        onClick={async () => {
+                                            const currentTagIds = (selectedTicket.tags ?? []).map((tg: any) => tg.tag?.id || tg.id);
+                                            const newTagIds = currentTagIds.filter((id: string) => id !== (t.tag?.id || t.id));
+                                            try {
+                                                const updated = await ticketsService.update(selectedTicket.id, { tagIds: newTagIds });
+                                                setSelectedTicket((prev: any) => prev ? { ...prev, tags: updated.tags ?? prev.tags } : prev);
+                                                setTickets((prev: any[]) => prev.map((tk: any) => tk.id === selectedTicket.id ? { ...tk, tags: updated.tags ?? tk.tags } : tk));
+                                                toast.success('Tag removida');
+                                            } catch { toast.error('Erro ao remover tag'); }
+                                        }}
+                                        className="group/tag flex items-center gap-1 px-2 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-widest border border-white/20 transition-all hover:opacity-70"
+                                        style={{ backgroundColor: `${t.tag.color}20`, color: t.tag.color }}
+                                        title={`Remover "${t.tag.name}"`}
+                                    >
+                                        {t.tag.name}
+                                        <X size={8} className="opacity-0 group-hover/tag:opacity-100 transition-opacity shrink-0" />
+                                    </button>
+                                ))}
+
+                                {/* Input para adicionar tag */}
+                                <div className="relative flex items-center">
+                                    <input
+                                        type="text"
+                                        value={tagBarSearch}
+                                        onChange={e => { setTagBarSearch(e.target.value); setShowTagBarDropdown(true); }}
+                                        onFocus={() => setShowTagBarDropdown(true)}
+                                        placeholder="+ tag..."
+                                        className="text-[8px] font-black uppercase tracking-widest placeholder:text-slate-400 bg-transparent outline-none w-12 focus:w-20 transition-all text-slate-600 dark:text-slate-300 cursor-text"
+                                    />
+                                    <AnimatePresence>
+                                        {showTagBarDropdown && (
+                                            <motion.div
+                                                initial={{ opacity: 0, y: 4, scale: 0.97 }}
+                                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                exit={{ opacity: 0, y: 4, scale: 0.97 }}
+                                                transition={{ duration: 0.12 }}
+                                                className="absolute top-full left-0 mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-xl shadow-2xl z-50 min-w-[160px] max-h-52 overflow-y-auto custom-scrollbar"
+                                            >
+                                                {availableTags
+                                                    .filter(tag => {
+                                                        const applied = (selectedTicket.tags ?? []).some((t: any) => (t.tag?.id || t.id) === tag.id);
+                                                        const matchesSearch = tag.name.toLowerCase().includes(tagBarSearch.toLowerCase());
+                                                        return !applied && matchesSearch;
+                                                    })
+                                                    .map(tag => (
+                                                        <button
+                                                            key={tag.id}
+                                                            type="button"
+                                                            onClick={async () => {
+                                                                const currentTagIds = (selectedTicket.tags ?? []).map((tg: any) => tg.tag?.id || tg.id);
+                                                                const newTagIds = [...currentTagIds, tag.id];
+                                                                try {
+                                                                    const updated = await ticketsService.update(selectedTicket.id, { tagIds: newTagIds });
+                                                                    setSelectedTicket((prev: any) => prev ? { ...prev, tags: updated.tags ?? prev.tags } : prev);
+                                                                    setTickets((prev: any[]) => prev.map((tk: any) => tk.id === selectedTicket.id ? { ...tk, tags: updated.tags ?? tk.tags } : tk));
+                                                                    setTagBarSearch('');
+                                                                    toast.success('Tag adicionada');
+                                                                } catch { toast.error('Erro ao adicionar tag'); }
+                                                            }}
+                                                            className="w-full flex items-center gap-2 px-3 py-2 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors text-left"
+                                                        >
+                                                            <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: tag.color }} />
+                                                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 truncate">{tag.name}</span>
+                                                        </button>
+                                                    ))}
+                                                {availableTags.filter(tag => {
+                                                    const applied = (selectedTicket.tags ?? []).some((t: any) => (t.tag?.id || t.id) === tag.id);
+                                                    return !applied && tag.name.toLowerCase().includes(tagBarSearch.toLowerCase());
+                                                }).length === 0 && (
+                                                    <p className="px-3 py-2 text-[10px] text-slate-400 italic">
+                                                        {tagBarSearch ? 'Nenhuma tag encontrada' : 'Todas as tags já foram aplicadas'}
+                                                    </p>
+                                                )}
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
+                                </div>
                             </div>
                         </div>
 

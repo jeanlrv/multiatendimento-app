@@ -52,8 +52,11 @@ export function CompanyManager() {
         e.preventDefault();
         setSubmitting(true);
         const toNum = (v: any) => (v !== '' && v !== undefined ? Number(v) : 0);
-        const payload = {
-            ...formData,
+        // Enviar apenas campos aceitos pelo UpdateCompanyDto (evita erro 400 por campos extras)
+        const payload: Record<string, any> = {
+            name: formData.name,
+            primaryColor: formData.primaryColor,
+            secondaryColor: formData.secondaryColor,
             limitTokens: toNum(formData.limitTokens),
             limitTokensPerHour: toNum(formData.limitTokensPerHour),
             limitTokensPerDay: toNum(formData.limitTokensPerDay),
