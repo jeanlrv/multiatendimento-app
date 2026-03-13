@@ -1,6 +1,7 @@
 import { Controller, Post, Body, Logger, Inject, forwardRef, HttpCode, BadRequestException } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../../database/prisma.service';
 import { WhatsAppService } from './whatsapp.service';
 import { ChatService } from '../chat/chat.service';
@@ -41,6 +42,7 @@ export class WebhooksController {
         @Inject(forwardRef(() => ChatService)) private chatService: ChatService,
         @Inject(forwardRef(() => ChatGateway)) private chatGateway: ChatGateway,
         private crypto: CryptoService,
+        private eventEmitter: EventEmitter2,
     ) { }
 
     /**
@@ -293,6 +295,17 @@ export class WebhooksController {
             return;
         }
 
+        // Ignorar Status do WhatsApp (stories de contatos) e reações
+        if (
+            payload.isStatus === true ||
+            payload.phone?.includes('@broadcast') ||
+            payload.phone?.includes('@status') ||
+            payload.reactionMessage
+        ) {
+            this.logger.debug(`[MSG] Ignorada (status/reação): ${payload.phone}`);
+            return;
+        }
+
         const phoneNumber: string = payload.phone;
         const instanceId: string = payload.instanceId;
 
@@ -341,6 +354,45 @@ export class WebhooksController {
                     name: payload.senderName || contact.name,
                 },
             });
+        }
+
+        // Interceptar resposta CSAT (1-5) se contato está aguardando avaliação
+        if ((contact as any).csatPending) {
+            const text = (payload.text?.message || payload.body || '').trim();
+            const score = parseInt(text, 10);
+            if (score >= 1 && score <= 5) {
+                // Registrar nota de satisfação no ticket original
+                const csatTicketId = (contact as any).csatTicketId;
+                if (csatTicketId) {
+                    // Evaluation.customerRating é o campo para CSAT (1-5)
+                    await (this.prisma as any).evaluation.updateMany({
+                        where: { ticketId: csatTicketId, companyId },
+                        data: { customerRating: score },
+                    });
+                }
+                // Limpar flags CSAT do contato
+                await (this.prisma as any).contact.update({
+                    where: { id: contact.id },
+                    data: { csatPending: false, csatTicketId: null },
+                });
+                this.logger.log(`CSAT registrado: contato ${contact.id} avaliou ${score}/5 no ticket ${csatTicketId}`);
+
+                // Emitir evento csat.received (workflows + re-análise sentimental)
+                this.eventEmitter.emit('csat.received', {
+                    ticketId: csatTicketId,
+                    companyId,
+                    customerRating: score,
+                    contactId: contact.id,
+                });
+
+                return; // Não criar ticket para resposta CSAT
+            } else {
+                // Resposta inválida — limpar flags e processar como mensagem normal
+                await (this.prisma as any).contact.update({
+                    where: { id: contact.id },
+                    data: { csatPending: false, csatTicketId: null },
+                });
+            }
         }
 
         // Buscar ticket ativo existente para este contato

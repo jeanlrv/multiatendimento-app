@@ -140,6 +140,11 @@ export default function TicketsPage() {
     });
     const [showColorPicker, setShowColorPicker] = useState(false);
     const colorPickerRef = useRef<HTMLDivElement>(null);
+    const [colorPickerPos, setColorPickerPos] = useState({ top: 0, right: 0 });
+    const [tagBarDropdownPos, setTagBarDropdownPos] = useState({ top: 0, left: 0 });
+    const tagInputRef = useRef<HTMLInputElement>(null);
+    const [aiSectionOpen, setAiSectionOpen] = useState(true);
+    const [humanSectionOpen, setHumanSectionOpen] = useState(true);
     const updateBubbleColor = (key: 'sent' | 'received', value: string) => {
         setBubbleColors(prev => {
             const next = { ...prev, [key]: value };
@@ -428,10 +433,13 @@ export default function TicketsPage() {
         const imageItem = items.find(item => item.type.startsWith('image/'));
         if (imageItem) {
             e.preventDefault();
-            const file = imageItem.getAsFile();
-            if (file) {
+            const blob = imageItem.getAsFile();
+            if (blob) {
+                // Clipboard não garante nome — gerar nome válido com timestamp
+                const ext = blob.type.split('/')[1] || 'png';
+                const namedFile = new File([blob], `imagem-colada-${Date.now()}.${ext}`, { type: blob.type });
                 toast.info('Enviando imagem colada...');
-                uploadAndSendFile(file);
+                uploadAndSendFile(namedFile);
             }
         }
     };
@@ -795,6 +803,124 @@ export default function TicketsPage() {
         );
     };
 
+    const aiTickets = filter === 'IN_PROGRESS' ? tickets.filter((t: any) => t.mode === 'AI' || t.mode === 'HIBRIDO') : [];
+    const humanTickets = filter === 'IN_PROGRESS' ? tickets.filter((t: any) => t.mode === 'HUMANO') : [];
+
+    const renderTicketCard = (ticket: any) => (
+        <motion.button
+            key={ticket.id}
+            onClick={() => handleSelectTicket(ticket)}
+            className={`w-full text-left p-2.5 rounded-2xl transition-all border relative group/card ${selectedTicket?.id === ticket.id
+                ? 'bg-primary/10 border-primary shadow-md shadow-primary/5'
+                : 'bg-white/60 dark:bg-transparent border-transparent hover:border-white/40 dark:hover:border-white/10'
+                } ${selectedTicketIds.includes(ticket.id) ? 'ring-2 ring-primary ring-offset-2 dark:ring-offset-slate-900 border-primary bg-primary/5' : ''}`}
+            whileHover={{ x: 5 }}
+            whileTap={{ scale: 0.98 }}
+        >
+            {/* Checkbox para seleção em lote */}
+            <div
+                onClick={(e) => handleToggleSelection(ticket.id, e)}
+                className={`absolute left-2 top-1/2 -translate-y-1/2 h-6 w-6 rounded-lg border-2 flex items-center justify-center transition-all z-20 ${selectedTicketIds.includes(ticket.id)
+                    ? 'bg-primary border-primary text-white'
+                    : 'border-slate-200 dark:border-white/10 bg-white dark:bg-slate-800 opacity-0 group-hover/card:opacity-100'
+                    }`}
+            >
+                {selectedTicketIds.includes(ticket.id) && <CheckCheck size={12} />}
+            </div>
+            <div className={`flex items-start justify-between mb-2 transition-transform ${selectedTicketIds.length > 0 || selectedTicketIds.includes(ticket.id) ? 'pl-6' : ''}`}>
+                <div className="flex items-center gap-3">
+                    <div className="relative">
+                        <div
+                            className={`h-10 w-10 rounded-xl flex items-center justify-center font-black text-base transition-all duration-500 ${selectedTicket?.id === ticket.id
+                                ? 'text-white shadow-lg'
+                                : 'bg-slate-200 dark:bg-white/5 text-slate-600 dark:text-gray-400'
+                                }`}
+                            style={{
+                                backgroundColor: selectedTicket?.id === ticket.id
+                                    ? (ticket.department.color || '#2563eb')
+                                    : undefined,
+                                boxShadow: selectedTicket?.id === ticket.id
+                                    ? `0 10px 20px ${(ticket.department.color || '#2563eb')}40`
+                                    : undefined
+                            }}
+                        >
+                            {ticket.department.emoji || ticket.contact.name.charAt(0)}
+                        </div>
+                        {ticket.priority !== 'MEDIUM' && (
+                            <div className={`absolute -top-1 -right-1 h-4 w-4 rounded-full border-2 border-white dark:border-slate-900 ${ticket.priority === 'CRITICAL' ? 'bg-rose-500' :
+                                ticket.priority === 'HIGH' ? 'bg-amber-500' : 'bg-slate-400'
+                                }`} />
+                        )}
+                    </div>
+                    <div className="flex-1 min-w-0 transition-transform flex flex-col gap-2">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                                <h3 className={`text-[13px] font-black tracking-tight leading-none truncate ${selectedTicket?.id === ticket.id ? 'text-primary' : 'text-slate-800 dark:text-white'}`}>
+                                    {ticket.contact.name || 'Contato'}
+                                </h3>
+                                <span className="text-[9px] font-mono text-slate-400 bg-slate-100 dark:bg-white/5 px-1 py-0.5 rounded-md shrink-0">
+                                    #{ticket.id.substring(ticket.id.length - 4).toUpperCase()}
+                                </span>
+                                {ticket.unreadMessages > 0 && (
+                                    <span className="h-1.5 w-1.5 bg-primary rounded-full animate-ping shrink-0" />
+                                )}
+                            </div>
+                            <div className="flex flex-col items-end gap-0.5 shrink-0">
+                                {ticket.assignedUser && (
+                                    <div className="flex items-center gap-1 bg-blue-50 dark:bg-blue-500/10 px-1 py-0.5 rounded-md border border-blue-100 dark:border-blue-500/20">
+                                        <User size={8} className="text-blue-600 dark:text-blue-400" />
+                                        <span className="text-[7.5px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-tighter">
+                                            {ticket.assignedUser.name.split(' ')[0]}
+                                        </span>
+                                    </div>
+                                )}
+                                <span className={`px-1.5 py-0.5 rounded-md text-[7.5px] font-black uppercase tracking-tighter ${selectedTicket?.id === ticket.id ? 'bg-primary/20 text-primary border border-primary/20' : 'bg-slate-100 dark:bg-white/5 text-slate-500'}`}>
+                                    {translateStatus(ticket.status)}
+                                </span>
+                            </div>
+                        </div>
+                        {ticket.subject && (
+                            <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 line-clamp-1 italic">
+                                {ticket.subject}
+                            </p>
+                        )}
+                        <div className="flex flex-nowrap gap-1">
+                            {ticket.tags?.slice(0, 2).map((t: any) => (
+                                <span
+                                    key={t.tag.id}
+                                    className="px-1.5 py-0.5 rounded-lg text-[7px] font-black uppercase tracking-widest border border-white/20 truncate max-w-[80px]"
+                                    style={{ backgroundColor: `${t.tag.color}20`, color: t.tag.color }}
+                                >
+                                    {t.tag.name}
+                                </span>
+                            ))}
+                            {(ticket.tags?.length || 0) > 2 && (
+                                <span className="text-[7px] font-black text-slate-400 self-center">
+                                    +{(ticket.tags?.length || 0) - 2}
+                                </span>
+                            )}
+                        </div>
+                        <div className="flex items-center justify-between mt-auto overflow-hidden gap-1">
+                            <div className="flex items-center gap-1 min-w-0 overflow-hidden">
+                                <p
+                                    className="text-[10px] font-black uppercase tracking-widest italic truncate max-w-[90px]"
+                                    style={{ color: ticket.department.color || undefined, opacity: selectedTicket?.id === ticket.id ? 1 : 0.6 }}
+                                >
+                                    {ticket.department.name}
+                                </p>
+                                <div className="h-1 w-1 shrink-0 bg-slate-300 rounded-full" />
+                                <p className="text-[10px] font-bold opacity-40 shrink-0">
+                                    {new Date(ticket.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </p>
+                            </div>
+                            <SlaIndicator ticket={ticket as any} />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </motion.button>
+    );
+
     return (
         <div className="flex flex-col md:flex-row h-full gap-3 md:gap-4 max-w-full relative overflow-hidden">
             {/* Lista de Tickets - Esquerda */}
@@ -1022,125 +1148,38 @@ export default function TicketsPage() {
                             <Bot className="h-12 w-12 mb-4" />
                             <p className="text-xs font-black uppercase tracking-widest">Vazio</p>
                         </div>
-                    ) : (
-                        tickets.map((ticket, idx) => (
-                            <motion.button
-                                key={ticket.id}
-                                onClick={() => handleSelectTicket(ticket)}
-                                className={`w-full text-left p-2.5 rounded-2xl transition-all border relative group/card ${selectedTicket?.id === ticket.id
-                                    ? 'bg-primary/10 border-primary shadow-md shadow-primary/5'
-                                    : 'bg-white/60 dark:bg-transparent border-transparent hover:border-white/40 dark:hover:border-white/10'
-                                    } ${selectedTicketIds.includes(ticket.id) ? 'ring-2 ring-primary ring-offset-2 dark:ring-offset-slate-900 border-primary bg-primary/5' : ''}`}
-                                whileHover={{ x: 5 }}
-                                whileTap={{ scale: 0.98 }}
+                    ) : filter === 'IN_PROGRESS' ? (
+                        <>
+                            {/* Seção EM ATENDIMENTO IA */}
+                            <button
+                                onClick={() => setAiSectionOpen(v => !v)}
+                                className="flex items-center justify-between w-full px-2 py-1.5 rounded-xl bg-blue-50 dark:bg-blue-500/10 border border-blue-100 dark:border-blue-500/20 mb-1 transition-all hover:bg-blue-100 dark:hover:bg-blue-500/20"
                             >
-                                {/* Checkbox para seleção em lote */}
-                                <div
-                                    onClick={(e) => handleToggleSelection(ticket.id, e)}
-                                    className={`absolute left-2 top-1/2 -translate-y-1/2 h-6 w-6 rounded-lg border-2 flex items-center justify-center transition-all z-20 ${selectedTicketIds.includes(ticket.id)
-                                        ? 'bg-primary border-primary text-white'
-                                        : 'border-slate-200 dark:border-white/10 bg-white dark:bg-slate-800 opacity-0 group-hover/card:opacity-100'
-                                        }`}
-                                >
-                                    {selectedTicketIds.includes(ticket.id) && <CheckCheck size={12} />}
+                                <div className="flex items-center gap-1.5">
+                                    <Bot size={10} className="text-blue-500 shrink-0" />
+                                    <span className="text-[9px] font-black uppercase tracking-widest text-blue-600 dark:text-blue-400">Em Atend. IA</span>
+                                    <span className="text-[8px] font-black bg-blue-500 text-white rounded-full px-1.5 py-0.5 leading-none">{aiTickets.length}</span>
                                 </div>
-                                <div className={`flex items-start justify-between mb-2 transition-transform ${selectedTicketIds.length > 0 || selectedTicketIds.includes(ticket.id) ? 'pl-6' : ''}`}>
-                                    <div className="flex items-center gap-3">
-                                        <div className="relative">
-                                            <div
-                                                className={`h-10 w-10 rounded-xl flex items-center justify-center font-black text-base transition-all duration-500 ${selectedTicket?.id === ticket.id
-                                                    ? 'text-white shadow-lg'
-                                                    : 'bg-slate-200 dark:bg-white/5 text-slate-600 dark:text-gray-400'
-                                                    }`}
-                                                style={{
-                                                    backgroundColor: selectedTicket?.id === ticket.id
-                                                        ? (ticket.department.color || '#2563eb')
-                                                        : undefined,
-                                                    boxShadow: selectedTicket?.id === ticket.id
-                                                        ? `0 10px 20px ${(ticket.department.color || '#2563eb')}40`
-                                                        : undefined
-                                                }}
-                                            >
-                                                {ticket.department.emoji || ticket.contact.name.charAt(0)}
-                                            </div>
-                                            {/* Badge de Prioridade */}
-                                            {ticket.priority !== 'MEDIUM' && (
-                                                <div className={`absolute -top-1 -right-1 h-4 w-4 rounded-full border-2 border-white dark:border-slate-900 ${ticket.priority === 'CRITICAL' ? 'bg-rose-500' :
-                                                    ticket.priority === 'HIGH' ? 'bg-amber-500' : 'bg-slate-400'
-                                                    }`} />
-                                            )}
-                                        </div>
-                                        <div className="flex-1 min-w-0 transition-transform flex flex-col gap-2">
-                                            <div className="flex items-center justify-between">
-                                                <div className="flex items-center gap-1.5 min-w-0">
-                                                    <h3 className={`text-[13px] font-black tracking-tight leading-none truncate ${selectedTicket?.id === ticket.id ? 'text-primary' : 'text-slate-800 dark:text-white'}`}>
-                                                        {ticket.contact.name || 'Contato'}
-                                                    </h3>
-                                                    <span className="text-[9px] font-mono text-slate-400 bg-slate-100 dark:bg-white/5 px-1 py-0.5 rounded-md shrink-0">
-                                                        #{ticket.id.substring(ticket.id.length - 4).toUpperCase()}
-                                                    </span>
-                                                    {ticket.unreadMessages > 0 && (
-                                                        <span className="h-1.5 w-1.5 bg-primary rounded-full animate-ping shrink-0" />
-                                                    )}
-                                                </div>
-                                                <div className="flex flex-col items-end gap-0.5 shrink-0">
-                                                    {ticket.assignedUser && (
-                                                        <div className="flex items-center gap-1 bg-blue-50 dark:bg-blue-500/10 px-1 py-0.5 rounded-md border border-blue-100 dark:border-blue-500/20">
-                                                            <User size={8} className="text-blue-600 dark:text-blue-400" />
-                                                            <span className="text-[7.5px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-tighter">
-                                                                {ticket.assignedUser.name.split(' ')[0]}
-                                                            </span>
-                                                        </div>
-                                                    )}
-                                                    <span className={`px-1.5 py-0.5 rounded-md text-[7.5px] font-black uppercase tracking-tighter ${selectedTicket?.id === ticket.id ? 'bg-primary/20 text-primary border border-primary/20' : 'bg-slate-100 dark:bg-white/5 text-slate-500'}`}>
-                                                        {translateStatus(ticket.status)}
-                                                    </span>
-                                                </div>
-                                            </div>
+                                <ChevronDown size={11} className={`text-blue-400 transition-transform duration-200 ${aiSectionOpen ? '' : '-rotate-90'}`} />
+                            </button>
+                            {aiSectionOpen && aiTickets.map((ticket: any) => renderTicketCard(ticket))}
 
-                                            {ticket.subject && (
-                                                <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 line-clamp-1 italic">
-                                                    {ticket.subject}
-                                                </p>
-                                            )}
-
-                                            <div className="flex flex-nowrap gap-1">
-                                                {ticket.tags?.slice(0, 2).map((t: any) => (
-                                                    <span
-                                                        key={t.tag.id}
-                                                        className="px-1.5 py-0.5 rounded-lg text-[7px] font-black uppercase tracking-widest border border-white/20 truncate max-w-[80px]"
-                                                        style={{ backgroundColor: `${t.tag.color}20`, color: t.tag.color }}
-                                                    >
-                                                        {t.tag.name}
-                                                    </span>
-                                                ))}
-                                                {(ticket.tags?.length || 0) > 2 && (
-                                                    <span className="text-[7px] font-black text-slate-400 self-center">
-                                                        +{(ticket.tags?.length || 0) - 2}
-                                                    </span>
-                                                )}
-                                            </div>
-
-                                            <div className="flex items-center justify-between mt-auto overflow-hidden gap-1">
-                                                <div className="flex items-center gap-1 min-w-0 overflow-hidden">
-                                                    <p
-                                                        className="text-[10px] font-black uppercase tracking-widest italic truncate max-w-[90px]"
-                                                        style={{ color: ticket.department.color || undefined, opacity: selectedTicket?.id === ticket.id ? 1 : 0.6 }}
-                                                    >
-                                                        {ticket.department.name}
-                                                    </p>
-                                                    <div className="h-1 w-1 shrink-0 bg-slate-300 rounded-full" />
-                                                    <p className="text-[10px] font-bold opacity-40 shrink-0">
-                                                        {new Date(ticket.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                    </p>
-                                                </div>
-                                                <SlaIndicator ticket={ticket as any} />
-                                            </div>
-                                        </div>
-                                    </div>
+                            {/* Seção EM ATENDIMENTO HUMANO */}
+                            <button
+                                onClick={() => setHumanSectionOpen(v => !v)}
+                                className="flex items-center justify-between w-full px-2 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-100 dark:border-amber-500/20 mt-2 mb-1 transition-all hover:bg-amber-100 dark:hover:bg-amber-500/20"
+                            >
+                                <div className="flex items-center gap-1.5">
+                                    <User size={10} className="text-amber-500 shrink-0" />
+                                    <span className="text-[9px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-400">Em Atend. Humano</span>
+                                    <span className="text-[8px] font-black bg-amber-500 text-white rounded-full px-1.5 py-0.5 leading-none">{humanTickets.length}</span>
                                 </div>
-                            </motion.button>
-                        ))
+                                <ChevronDown size={11} className={`text-amber-400 transition-transform duration-200 ${humanSectionOpen ? '' : '-rotate-90'}`} />
+                            </button>
+                            {humanSectionOpen && humanTickets.map((ticket: any) => renderTicketCard(ticket))}
+                        </>
+                    ) : (
+                        tickets.map((ticket: any) => renderTicketCard(ticket))
                     )}
                 </div>
             </div>
@@ -1569,7 +1608,11 @@ export default function TicketsPage() {
                                         {/* Personalizar Cores dos Balões */}
                                         <div className="relative" ref={colorPickerRef}>
                                             <button
-                                                onClick={() => setShowColorPicker(!showColorPicker)}
+                                                onClick={() => {
+                                                    const rect = colorPickerRef.current?.getBoundingClientRect();
+                                                    if (rect) setColorPickerPos({ top: rect.bottom + 8, right: window.innerWidth - rect.right });
+                                                    setShowColorPicker(v => !v);
+                                                }}
                                                 className={`p-2 rounded-xl transition-all ${showColorPicker ? 'bg-primary text-white' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5'}`}
                                                 title="Personalizar cores dos balões"
                                             >
@@ -1582,7 +1625,8 @@ export default function TicketsPage() {
                                                         animate={{ opacity: 1, y: 0, scale: 1 }}
                                                         exit={{ opacity: 0, y: 8, scale: 0.95 }}
                                                         transition={{ duration: 0.15 }}
-                                                        className="absolute top-full right-0 mt-2 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-white/10 p-4 z-50 w-52"
+                                                        className="fixed bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-white/10 p-4 z-[200] w-52"
+                                                        style={{ top: colorPickerPos.top, right: colorPickerPos.right }}
                                                     >
                                                         <p className="text-[10px] font-black uppercase tracking-widest text-primary mb-3">Cores dos balões</p>
                                                         <div className="space-y-3">
@@ -1724,10 +1768,15 @@ export default function TicketsPage() {
                                 {/* Input para adicionar tag */}
                                 <div className="relative flex items-center">
                                     <input
+                                        ref={tagInputRef}
                                         type="text"
                                         value={tagBarSearch}
                                         onChange={e => { setTagBarSearch(e.target.value); setShowTagBarDropdown(true); }}
-                                        onFocus={() => setShowTagBarDropdown(true)}
+                                        onFocus={() => {
+                                            const rect = tagInputRef.current?.getBoundingClientRect();
+                                            if (rect) setTagBarDropdownPos({ top: rect.bottom + 4, left: rect.left });
+                                            setShowTagBarDropdown(true);
+                                        }}
                                         placeholder="+ tag..."
                                         className="text-[8px] font-black uppercase tracking-widest placeholder:text-slate-400 bg-transparent outline-none w-12 focus:w-20 transition-all text-slate-600 dark:text-slate-300 cursor-text"
                                     />
@@ -1738,7 +1787,8 @@ export default function TicketsPage() {
                                                 animate={{ opacity: 1, y: 0, scale: 1 }}
                                                 exit={{ opacity: 0, y: 4, scale: 0.97 }}
                                                 transition={{ duration: 0.12 }}
-                                                className="absolute top-full left-0 mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-xl shadow-2xl z-50 min-w-[160px] max-h-52 overflow-y-auto custom-scrollbar"
+                                                className="fixed bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-xl shadow-2xl z-[200] min-w-[160px] max-h-52 overflow-y-auto custom-scrollbar"
+                                                style={{ top: tagBarDropdownPos.top, left: tagBarDropdownPos.left }}
                                             >
                                                 {availableTags
                                                     .filter(tag => {

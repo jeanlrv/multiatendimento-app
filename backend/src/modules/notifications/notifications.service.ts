@@ -98,4 +98,29 @@ export class NotificationsService {
             entityId: payload.ticketId,
         }).catch(err => this.logger.error('Erro ao criar notificação sla.breach:', err.message));
     }
+
+    @OnEvent('evaluation.negative_score')
+    async onNegativeSentiment(payload: { ticketId: string; companyId: string; score: number; threshold: number; summary: string }) {
+        // Notificar todos os gestores e admins da empresa
+        const managers = await this.prisma.user.findMany({
+            where: {
+                companyId: payload.companyId,
+                role: { name: { in: ['ADMIN', 'MANAGER', 'admin', 'manager'] } },
+            },
+            include: { role: true },
+        });
+
+        const scoreFormatted = payload.score.toFixed(1);
+        await Promise.all(managers.map(manager =>
+            this.create({
+                userId: manager.id,
+                companyId: payload.companyId,
+                type: 'evaluation.negative_score',
+                title: `Avaliação sentimental baixa: ${scoreFormatted}/10`,
+                body: `Ticket #${payload.ticketId.slice(-4).toUpperCase()} — ${payload.summary?.substring(0, 120) || 'Score abaixo do limite configurado.'}`,
+                entityType: 'ticket',
+                entityId: payload.ticketId,
+            }).catch(err => this.logger.error(`Erro ao notificar gestor ${manager.id}:`, err.message))
+        ));
+    }
 }

@@ -6,6 +6,7 @@ import { CreateWhatsAppDto } from './dto/create-whatsapp.dto';
 import { UpdateWhatsAppDto } from './dto/update-whatsapp.dto';
 import { IntegrationsService } from '../settings/integrations.service';
 import { CryptoService } from '../../common/services/crypto.service';
+import { OnEvent } from '@nestjs/event-emitter';
 
 @Injectable()
 export class WhatsAppService {
@@ -392,6 +393,16 @@ export class WhatsAppService {
         } catch (error) {
             this.logger.error(`Erro ao enviar vídeo via Z-API: ${error.message}`);
             throw error;
+        }
+    }
+
+    @OnEvent('csat.pending')
+    async handleCsatPending(payload: { companyId: string; ticketId: string; connectionId: string; phoneNumber: string; message: string }) {
+        try {
+            await this.sendMessage(payload.connectionId, payload.phoneNumber, payload.message, payload.companyId);
+            this.logger.log(`CSAT enviado para ${payload.phoneNumber} (ticket ${payload.ticketId})`);
+        } catch (error) {
+            this.logger.error(`Falha ao enviar CSAT para ticket ${payload.ticketId}: ${error.message}`);
         }
     }
 }

@@ -220,9 +220,44 @@ export class ChatService {
             // AIService.chat() já verifica limites de tokens e registra uso
             const aiResponse = await this.aiService.chat(ticket.companyId, ticket.department.aiAgentId, content, history);
 
-            if (aiResponse) {
-                await this.sendMessage(ticketId, aiResponse, true, 'TEXT', undefined, ticket.companyId, 'AI');
+            if (!aiResponse) return;
+
+            // Detectar comando de roteamento: [TRANSFERIR:NomeDepartamento] ou [FINALIZAR]
+            const transferMatch = aiResponse.match(/\[TRANSFERIR:([^\]]+)\]/i);
+            const finalizeMatch = aiResponse.match(/\[FINALIZAR\]/i);
+
+            if (transferMatch) {
+                const deptName = transferMatch[1].trim();
+                const targetDept = await this.prisma.department.findFirst({
+                    where: {
+                        companyId: ticket.companyId,
+                        name: { equals: deptName, mode: 'insensitive' },
+                    },
+                });
+                if (targetDept) {
+                    await this.prisma.ticket.update({
+                        where: { id: ticketId },
+                        data: { departmentId: targetDept.id },
+                    });
+                    this.eventEmitter.emit('ticket.status_changed', { ticketId, companyId: ticket.companyId });
+                    this.logger.log(`IA transferiu ticket ${ticketId} para departamento "${deptName}"`);
+                } else {
+                    this.logger.warn(`IA tentou transferir para departamento "${deptName}" não encontrado`);
+                }
+                return; // Não enviar o texto do comando ao cliente
             }
+
+            if (finalizeMatch) {
+                await this.prisma.ticket.update({
+                    where: { id: ticketId },
+                    data: { status: 'RESOLVED', resolvedAt: new Date() },
+                });
+                this.eventEmitter.emit('ticket.resolved', { ticketId, companyId: ticket.companyId });
+                this.logger.log(`IA finalizou ticket ${ticketId}`);
+                return; // Não enviar o texto do comando ao cliente
+            }
+
+            await this.sendMessage(ticketId, aiResponse, true, 'TEXT', undefined, ticket.companyId, 'AI');
         } catch (error) {
             this.logger.error(`Erro ao processar resposta de IA: ${error.message}`);
         }

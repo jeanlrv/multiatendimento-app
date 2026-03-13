@@ -1,4 +1,5 @@
 import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
+import { OnEvent } from '@nestjs/event-emitter';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateEvaluationDto } from './dto/create-evaluation.dto';
 import { AIService } from '../ai/ai.service';
@@ -40,8 +41,9 @@ export class EvaluationsService {
             where: { id: ticketId, companyId },
             include: {
                 department: true,
-                messages: { orderBy: { sentAt: 'asc' } }
-            }
+                messages: { orderBy: { sentAt: 'asc' } },
+                evaluation: true,
+            } as any
         });
 
         if (!ticket || !ticket.department?.aiAgentId || ticket.messages.length === 0) {
@@ -49,9 +51,17 @@ export class EvaluationsService {
             return null;
         }
 
-        const conversation = ticket.messages
-            .map(m => `${m.fromMe ? 'Atendente' : 'Cliente'}: ${m.content}`)
+        const conversationLines = ticket.messages
+            .map((m: any) => `${m.fromMe ? 'Atendente' : 'Cliente'}: ${m.content}`)
             .join('\n');
+
+        // Incluir nota CSAT do cliente no contexto se disponível
+        const csatRating = (ticket as any).evaluation?.customerRating;
+        const csatContext = csatRating
+            ? `\n\n[Nota CSAT do cliente: ${csatRating}/5 — considere esta avaliação na análise do score final]`
+            : '';
+
+        const conversation = conversationLines + csatContext;
 
         const result = await this.aiService.analyzeSentiment(companyId, ticket.department.aiAgentId, conversation);
 
@@ -83,6 +93,20 @@ export class EvaluationsService {
         });
 
         this.chatGateway.emitSentimentUpdate(ticketId, evaluation);
+
+        // Alerta sentimental: verificar threshold da empresa
+        const company = await this.prisma.company.findUnique({ where: { id: companyId } });
+        const threshold = (company as any)?.sentimentAlertThreshold ?? 5;
+        if (result.score < threshold) {
+            this.eventEmitter.emit('evaluation.negative_score', {
+                ticketId,
+                companyId,
+                score: result.score,
+                threshold,
+                summary: result.justification,
+            });
+            this.logger.warn(`Alerta sentimental: ticket ${ticketId} score ${result.score} < ${threshold}`);
+        }
 
         return evaluation;
     }
@@ -147,6 +171,26 @@ export class EvaluationsService {
                 customerRating: rating,
                 customerFeedback: feedback,
             }
+        });
+    }
+
+    /**
+     * Quando o cliente responde ao CSAT, re-executa a análise sentimental
+     * para que o score final incorpore a nota 1-5 do cliente.
+     */
+    @OnEvent('csat.received')
+    async onCsatReceived(payload: { ticketId: string; companyId: string; customerRating: number }) {
+        if (!payload.ticketId || !payload.companyId) return;
+        this.logger.log(`Re-analisando sentimento após CSAT (nota ${payload.customerRating}/5) para ticket ${payload.ticketId}`);
+
+        // Forçar re-análise (ignorar cache de 2min): zeramos o aiSentiment temporariamente
+        await this.prisma.evaluation.updateMany({
+            where: { ticketId: payload.ticketId, companyId: payload.companyId },
+            data: { aiSentiment: null as any },
+        });
+
+        this.generateAISentimentAnalysis(payload.companyId, payload.ticketId).catch(err => {
+            this.logger.error(`Falha na re-análise pós-CSAT para ticket ${payload.ticketId}: ${err.message}`);
         });
     }
 }

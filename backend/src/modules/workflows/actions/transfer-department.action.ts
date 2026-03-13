@@ -11,41 +11,45 @@ export class TransferDepartmentAction implements ActionExecutor {
     async execute(context: WorkflowContext, params: any): Promise<ActionResult> {
         this.logger.log(`Executing TransferDepartmentAction for workflow ${context.workflowId}`);
 
-        const { departmentId } = params;
+        const { departmentId, departmentName, mode } = params;
         const ticketId = context.entityId || context.variables?.ticketId;
 
         if (!ticketId || context.entityType !== 'ticket') {
             return { success: false, error: 'Ação suportada apenas para tickets' };
         }
 
-        if (!departmentId) {
-            return { success: false, error: 'ID do departamento de destino é obrigatório' };
+        if (!departmentId && !departmentName) {
+            return { success: false, error: 'É necessário informar o ID ou nome do departamento de destino' };
         }
 
         try {
-            // Verifica se o departamento existe para evitar erro de FK
-            const dept = await (this.prisma as any).department.findUnique({
-                where: { id: departmentId }
-            });
+            // Buscar departamento: ID tem prioridade; fallback por nome
+            let dept: any;
+            if (departmentId) {
+                dept = await (this.prisma as any).department.findUnique({ where: { id: departmentId } });
+            } else {
+                // Busca pelo nome dentro da empresa do ticket
+                const ticket = await (this.prisma as any).ticket.findUnique({ where: { id: ticketId }, select: { companyId: true } });
+                dept = await (this.prisma as any).department.findFirst({
+                    where: { companyId: ticket?.companyId, name: { equals: departmentName, mode: 'insensitive' } }
+                });
+            }
 
             if (!dept) {
-                return { success: false, error: `Departamento ${departmentId} não encontrado` };
+                return { success: false, error: `Departamento "${departmentId || departmentName}" não encontrado` };
             }
+
+            const updateData: any = { departmentId: dept.id, updatedAt: new Date() };
+            if (mode) updateData.mode = mode;
 
             await (this.prisma as any).ticket.update({
                 where: { id: ticketId },
-                data: {
-                    departmentId,
-                    updatedAt: new Date()
-                }
+                data: updateData
             });
 
             return {
                 success: true,
-                data: {
-                    ticketId,
-                    departmentId
-                }
+                data: { ticketId, departmentId: dept.id, departmentName: dept.name }
             };
         } catch (error) {
             this.logger.error(`TransferDepartment Error: ${error.message}`);

@@ -10,22 +10,35 @@ import { Node, Edge } from 'reactflow';
 // ========================================
 
 export type WorkflowEvent =
-    | 'ticket.created'
-    | 'ticket.updated'
-    | 'message.received'
-    | 'contact.risk_high'
-    | 'manual.trigger'
+    // ── Ticket ──────────────────────────────────────────────────────────────
+    | 'ticket.created'           // Novo ticket aberto
+    | 'ticket.updated'           // Ticket editado (qualquer campo)
+    | 'ticket.status_changed'    // Status mudou (OPEN → IN_PROGRESS → RESOLVED etc.)
+    | 'ticket.resolved'          // Ticket finalizado (alias explícito para RESOLVED)
+    | 'ticket.assigned'          // Ticket atribuído a um atendente
+    | 'ticket.transferred'       // Ticket transferido para outro departamento
+    | 'ticket.sla_breached'      // SLA violado
 
-    // Ticket Events (Épico 3)
-    | 'ticket.status_changed'
-    | 'ticket.sla_breached'
+    // ── Mensagem ─────────────────────────────────────────────────────────────
+    | 'message.received'         // Nova mensagem do cliente
 
-    // Scheduling Events
+    // ── Avaliação / CSAT ─────────────────────────────────────────────────────
+    | 'evaluation.created'       // Análise sentimental gerada pela IA
+    | 'evaluation.negative_score'// Score sentimental abaixo do threshold da empresa
+    | 'csat.received'            // Cliente respondeu à pesquisa CSAT (1-5)
+
+    // ── Contato ──────────────────────────────────────────────────────────────
+    | 'contact.risk_high'        // Score de risco do contato acima do limite
+
+    // ── Agendamento ──────────────────────────────────────────────────────────
     | 'schedule.created'
     | 'schedule.pending'
     | 'schedule.confirmed'
     | 'schedule.cancelled'
-    | 'schedule.no_show';
+    | 'schedule.no_show'
+
+    // ── Manual ───────────────────────────────────────────────────────────────
+    | 'manual.trigger';          // Disparo manual via UI ou API
 
 
 // ========================================
@@ -53,16 +66,23 @@ export interface WorkflowCondition {
 // ========================================
 
 export type WorkflowActionType =
+    // Comunicação
     | 'send_message'
-    | 'create_schedule'
-    | 'update_schedule_status'
-    | 'update_ticket'
-    | 'ai_intent'
     | 'send_email'
     | 'http_webhook'
+    // Ticket
+    | 'update_ticket'
     | 'add_tag'
     | 'transfer_to_human'
+    | 'transfer_department'
+    // IA
+    | 'ai_intent'
+    | 'ai_respond'
     | 'analyze_sentiment'
+    | 'notify_managers'
+    // Agendamento
+    | 'create_schedule'
+    | 'update_schedule_status'
     | string;
 
 
@@ -106,7 +126,7 @@ export interface WorkflowExecution {
     workflowRuleId: string;
     entityType: string;
     entityId: string;
-    status: 'success' | 'failed' | 'partial';
+    status: 'success' | 'failed' | 'partial' | 'running' | 'waiting_event' | 'delayed';
     steps: any[];
     logs: any[];
     duration?: number;
@@ -162,6 +182,7 @@ export interface NodeData {
 
     // Condition
     conditions?: WorkflowCondition[];
+    conditionLogic?: 'AND' | 'OR';
 
     // Delay
     delayMs?: number;
@@ -171,8 +192,7 @@ export interface NodeData {
 
 
 /**
- * 🔥 CORREÇÃO DEFINITIVA:
- * Agora usamos os tipos do ReactFlow.
+ * Usamos os tipos do ReactFlow para nós e arestas.
  */
 
 export type WorkflowNode = Node<NodeData>;

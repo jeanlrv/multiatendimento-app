@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 
 interface AuditData {
-    userId: string;
+    userId?: string | null;
     companyId: string; // Torna obrigatório para multi-tenancy
     action: string;
     entity: string;
@@ -31,7 +31,7 @@ export class AuditService {
         try {
             return await this.prisma.auditLog.create({
                 data: {
-                    userId: data.userId,
+                    userId: data.userId ?? null,
                     companyId: data.companyId,
                     action: data.action,
                     entity: data.entity,

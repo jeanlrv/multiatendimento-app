@@ -55,6 +55,10 @@ const FIELD_CATALOG: FieldMeta[] = [
     { value: 'message.content',        label: 'Conteúdo da Mensagem',    group: 'Mensagem', type: 'string' },
     { value: 'message.messageType',    label: 'Tipo de Mídia',           group: 'Mensagem', type: 'enum',  values: [{ value: 'TEXT', label: 'Texto' }, { value: 'IMAGE', label: 'Imagem' }, { value: 'AUDIO', label: 'Áudio' }, { value: 'VIDEO', label: 'Vídeo' }, { value: 'DOCUMENT', label: 'Documento' }, { value: 'STICKER', label: 'Sticker' }] },
     { value: 'message.fromMe',         label: 'Enviado por Mim?',        group: 'Mensagem', type: 'enum',  values: [{ value: 'true', label: 'Sim' }, { value: 'false', label: 'Não' }] },
+    // Avaliação / Sentimento
+    { value: 'evaluation.aiSentiment',      label: 'Sentimento IA',              group: 'Avaliação', type: 'enum',   values: [{ value: 'POSITIVE', label: 'Positivo' }, { value: 'NEUTRAL', label: 'Neutro' }, { value: 'NEGATIVE', label: 'Negativo' }] },
+    { value: 'evaluation.aiSentimentScore', label: 'Score Sentimental IA (0-10)', group: 'Avaliação', type: 'number' },
+    { value: 'evaluation.customerRating',   label: 'Nota CSAT do Cliente (1-5)',  group: 'Avaliação', type: 'number' },
     // Agendamento
     { value: 'schedule.status',        label: 'Status do Agendamento',   group: 'Agendamento', type: 'enum', values: [{ value: 'PENDING', label: 'Pendente' }, { value: 'CONFIRMED', label: 'Confirmado' }, { value: 'CANCELLED', label: 'Cancelado' }, { value: 'NO_SHOW', label: 'Não Compareceu' }] },
 ];
@@ -85,18 +89,30 @@ const OPERATOR_LABELS: Record<WorkflowOperator, string> = {
 // ─────────────────────────────────────────────────────────────
 
 const EVENT_LABELS: Record<WorkflowEvent, string> = {
-    'ticket.created':       'Ticket Criado',
-    'ticket.updated':       'Ticket Atualizado',
-    'ticket.status_changed':'Mudança de Status',
-    'ticket.sla_breached':  'SLA Quebrado (Alerta!)',
-    'message.received':     'Mensagem Recebida',
-    'contact.risk_high':    'Contato com Risco Alto',
-    'manual.trigger':       'Disparo Manual',
-    'schedule.created':     'Agendamento Criado',
-    'schedule.pending':     'Agendamento Pendente',
-    'schedule.confirmed':   'Agendamento Confirmado',
-    'schedule.cancelled':   'Agendamento Cancelado',
-    'schedule.no_show':     'Cliente Não Compareceu',
+    // Ticket
+    'ticket.created':           'Ticket Criado',
+    'ticket.updated':           'Ticket Atualizado',
+    'ticket.status_changed':    'Mudança de Status',
+    'ticket.resolved':          'Ticket Finalizado',
+    'ticket.assigned':          'Ticket Atribuído a Atendente',
+    'ticket.transferred':       'Ticket Transferido de Departamento',
+    'ticket.sla_breached':      'SLA Quebrado (Alerta!)',
+    // Mensagem
+    'message.received':         'Mensagem Recebida',
+    // Avaliação / CSAT
+    'evaluation.created':       'Avaliação Sentimental Gerada',
+    'evaluation.negative_score':'Score Sentimental Baixo (Alerta!)',
+    'csat.received':            'Cliente Respondeu CSAT',
+    // Contato
+    'contact.risk_high':        'Contato com Risco Alto',
+    // Agendamento
+    'schedule.created':         'Agendamento Criado',
+    'schedule.pending':         'Agendamento Pendente',
+    'schedule.confirmed':       'Agendamento Confirmado',
+    'schedule.cancelled':       'Agendamento Cancelado',
+    'schedule.no_show':         'Cliente Não Compareceu',
+    // Manual
+    'manual.trigger':           'Disparo Manual',
 };
 
 const ACTION_LABELS: Record<string, string> = {
@@ -112,6 +128,7 @@ const ACTION_LABELS: Record<string, string> = {
     transfer_to_human:       'Transferir para Humano',
     transfer_department:     'Transferir Departamento',
     analyze_sentiment:       'Análise de Sentimento',
+    notify_managers:         'Notificar Gestores',
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -361,10 +378,16 @@ export default function WorkflowPropertiesPanel({
                             <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl text-[10px] text-blue-700 dark:text-blue-300 space-y-1">
                                 <p className="font-black uppercase tracking-widest">Variáveis disponíveis</p>
                                 {config.event.startsWith('ticket') && (
-                                    <TemplateTip fields={['ticketId', 'ticket.status', 'ticket.priority', 'contact.name', 'contact.phoneNumber']} />
+                                    <TemplateTip fields={['ticketId', 'ticket.status', 'ticket.priority', 'ticket.mode', 'contact.name', 'contact.phoneNumber']} />
                                 )}
                                 {config.event === 'message.received' && (
                                     <TemplateTip fields={['message.content', 'message.messageType', 'ticketId', 'contact.name']} />
+                                )}
+                                {(config.event === 'evaluation.created' || config.event === 'evaluation.negative_score') && (
+                                    <TemplateTip fields={['ticketId', 'evaluation.aiSentiment', 'evaluation.aiSentimentScore', 'evaluation.customerRating', 'contact.name']} />
+                                )}
+                                {config.event === 'csat.received' && (
+                                    <TemplateTip fields={['ticketId', 'evaluation.customerRating', 'contact.name', 'contact.phoneNumber']} />
                                 )}
                                 {config.event === 'contact.risk_high' && (
                                     <TemplateTip fields={['contact.name', 'contact.riskScore', 'contact.phoneNumber']} />
@@ -596,6 +619,9 @@ export default function WorkflowPropertiesPanel({
                                     <option value="create_schedule">Criar Agendamento</option>
                                     <option value="update_schedule_status">Atualizar Status de Agendamento</option>
                                 </optgroup>
+                                <optgroup label="Notificações">
+                                    <option value="notify_managers">Notificar Gestores</option>
+                                </optgroup>
                                 <optgroup label="Integrações">
                                     <option value="http_webhook">Webhook HTTP</option>
                                 </optgroup>
@@ -736,14 +762,39 @@ export default function WorkflowPropertiesPanel({
 
                         {/* ── transfer_department ── */}
                         {config.actionType === 'transfer_department' && (
-                            <div className="space-y-2">
-                                <label className="text-[10px] uppercase font-bold text-slate-400">ID do Departamento Destino</label>
-                                <input
-                                    placeholder="Obrigatório — UUID do departamento"
-                                    value={config.params?.departmentId || ''}
-                                    onChange={(e) => setConfig({ ...config, params: { ...config.params, departmentId: e.target.value } })}
-                                    className="w-full px-3 py-2 rounded-xl border text-sm dark:bg-slate-800 dark:border-slate-700"
-                                />
+                            <div className="space-y-3">
+                                <div className="space-y-1">
+                                    <label className="text-[10px] uppercase font-bold text-slate-400">Nome do Departamento Destino</label>
+                                    <input
+                                        placeholder="Ex: Suporte Técnico (busca por nome)"
+                                        value={config.params?.departmentName || ''}
+                                        onChange={(e) => setConfig({ ...config, params: { ...config.params, departmentName: e.target.value, departmentId: e.target.value ? undefined : config.params?.departmentId } })}
+                                        className="w-full px-3 py-2 rounded-xl border text-sm dark:bg-slate-800 dark:border-slate-700"
+                                    />
+                                    <p className="text-[9px] text-slate-400">Recomendado — o sistema busca o departamento pelo nome.</p>
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[10px] uppercase font-bold text-slate-400">ID do Departamento (alternativa)</label>
+                                    <input
+                                        placeholder="UUID do departamento (tem prioridade sobre o nome)"
+                                        value={config.params?.departmentId || ''}
+                                        onChange={(e) => setConfig({ ...config, params: { ...config.params, departmentId: e.target.value || undefined } })}
+                                        className="w-full px-3 py-2 rounded-xl border text-sm dark:bg-slate-800 dark:border-slate-700"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-[10px] uppercase font-bold text-slate-400">Modo após Transferência</label>
+                                    <select
+                                        value={config.params?.mode || ''}
+                                        onChange={(e) => setConfig({ ...config, params: { ...config.params, mode: e.target.value || undefined } })}
+                                        className="w-full mt-1 px-3 py-2 rounded-xl border text-sm dark:bg-slate-800 dark:border-slate-700"
+                                    >
+                                        <option value="">Manter modo atual</option>
+                                        <option value="AI">IA Automático</option>
+                                        <option value="HUMANO">Humano</option>
+                                        <option value="HIBRIDO">Híbrido</option>
+                                    </select>
+                                </div>
                                 <div className="p-2 bg-amber-50 dark:bg-amber-900/20 rounded-lg text-[10px] text-amber-700 dark:text-amber-300 font-bold">
                                     ⚠ O ticket é movido imediatamente para este departamento.
                                 </div>
@@ -895,6 +946,43 @@ export default function WorkflowPropertiesPanel({
                                         <option value="NO_SHOW">Não Compareceu</option>
                                     </select>
                                 </div>
+                            </div>
+                        )}
+
+                        {/* ── notify_managers ── */}
+                        {config.actionType === 'notify_managers' && (
+                            <div className="space-y-3">
+                                <div className="space-y-1">
+                                    <label className="text-[10px] uppercase font-bold text-slate-400">Título da Notificação</label>
+                                    <input
+                                        placeholder="Ex: Alerta: Ticket com sentimento negativo"
+                                        value={config.params?.title || ''}
+                                        onChange={(e) => setConfig({ ...config, params: { ...config.params, title: e.target.value } })}
+                                        className="w-full px-3 py-2 rounded-xl border text-sm dark:bg-slate-800 dark:border-slate-700"
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[10px] uppercase font-bold text-slate-400">Mensagem</label>
+                                    <textarea
+                                        placeholder="O ticket {{ticketId}} de {{contact.name}} requer atenção."
+                                        value={config.params?.message || ''}
+                                        onChange={(e) => setConfig({ ...config, params: { ...config.params, message: e.target.value } })}
+                                        className="w-full px-3 py-2 rounded-xl border text-sm min-h-[70px] dark:bg-slate-800 dark:border-slate-700"
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[10px] uppercase font-bold text-slate-400">Roles a Notificar</label>
+                                    <select
+                                        value={config.params?.targetRole || 'MANAGER'}
+                                        onChange={(e) => setConfig({ ...config, params: { ...config.params, targetRole: e.target.value } })}
+                                        className="w-full px-3 py-2 rounded-xl border text-sm dark:bg-slate-800 dark:border-slate-700"
+                                    >
+                                        <option value="MANAGER">Gestores (MANAGER)</option>
+                                        <option value="ADMIN">Administradores (ADMIN)</option>
+                                        <option value="ALL">Gestores + Admins</option>
+                                    </select>
+                                </div>
+                                <p className="text-[9px] text-slate-400">Variáveis: <code className="bg-slate-100 dark:bg-slate-800 px-1 rounded font-mono">{'{{ticketId}}'}</code> <code className="bg-slate-100 dark:bg-slate-800 px-1 rounded font-mono">{'{{contact.name}}'}</code></p>
                             </div>
                         )}
 

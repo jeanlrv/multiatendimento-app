@@ -210,6 +210,10 @@ model Contact {
   tickets   Ticket[]
   schedules Schedule[]
 
+  // CSAT Survey
+  csatPending  Boolean @default(false)
+  csatTicketId String?
+
   @@index([phoneNumber])
   @@index([riskScore])
   @@index([companyId])
@@ -273,6 +277,13 @@ model Company {
 
   // Configurações de providers de IA por empresa
   providerConfigs ProviderConfig[]
+
+  // CSAT Survey
+  csatEnabled Boolean @default(false)
+  csatMessage String? @db.Text
+
+  // Alerta sentimental
+  sentimentAlertThreshold Int @default(5)
 
   @@map("companies")
 }

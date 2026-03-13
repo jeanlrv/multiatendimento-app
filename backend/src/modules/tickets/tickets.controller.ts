@@ -119,7 +119,7 @@ export class TicketsController {
     @RequirePermission(Permission.TICKETS_RESOLVE)
     @ApiOperation({ summary: 'Marcar ticket como resolvido' })
     resolve(@Req() req: any, @Param('id') id: string) {
-        return this.ticketsService.resolve(req.user.companyId, id);
+        return this.ticketsService.resolve(req.user.companyId, id, req.user.id);
     }
 
     @Post(':id/pause')

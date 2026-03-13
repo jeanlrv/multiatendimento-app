@@ -252,7 +252,7 @@ export class TicketsService {
 
         // Audit Log com companyId obrigatório
         await this.auditService.log({
-            userId: actorUserId || 'system',
+            userId: actorUserId || null,
             companyId,
             action: 'UPDATE',
             entity: 'Ticket',
@@ -280,6 +280,17 @@ export class TicketsService {
             }
         }
 
+        // Emitir evento de transferência de departamento
+        if (updateTicketDto.departmentId && updateTicketDto.departmentId !== oldTicket.departmentId) {
+            this.eventEmitter.emit('ticket.transferred', {
+                ticketId: id,
+                companyId,
+                fromDepartmentId: oldTicket.departmentId,
+                toDepartmentId: updatedTicket.departmentId,
+                ticket: updatedTicket
+            });
+        }
+
         // Notificar usuário quando atribuição muda
         if (updateTicketDto.assignedUserId && updateTicketDto.assignedUserId !== oldTicket.assignedUserId) {
             this.eventEmitter.emit('ticket.assigned', { ticket: updatedTicket, assignedUserId: updatedTicket.assignedUserId });
@@ -292,11 +303,12 @@ export class TicketsService {
         return this.update(companyId, id, { assignedUserId: userId }, actorUserId);
     }
 
-    async resolve(companyId: string, id: string) {
+    async resolve(companyId: string, id: string, actorUserId?: string) {
         const ticket = await this.prisma.ticket.findFirst({
             where: { id, companyId },
             include: {
                 department: true,
+                contact: true,
                 messages: { orderBy: { sentAt: 'asc' } }
             }
         });
@@ -330,9 +342,17 @@ export class TicketsService {
             ticket: resolvedTicket
         });
 
+        // Emitir evento dedicado ticket.resolved (para workflows e listeners)
+        this.eventEmitter.emit('ticket.resolved', {
+            ticketId: id,
+            companyId,
+            ticket: resolvedTicket,
+            summary: aiSummary,
+        });
+
         // Audit Log
         await this.auditService.log({
-            userId: resolvedTicket.assignedUserId || 'system',
+            userId: actorUserId || resolvedTicket.assignedUserId || null,
             companyId,
             action: 'RESOLVE',
             entity: 'Ticket',
@@ -345,7 +365,33 @@ export class TicketsService {
             this.logger.error(`Falha ao gerar análise de sentimento para ticket ${id}: ${err.message}`);
         });
 
+        // Enviar CSAT survey se habilitado para a empresa
+        this.sendCsatIfEnabled(companyId, id, (ticket as any).contact, (ticket as any).connectionId).catch(err => {
+            this.logger.warn(`CSAT não enviado para ticket ${id}: ${err.message}`);
+        });
+
         return resolvedTicket;
+    }
+
+    private async sendCsatIfEnabled(companyId: string, ticketId: string, contact: any, connectionId: string | null) {
+        const company = await this.prisma.company.findUnique({ where: { id: companyId } });
+        if (!(company as any)?.csatEnabled || !(company as any)?.csatMessage) return;
+        if (!contact?.phoneNumber || !connectionId) return;
+
+        // Marcar contato como aguardando resposta CSAT
+        await this.prisma.contact.update({
+            where: { id: contact.id },
+            data: { csatPending: true, csatTicketId: ticketId } as any,
+        });
+
+        // Emitir evento para WhatsApp service enviar a mensagem
+        this.eventEmitter.emit('csat.pending', {
+            companyId,
+            ticketId,
+            connectionId,
+            phoneNumber: contact.phoneNumber,
+            message: (company as any).csatMessage,
+        });
     }
 
     async pause(companyId: string, id: string) {
