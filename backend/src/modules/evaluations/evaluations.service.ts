@@ -46,7 +46,8 @@ export class EvaluationsService {
             } as any
         });
 
-        if (!ticket || !ticket.department?.aiAgentId || ticket.messages.length === 0) {
+        const dept = (ticket as any).department;
+        if (!ticket || !dept?.aiAgentId || ticket.messages.length === 0) {
             this.logger.warn(`Não foi possível gerar análise para o ticket ${ticketId} na empresa ${companyId}: Agente ou mensagens ausentes.`);
             return null;
         }
@@ -63,7 +64,7 @@ export class EvaluationsService {
 
         const conversation = conversationLines + csatContext;
 
-        const result = await this.aiService.analyzeSentiment(companyId, ticket.department.aiAgentId, conversation);
+        const result = await this.aiService.analyzeSentiment(companyId, dept.aiAgentId, conversation);
 
         if (!result) return null;
 
