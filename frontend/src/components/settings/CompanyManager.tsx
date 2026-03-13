@@ -14,6 +14,10 @@ interface Company {
     limitTokens: number;
     limitTokensPerHour: number;
     limitTokensPerDay: number;
+    maxUsers: number;
+    maxDepartments: number;
+    maxWhatsApp: number;
+    expiresAt?: string | null;
 }
 
 export function CompanyManager() {
@@ -47,11 +51,16 @@ export function CompanyManager() {
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
         setSubmitting(true);
+        const toNum = (v: any) => (v !== '' && v !== undefined ? Number(v) : 0);
         const payload = {
             ...formData,
-            limitTokens: formData.limitTokens !== '' && formData.limitTokens !== undefined ? Number(formData.limitTokens) : 0,
-            limitTokensPerHour: formData.limitTokensPerHour !== '' && formData.limitTokensPerHour !== undefined ? Number(formData.limitTokensPerHour) : 0,
-            limitTokensPerDay: formData.limitTokensPerDay !== '' && formData.limitTokensPerDay !== undefined ? Number(formData.limitTokensPerDay) : 0,
+            limitTokens: toNum(formData.limitTokens),
+            limitTokensPerHour: toNum(formData.limitTokensPerHour),
+            limitTokensPerDay: toNum(formData.limitTokensPerDay),
+            maxUsers: toNum(formData.maxUsers) || 3,
+            maxDepartments: toNum(formData.maxDepartments) || 1,
+            maxWhatsApp: toNum(formData.maxWhatsApp) || 1,
+            expiresAt: formData.expiresAt || null,
         };
         try {
             if (editingCompany) {
@@ -91,7 +100,7 @@ export function CompanyManager() {
             setFormData(company);
         } else {
             setEditingCompany(null);
-            setFormData({ name: '', primaryColor: '#3B82F6', secondaryColor: '#1E293B', limitTokens: 0, limitTokensPerHour: 0, limitTokensPerDay: 0 });
+            setFormData({ name: '', primaryColor: '#3B82F6', secondaryColor: '#1E293B', limitTokens: 0, limitTokensPerHour: 0, limitTokensPerDay: 0, maxUsers: 3, maxDepartments: 5, maxWhatsApp: 2, expiresAt: '' });
         }
         setIsFormOpen(true);
     };
@@ -201,6 +210,51 @@ export function CompanyManager() {
                         </div>
                     </div>
 
+                    <div className="pt-2 border-t border-slate-100 dark:border-white/10">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 mt-3">Limites do Plano</p>
+                        <div className="grid grid-cols-3 gap-4">
+                            <div>
+                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block ml-2">Usuários</label>
+                                <input
+                                    type="number"
+                                    min="1"
+                                    value={formData.maxUsers ?? 3}
+                                    onChange={e => setFormData({ ...formData, maxUsers: e.target.value })}
+                                    className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 outline-none focus:ring-2 focus:ring-primary/20 text-sm font-bold dark:text-white transition-all font-mono"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block ml-2">Departamentos</label>
+                                <input
+                                    type="number"
+                                    min="1"
+                                    value={formData.maxDepartments ?? 5}
+                                    onChange={e => setFormData({ ...formData, maxDepartments: e.target.value })}
+                                    className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 outline-none focus:ring-2 focus:ring-primary/20 text-sm font-bold dark:text-white transition-all font-mono"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block ml-2">Conexões WA</label>
+                                <input
+                                    type="number"
+                                    min="1"
+                                    value={formData.maxWhatsApp ?? 2}
+                                    onChange={e => setFormData({ ...formData, maxWhatsApp: e.target.value })}
+                                    className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 outline-none focus:ring-2 focus:ring-primary/20 text-sm font-bold dark:text-white transition-all font-mono"
+                                />
+                            </div>
+                        </div>
+                        <div className="mt-4">
+                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block ml-2">Vencimento da Licença (deixe vazio = sem expiração)</label>
+                            <input
+                                type="date"
+                                value={formData.expiresAt ? formData.expiresAt.substring(0, 10) : ''}
+                                onChange={e => setFormData({ ...formData, expiresAt: e.target.value || null })}
+                                className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 outline-none focus:ring-2 focus:ring-primary/20 text-sm font-bold dark:text-white transition-all"
+                            />
+                        </div>
+                    </div>
+
                     <div className="pt-4 flex gap-4">
                         <button
                             type="button"
@@ -265,16 +319,16 @@ export function CompanyManager() {
                         </div>
                         <div className="space-y-2 ml-4 mb-4">
                             <div className="flex items-center justify-between text-xs text-slate-500 font-semibold border-b border-white/5 pb-2">
+                                <span>Usuários / Depts / WA:</span>
+                                <span className="font-bold text-primary">{company.maxUsers ?? '?'} / {company.maxDepartments ?? '?'} / {company.maxWhatsApp ?? '?'}</span>
+                            </div>
+                            <div className="flex items-center justify-between text-xs text-slate-500 font-semibold border-b border-white/5 pb-2">
                                 <span>Tokens Mensais:</span>
                                 <span className="text-primary font-bold">{company.limitTokens > 0 ? company.limitTokens.toLocaleString('pt-BR') : '∞'}</span>
                             </div>
                             <div className="flex items-center justify-between text-xs text-slate-500 font-semibold border-b border-white/5 pb-2">
-                                <span>Por Hora:</span>
-                                <span className="font-bold">{(company.limitTokensPerHour ?? 0) > 0 ? (company.limitTokensPerHour).toLocaleString('pt-BR') : '∞'}</span>
-                            </div>
-                            <div className="flex items-center justify-between text-xs text-slate-500 font-semibold border-b border-white/5 pb-2">
-                                <span>Por Dia:</span>
-                                <span className="font-bold">{(company.limitTokensPerDay ?? 0) > 0 ? (company.limitTokensPerDay).toLocaleString('pt-BR') : '∞'}</span>
+                                <span>Vencimento:</span>
+                                <span className="font-bold">{company.expiresAt ? new Date(company.expiresAt).toLocaleDateString('pt-BR') : '∞'}</span>
                             </div>
                             <div className="flex items-center justify-between text-xs text-slate-500 font-semibold pt-1">
                                 <span>ID:</span>

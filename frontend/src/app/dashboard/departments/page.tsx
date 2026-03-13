@@ -327,6 +327,13 @@ function DepartmentFormView({ department, agents, workflows, onClose, onSave }: 
             exit={{ opacity: 0, y: -20 }}
             className="w-full max-w-4xl mx-auto liquid-glass rounded-[2rem] md:rounded-[3rem] p-6 md:p-10 border border-white/10 shadow-2xl flex flex-col"
         >
+            {/* Form envolve todo o conteúdo para que o botão Sincronizar (type=submit) funcione corretamente */}
+            <form onSubmit={handleSubmit(onSubmit, (errors) => {
+                const firstError = Object.values(errors)[0];
+                const msg = (firstError as any)?.message || 'Corrija os campos obrigatórios';
+                toast.error(msg);
+            })} className="flex flex-col gap-0">
+
             {/* Header */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 border-b border-white/10 pb-6">
                 <div className="flex items-center gap-4">
@@ -361,7 +368,6 @@ function DepartmentFormView({ department, agents, workflows, onClose, onSave }: 
                     <button
                         type="submit"
                         disabled={submitting}
-                        onClick={handleSubmit(onSubmit)}
                         className="flex-1 md:flex-none px-8 py-3 bg-primary text-white font-black text-[10px] uppercase tracking-[0.2em] rounded-2xl shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
                     >
                         {submitting ? <RefreshCcw className="animate-spin w-4 h-4" /> : <Save className="w-4 h-4" />}
@@ -392,7 +398,7 @@ function DepartmentFormView({ department, agents, workflows, onClose, onSave }: 
             </div>
 
             {/* Form Content */}
-            <form onSubmit={handleSubmit(onSubmit)} className="flex-1 space-y-8 pb-4">
+            <div className="flex-1 space-y-8 pb-4">
                 {activeTab === 'geral' && (
                     <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
                         <div className="grid grid-cols-2 gap-6">
@@ -577,8 +583,9 @@ function DepartmentFormView({ department, agents, workflows, onClose, onSave }: 
                         </label>
                     </motion.div>
                 )}
-            </form>
+            </div>
 
+            </form>
         </motion.div>
     );
 }
