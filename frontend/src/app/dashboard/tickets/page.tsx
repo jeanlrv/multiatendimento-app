@@ -976,7 +976,9 @@ export default function TicketsPage() {
 
                     {/* Filtros Rápidos de Setor — sempre visível */}
                     {(() => {
-                        const visibleDepts = (user?.role === 'ADMIN' || user?.role === 'SUPERVISOR') ? departments : (user?.departments || []);
+                        // Todos os departamentos são visíveis no filtro para qualquer agente
+                        // (acesso real é controlado no backend — aqui é apenas conveniência de filtro)
+                        const visibleDepts = departments;
                         if (visibleDepts.length === 0) return null;
                         return (
                             <div className="mb-4 space-y-2">

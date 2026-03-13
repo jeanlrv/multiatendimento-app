@@ -5,7 +5,7 @@ import {
     SlidersHorizontal, Clock, Search, MessageSquare, Users,
     Star, Bot, Link2, Database, ShieldCheck, Download,
     Bell, ArrowRightLeft, BarChart3, Save, RefreshCcw, History,
-    Volume2, VolumeX, Play
+    Volume2, VolumeX, Play, ThumbsUp
 } from 'lucide-react';
 import { NOTIFICATION_SOUNDS, SoundId, playPreview } from '@/hooks/useNotificationSound';
 import { motion } from 'framer-motion';
@@ -42,6 +42,8 @@ const DEFAULT_PARAMS: Record<string, any> = {
     enableGroupTicketHistory: false,
     enableTicketQualification: true,
     enableTicketMetrics: true,
+    csat_enabled: false,
+    csat_message: 'Olá! Gostaríamos de saber sua opinião sobre o atendimento que você recebeu.\n\nPor favor, avalie de 1 a 5:\n1️⃣ Péssimo\n2️⃣ Ruim\n3️⃣ Regular\n4️⃣ Bom\n5️⃣ Excelente\n\nResponda apenas com o número da sua nota.',
 };
 
 // ============================================
@@ -292,6 +294,36 @@ export function GeneralParams() {
                 <ParamRow icon={BarChart3} label="Métricas de Tickets" description="Exibir métricas detalhadas no dashboard (tempo médio, SLA, etc).">
                     <ToggleSwitch enabled={params.enableTicketMetrics} onChange={(v) => updateParam('enableTicketMetrics', v)} />
                 </ParamRow>
+            </ParamSection>
+
+            {/* CSAT — Pesquisa de Satisfação */}
+            <ParamSection title="Pesquisa de Satisfação (CSAT)">
+                <ParamRow icon={ThumbsUp} label="Ativar pesquisa de satisfação" description="Envia mensagem automática via WhatsApp ao encerrar o ticket solicitando nota de 1 a 5.">
+                    <ToggleSwitch enabled={!!params.csat_enabled} onChange={(v) => updateParam('csat_enabled', v)} />
+                </ParamRow>
+                {params.csat_enabled && (
+                    <div className="p-5 bg-slate-50 dark:bg-white/5 rounded-[1.5rem] border border-slate-100 dark:border-white/5 space-y-3">
+                        <div className="flex items-center gap-3 mb-2">
+                            <div className="p-2 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-slate-100 dark:border-white/5">
+                                <MessageSquare size={16} className="text-primary" />
+                            </div>
+                            <div>
+                                <span className="text-sm font-black text-slate-800 dark:text-white italic">Mensagem da pesquisa</span>
+                                <span className="text-[10px] text-slate-400 block font-black uppercase tracking-widest opacity-70">Enviada ao cliente via WhatsApp após encerramento</span>
+                            </div>
+                        </div>
+                        <textarea
+                            value={params.csat_message || ''}
+                            onChange={(e) => updateParam('csat_message', e.target.value)}
+                            rows={6}
+                            className="w-full bg-white dark:bg-gray-900 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-sm focus:ring-4 focus:ring-primary/10 outline-none transition-all resize-none font-medium text-slate-600 dark:text-slate-300"
+                            placeholder="Ex: Como foi seu atendimento? Responda de 1 a 5..."
+                        />
+                        <p className="text-[10px] text-slate-400 font-bold italic">
+                            💡 O cliente deve responder com um número de 1 a 5. A nota é registrada automaticamente.
+                        </p>
+                    </div>
+                )}
             </ParamSection>
 
             {/* Notificações Sonoras */}

@@ -434,6 +434,7 @@ export class WebhooksController {
                     whatsappInstance: { connect: { id: connection.id } },
                     company: { connect: { id: companyId } },
                     status: 'OPEN' as any,
+                    mode: department.defaultMode || 'AI', // Usar modo padrão do departamento
                     subject: content.substring(0, 100) || 'Novo Atendimento',
                 },
                 include: { department: true },

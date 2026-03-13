@@ -117,10 +117,16 @@ export class EvaluationsService {
             where: { companyId },
             include: {
                 ticket: {
-                    include: {
-                        contact: true,
-                        department: true,
-                        assignedUser: true
+                    select: {
+                        id: true,
+                        subject: true,
+                        summary: true,
+                        status: true,
+                        resolvedAt: true,
+                        closedAt: true,
+                        contact: { select: { name: true, phoneNumber: true } },
+                        department: { select: { name: true, emoji: true, color: true } },
+                        assignedUser: { select: { name: true, avatar: true } },
                     }
                 }
             },

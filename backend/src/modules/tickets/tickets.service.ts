@@ -374,9 +374,25 @@ export class TicketsService {
     }
 
     private async sendCsatIfEnabled(companyId: string, ticketId: string, contact: any, connectionId: string | null) {
-        const company = await this.prisma.company.findUnique({ where: { id: companyId } });
-        if (!(company as any)?.csatEnabled || !(company as any)?.csatMessage) return;
         if (!contact?.phoneNumber || !connectionId) return;
+
+        // Ler configuração CSAT do key-value settings store
+        const csatEnabledSetting = await this.prisma.setting.findUnique({
+            where: { companyId_key: { companyId, key: 'csat_enabled' } },
+        });
+        const csatMessageSetting = await this.prisma.setting.findUnique({
+            where: { companyId_key: { companyId, key: 'csat_message' } },
+        });
+
+        const csatEnabled = csatEnabledSetting?.value === 'true' || csatEnabledSetting?.value === '"true"';
+        const csatMessage = csatMessageSetting?.value
+            ? csatMessageSetting.value.replace(/^"|"$/g, '') // remover aspas do JSON.stringify
+            : null;
+
+        if (!csatEnabled || !csatMessage) {
+            this.logger.debug(`CSAT desabilitado ou sem mensagem configurada para empresa ${companyId}`);
+            return;
+        }
 
         // Marcar contato como aguardando resposta CSAT
         await this.prisma.contact.update({
@@ -390,8 +406,10 @@ export class TicketsService {
             ticketId,
             connectionId,
             phoneNumber: contact.phoneNumber,
-            message: (company as any).csatMessage,
+            message: csatMessage,
         });
+
+        this.logger.log(`CSAT agendado para contato ${contact.phoneNumber} (ticket ${ticketId})`);
     }
 
     async pause(companyId: string, id: string) {

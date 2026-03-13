@@ -282,6 +282,13 @@ export class ChatService {
                         this.logger.warn(`IA tentou transferir para o mesmo departamento atual "${deptName}" — ignorado`);
                         return;
                     }
+
+                    // Buscar o novo departamento completo (para verificar se tem IA)
+                    const newDeptFull = await this.prisma.department.findUnique({
+                        where: { id: targetDept.id },
+                        select: { id: true, name: true, aiAgentId: true },
+                    });
+
                     await this.prisma.ticket.update({
                         where: { id: ticketId },
                         data: { departmentId: targetDept.id },
@@ -292,13 +299,23 @@ export class ChatService {
                         fromDepartmentId: ticket.departmentId,
                         toDepartmentId: targetDept.id,
                     });
-                    // Avisar o cliente da transferência sem expor o comando interno
-                    await this.sendMessage(
-                        ticketId,
-                        `Vou te encaminhar para o departamento *${targetDept.name}*. Um momento! 🔄`,
-                        true, 'TEXT', undefined, ticket.companyId, 'AI'
-                    );
+
                     this.logger.log(`IA transferiu ticket ${ticketId} para departamento "${deptName}"`);
+
+                    // Se o novo departamento tem IA, ela responde imediatamente com contexto
+                    // (sem enviar mensagem de "encaminhando" — a própria IA do destino se apresenta)
+                    if (newDeptFull?.aiAgentId) {
+                        this.handleAIResponseAfterTransfer(ticketId, content, ticket.department?.name ?? currentDeptName, ticket.companyId).catch(err =>
+                            this.logger.error(`Erro ao acionar IA pós-transferência: ${err.message}`)
+                        );
+                    } else {
+                        // Destino sem IA — avisar o cliente e colocar em espera humana
+                        await this.sendMessage(
+                            ticketId,
+                            `Você foi encaminhado para o departamento *${targetDept.name}*. Em breve um atendente irá te ajudar! 🔄`,
+                            true, 'TEXT', undefined, ticket.companyId, 'AI'
+                        );
+                    }
                 } else {
                     this.logger.warn(`IA tentou transferir para departamento "${deptName}" não encontrado`);
                 }
@@ -333,6 +350,85 @@ export class ChatService {
             await this.sendMessage(ticketId, this.sanitizeForWhatsApp(aiResponse), true, 'TEXT', undefined, ticket.companyId, 'AI');
         } catch (error) {
             this.logger.error(`Erro ao processar resposta de IA: ${error.message}`);
+        }
+    }
+
+    /**
+     * Acionado após uma transferência AI→AI.
+     * O novo agente recebe contexto do histórico e da mensagem original do cliente,
+     * e responde imediatamente de forma orgânica (sem expor metadados de roteamento).
+     */
+    private async handleAIResponseAfterTransfer(ticketId: string, lastClientMessage: string, fromDeptName: string, companyId: string) {
+        try {
+            const ticket = await this.prisma.ticket.findUnique({
+                where: { id: ticketId },
+                include: { department: true, contact: true },
+            });
+
+            if (!ticket?.department?.aiAgentId) return;
+
+            const ticketMode = (ticket as any).mode || 'AI';
+            if (ticketMode !== 'AI' && ticketMode !== 'HIBRIDO') return;
+
+            // Histórico recente (excluindo as mensagens de roteamento/sistema)
+            const messages = await this.prisma.message.findMany({
+                where: { ticketId },
+                orderBy: { sentAt: 'desc' },
+                take: 15,
+            });
+
+            const history = messages
+                .filter(m => !m.content.startsWith('Vou te encaminhar') && !m.content.startsWith('Você foi encaminhado'))
+                .reverse()
+                .map(m => ({ role: m.fromMe ? 'assistant' : 'user', content: m.content }));
+
+            // Contexto de transferência injetado no sufixo do sistema (não exibido ao cliente)
+            const deptTimezone = (ticket.department as any)?.timezone || 'America/Sao_Paulo';
+            const nowLocal = new Date(new Date().toLocaleString('en-US', { timeZone: deptTimezone }));
+            const dateStr = nowLocal.toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+            const timeStr = nowLocal.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+            const otherDepts = await this.prisma.department.findMany({
+                where: { companyId, NOT: { id: ticket.departmentId } },
+                select: { id: true, name: true },
+            });
+            const deptNames = otherDepts.length > 0 ? otherDepts.map(d => d.name).join(', ') : '(nenhum outro disponível)';
+
+            const transferContext = [
+                '========================================',
+                '[INSTRUÇÕES DE ROTEAMENTO — NÃO EXIBA AO CLIENTE]',
+                '========================================',
+                `Data e hora atual: ${dateStr}, ${timeStr} (${deptTimezone})`,
+                `Você está ATUALMENTE no departamento: ${ticket.department.name}`,
+                `Este cliente acabou de ser transferido do departamento: ${fromDeptName}`,
+                'Apresente-se brevemente e atenda a necessidade do cliente de forma natural e direta.',
+                'NÃO mencione que houve transferência a menos que o cliente pergunte.',
+                '',
+                `• [TRANSFERIR:NomeDoDepartamento] — transfere para outro departamento`,
+                `• [HUMANO] — transfere para um atendente humano`,
+                `• [FINALIZAR] — encerra o atendimento`,
+                '',
+                `Departamentos disponíveis para transferência: ${deptNames}`,
+                '========================================',
+            ].join('\n');
+
+            const aiResponse = await this.aiService.chat(companyId, ticket.department.aiAgentId, lastClientMessage, history, undefined, transferContext);
+            if (!aiResponse) return;
+
+            // Processar comandos de roteamento na resposta do novo agente
+            const transferMatch = aiResponse.match(/\[TRANSFERIR:([^\]]+)\]/i);
+            const humanMatch = aiResponse.match(/\[HUMANO\]/i);
+            const finalizeMatch = aiResponse.match(/\[FINALIZAR\]/i);
+
+            if (transferMatch || humanMatch || finalizeMatch) {
+                // Delegar para o handler principal que já trata esses casos
+                await this.handleAIResponse(ticketId, lastClientMessage);
+                return;
+            }
+
+            await this.sendMessage(ticketId, this.sanitizeForWhatsApp(aiResponse), true, 'TEXT', undefined, companyId, 'AI');
+        } catch (error) {
+            this.logger.error(`Erro na IA pós-transferência: ${error.message}`);
         }
     }
 
