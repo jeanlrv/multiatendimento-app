@@ -360,7 +360,7 @@ export class AIService {
      * Motor de Chat Nativo: Usa LangChain com suporte multi-provider.
      * @param conversationId ID da conversa no playground (opcional) — habilita sumarização progressiva.
      */
-    async chat(companyId: string, agentId: string, message: string, history: any[] = [], conversationId?: string) {
+    async chat(companyId: string, agentId: string, message: string, history: any[] = [], conversationId?: string, systemSuffix?: string) {
         if (!message || message.trim().length === 0) {
             throw new BadRequestException('Mensagem não pode ser vazia');
         }
@@ -490,6 +490,11 @@ export class AIService {
             let systemPrompt = conversationSummary
                 ? `${agent.prompt || 'Você é um assistente virtual prestativo.'}\n\n[Resumo da conversa até agora]: ${conversationSummary}`
                 : (agent.prompt || 'Você é um assistente virtual prestativo.');
+
+            // Sufixo adicional (ex: instruções de roteamento injetadas pelo chat.service)
+            if (systemSuffix) {
+                systemPrompt += `\n\n${systemSuffix}`;
+            }
 
             // Adiciona instrução de grounding (RAG) se houver contexto
             if (context) {

@@ -30,7 +30,7 @@ export class TransferToHumanAction implements ActionExecutor {
 
             // Build update data object
             const updateData: any = {
-                mode: 'HUMAN',
+                mode: 'HUMANO',
                 status: 'OPEN', // Ensure it's open if it's going to a human
                 updatedAt: new Date()
             };

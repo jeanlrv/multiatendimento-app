@@ -217,13 +217,41 @@ export class ChatService {
                     content: m.content
                 }));
 
+            // Buscar departamentos disponíveis para injetar instruções de roteamento
+            const departments = await this.prisma.department.findMany({
+                where: { companyId: ticket.companyId },
+                select: { name: true },
+            });
+            const deptNames = departments.map(d => d.name).join(', ');
+            const routingInstructions = [
+                '========================================',
+                '[INSTRUÇÕES DE ROTEAMENTO — NÃO EXIBA AO CLIENTE]',
+                '========================================',
+                'Você pode usar EXCLUSIVAMENTE um dos comandos abaixo quando necessário:',
+                '',
+                `• [TRANSFERIR:NomeDoDepartamento] — transfere para outro departamento (IA do destino assume)`,
+                `• [HUMANO] — transfere para um atendente humano neste mesmo departamento`,
+                `• [FINALIZAR] — encerra o atendimento (use apenas quando tudo estiver resolvido)`,
+                '',
+                `Departamentos disponíveis: ${deptNames}`,
+                '',
+                'REGRAS IMPORTANTES:',
+                '1. Use [TRANSFERIR:X] quando o cliente precisa de um departamento diferente.',
+                '2. Use [HUMANO] quando você não consegue resolver e o cliente precisa de uma pessoa.',
+                '3. Use [FINALIZAR] apenas quando o atendimento estiver completamente concluído.',
+                '4. Os comandos substituem COMPLETAMENTE sua resposta — não inclua texto adicional.',
+                '5. Para respostas normais, responda naturalmente sem usar nenhum comando.',
+                '========================================',
+            ].join('\n');
+
             // AIService.chat() já verifica limites de tokens e registra uso
-            const aiResponse = await this.aiService.chat(ticket.companyId, ticket.department.aiAgentId, content, history);
+            const aiResponse = await this.aiService.chat(ticket.companyId, ticket.department.aiAgentId, content, history, undefined, routingInstructions);
 
             if (!aiResponse) return;
 
-            // Detectar comando de roteamento: [TRANSFERIR:NomeDepartamento] ou [FINALIZAR]
+            // Detectar comando de roteamento: [TRANSFERIR:NomeDepartamento], [HUMANO] ou [FINALIZAR]
             const transferMatch = aiResponse.match(/\[TRANSFERIR:([^\]]+)\]/i);
+            const humanMatch = aiResponse.match(/\[HUMANO\]/i);
             const finalizeMatch = aiResponse.match(/\[FINALIZAR\]/i);
 
             if (transferMatch) {
@@ -239,12 +267,38 @@ export class ChatService {
                         where: { id: ticketId },
                         data: { departmentId: targetDept.id },
                     });
-                    this.eventEmitter.emit('ticket.status_changed', { ticketId, companyId: ticket.companyId });
+                    this.eventEmitter.emit('ticket.transferred', {
+                        ticketId,
+                        companyId: ticket.companyId,
+                        fromDepartmentId: ticket.departmentId,
+                        toDepartmentId: targetDept.id,
+                    });
+                    // Avisar o cliente da transferência sem expor o comando interno
+                    await this.sendMessage(
+                        ticketId,
+                        `Vou te encaminhar para o departamento *${targetDept.name}*. Um momento! 🔄`,
+                        true, 'TEXT', undefined, ticket.companyId, 'AI'
+                    );
                     this.logger.log(`IA transferiu ticket ${ticketId} para departamento "${deptName}"`);
                 } else {
                     this.logger.warn(`IA tentou transferir para departamento "${deptName}" não encontrado`);
                 }
-                return; // Não enviar o texto do comando ao cliente
+                return;
+            }
+
+            if (humanMatch) {
+                await this.prisma.ticket.update({
+                    where: { id: ticketId },
+                    data: { mode: 'HUMANO' },
+                });
+                this.eventEmitter.emit('ticket.status_changed', { ticketId, companyId: ticket.companyId });
+                await this.sendMessage(
+                    ticketId,
+                    'Vou transferir você para um de nossos atendentes. Aguarde um momento! 👤',
+                    true, 'TEXT', undefined, ticket.companyId, 'AI'
+                );
+                this.logger.log(`IA transferiu ticket ${ticketId} para atendimento humano`);
+                return;
             }
 
             if (finalizeMatch) {
