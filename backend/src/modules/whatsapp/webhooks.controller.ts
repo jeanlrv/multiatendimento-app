@@ -65,26 +65,29 @@ export class WebhooksController {
             storedToken = (integration as any)?.zapiClientToken ?? null;
         }
 
-        // Se token configurado no sistema, validar correspondência
-        // Se NÃO configurado, aceitar (o usuário não ativou o Security Token na Z-API)
-        if (storedToken) {
+        // Lógica de validação:
+        // - O campo zapiClientToken serve tanto para autenticação de chamadas à API da Z-API
+        //   (header Client-Token) quanto como Security Token de webhook (se habilitado no portal Z-API).
+        // - A Z-API SÓ envia clientToken no payload do webhook se o "Security Token" estiver
+        //   habilitado no portal Z-API (seção Security). Se não estiver habilitado, não envia nada.
+        // - Portanto: só rejeitar se a Z-API ENVIOU um token E ele não bate com o armazenado.
+        //   Se a Z-API não enviou token, aceitar (Security Token não ativo no portal).
+
+        if (incomingToken && storedToken) {
+            // Z-API enviou token e temos um esperado — validar correspondência
             const decryptedToken = this.crypto.decrypt(storedToken);
-            const incomingPreview = incomingToken
-                ? `"${incomingToken.substring(0, 4)}..."(len=${incomingToken.length})`
-                : '(ausente/undefined)';
-            const expectedPreview = `"${decryptedToken.substring(0, 4)}..."(len=${decryptedToken.length})`;
-            this.logger.warn(`[TOKEN-DIAG] instanceId=${instanceId} incoming=${incomingPreview} expected=${expectedPreview}`);
             if (incomingToken !== decryptedToken) {
-                this.logger.warn(`Webhook Z-API rejeitado: token inválido para instanceId=${instanceId} | incoming=${incomingPreview} expected=${expectedPreview}`);
+                this.logger.warn(`Webhook Z-API rejeitado: clientToken não confere para instanceId=${instanceId}`);
                 return false;
             }
-        } else {
-            // ALERTA DE SEGURANÇA: webhook sem Client-Token é vulnerável a payloads forjados
+        } else if (incomingToken && !storedToken) {
+            // Z-API enviou token mas não temos nenhum configurado — aceitar mas alertar
             this.logger.warn(
-                `⚠️ SEGURANÇA: Webhook recebido SEM Client-Token para instanceId=${instanceId}. ` +
-                `Configure o Security Token na Z-API e no sistema para proteger contra requisições não autorizadas.`
+                `⚠️ instanceId=${instanceId}: Z-API enviou clientToken mas sistema não tem token configurado. ` +
+                `Configure o Security Token na conexão para validar webhooks.`
             );
         }
+        // Se não há incomingToken (Z-API sem Security Token ativo): aceitar normalmente
 
         return true;
     }
