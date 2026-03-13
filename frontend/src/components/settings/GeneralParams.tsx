@@ -4,8 +4,10 @@ import { useState, useEffect, useCallback } from 'react';
 import {
     SlidersHorizontal, Clock, Search, MessageSquare, Users,
     Star, Bot, Link2, Database, ShieldCheck, Download,
-    Bell, ArrowRightLeft, BarChart3, Save, RefreshCcw, History
+    Bell, ArrowRightLeft, BarChart3, Save, RefreshCcw, History,
+    Volume2, VolumeX, Play
 } from 'lucide-react';
+import { NOTIFICATION_SOUNDS, SoundId, playPreview } from '@/hooks/useNotificationSound';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
@@ -112,6 +114,24 @@ export function GeneralParams() {
     const [params, setParams] = useState<Record<string, any>>({ ...DEFAULT_PARAMS });
     const [saving, setSaving] = useState(false);
     const [saveSuccess, setSaveSuccess] = useState(false);
+
+    // Estado local para configurações de som (localStorage — não vão para o backend)
+    const [soundEnabled, setSoundEnabledState] = useState(() =>
+        typeof window !== 'undefined' ? localStorage.getItem('kszap_sound_enabled') !== 'false' : true
+    );
+    const [selectedSound, setSelectedSoundState] = useState<SoundId>(() =>
+        typeof window !== 'undefined' ? (localStorage.getItem('kszap_notification_sound') as SoundId) ?? 'soft' : 'soft'
+    );
+
+    const handleToggleSound = (val: boolean) => {
+        setSoundEnabledState(val);
+        localStorage.setItem('kszap_sound_enabled', val ? 'true' : 'false');
+    };
+
+    const handleSelectSound = (id: SoundId) => {
+        setSelectedSoundState(id);
+        localStorage.setItem('kszap_notification_sound', id);
+    };
 
     useEffect(() => {
         const fetchParams = async () => {
@@ -272,6 +292,58 @@ export function GeneralParams() {
                 <ParamRow icon={BarChart3} label="Métricas de Tickets" description="Exibir métricas detalhadas no dashboard (tempo médio, SLA, etc).">
                     <ToggleSwitch enabled={params.enableTicketMetrics} onChange={(v) => updateParam('enableTicketMetrics', v)} />
                 </ParamRow>
+            </ParamSection>
+
+            {/* Notificações Sonoras */}
+            <ParamSection title="Notificações Sonoras">
+                <ParamRow icon={soundEnabled ? Volume2 : VolumeX} label="Ativar sons de notificação" description="Toca um som ao receber novas mensagens no atendimento.">
+                    <ToggleSwitch enabled={soundEnabled} onChange={handleToggleSound} />
+                </ParamRow>
+
+                {soundEnabled && (
+                    <div className="p-5 bg-slate-50 dark:bg-white/5 rounded-[1.5rem] border border-slate-100 dark:border-white/5 space-y-4">
+                        <div className="flex items-center gap-3 mb-1">
+                            <div className="p-2 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-slate-100 dark:border-white/5">
+                                <Play size={16} className="text-primary" />
+                            </div>
+                            <div>
+                                <span className="text-sm font-black text-slate-800 dark:text-white italic">Tom de Notificação</span>
+                                <span className="text-[10px] text-slate-400 block font-black uppercase tracking-widest opacity-70">Clique em ▶ para pré-escutar</span>
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                            {NOTIFICATION_SOUNDS.map((sound) => (
+                                <button
+                                    key={sound.id}
+                                    type="button"
+                                    onClick={() => handleSelectSound(sound.id as SoundId)}
+                                    className={`flex items-center justify-between px-4 py-3 rounded-2xl border-2 transition-all text-left ${
+                                        selectedSound === sound.id
+                                            ? 'border-primary bg-primary/10 text-primary shadow-sm shadow-primary/20'
+                                            : 'border-slate-200 dark:border-white/10 hover:border-primary/40 text-slate-700 dark:text-slate-300 bg-white dark:bg-white/5'
+                                    }`}
+                                >
+                                    <span className="text-xs font-black">{sound.label}</span>
+                                    <button
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); playPreview(sound.url); }}
+                                        className={`p-1.5 rounded-xl transition-all hover:scale-110 ${
+                                            selectedSound === sound.id
+                                                ? 'bg-primary/20 hover:bg-primary/30 text-primary'
+                                                : 'bg-slate-100 dark:bg-white/10 hover:bg-primary/10 text-slate-400 hover:text-primary'
+                                        }`}
+                                        title="Pré-escutar"
+                                    >
+                                        <Play size={11} />
+                                    </button>
+                                </button>
+                            ))}
+                        </div>
+                        <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest text-center">
+                            Som selecionado: <span className="text-primary">{NOTIFICATION_SOUNDS.find(s => s.id === selectedSound)?.label}</span>
+                        </p>
+                    </div>
+                )}
             </ParamSection>
 
             {/* Botão Salvar */}

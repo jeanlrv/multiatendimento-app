@@ -43,6 +43,8 @@ const departmentSchema = z.object({
         .min(1, 'SLA deve ser ao menos 1 minuto')
         .default(1440),
     outOfHoursMessage: z.string().optional(),
+    greetingMessage: z.string().optional(),
+    timezone: z.string().default('America/Sao_Paulo'),
     aiAgentId: z.string().optional().nullable(),
     workflowId: z.string().optional().nullable(),
     defaultMode: z.enum(['AI', 'HUMANO', 'HIBRIDO']).default('AI'),
@@ -355,6 +357,8 @@ function DepartmentFormView({
             slaFirstResponseMin: department.slaFirstResponseMin || 60,
             slaResolutionMin: department.slaResolutionMin || 1440,
             outOfHoursMessage: department.outOfHoursMessage || '',
+            greetingMessage: (department as any).greetingMessage || '',
+            timezone: (department as any).timezone || 'America/Sao_Paulo',
             aiAgentId: department.aiAgentId || '',
             workflowId: department.workflowId || '',
             defaultMode: department.defaultMode || 'AI',
@@ -369,6 +373,8 @@ function DepartmentFormView({
             slaFirstResponseMin: 60,
             slaResolutionMin: 1440,
             outOfHoursMessage: '',
+            greetingMessage: '',
+            timezone: 'America/Sao_Paulo',
             aiAgentId: '',
             workflowId: '',
             defaultMode: 'AI',
@@ -672,6 +678,35 @@ function DepartmentFormView({
                                         </div>
                                     );
                                 })}
+                            </div>
+
+                            <div className="pt-4 border-t border-slate-100 dark:border-white/5">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block ml-1 italic">Fuso Horário</label>
+                                <select
+                                    {...register('timezone')}
+                                    className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 outline-none focus:ring-2 focus:ring-primary/20 text-sm font-bold"
+                                >
+                                    <option value="America/Sao_Paulo">América/São Paulo (UTC-3)</option>
+                                    <option value="America/Manaus">América/Manaus (UTC-4)</option>
+                                    <option value="America/Rio_Branco">América/Rio Branco (UTC-5)</option>
+                                    <option value="America/Noronha">América/Noronha (UTC-2)</option>
+                                    <option value="America/New_York">América/Nova York (UTC-5/-4)</option>
+                                    <option value="America/Chicago">América/Chicago (UTC-6/-5)</option>
+                                    <option value="America/Los_Angeles">América/Los Angeles (UTC-8/-7)</option>
+                                    <option value="Europe/Lisbon">Europa/Lisboa (UTC+0/+1)</option>
+                                    <option value="Europe/London">Europa/Londres (UTC+0/+1)</option>
+                                    <option value="UTC">UTC</option>
+                                </select>
+                            </div>
+
+                            <div className="pt-4 border-t border-slate-100 dark:border-white/5">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 block ml-1 italic">Mensagem de Boas-vindas</label>
+                                <textarea
+                                    {...register('greetingMessage')}
+                                    className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 outline-none focus:ring-2 focus:ring-primary/20 text-sm italic h-20 resize-none"
+                                    placeholder="Ex: Olá! Seja bem-vindo ao nosso suporte. Em breve um atendente irá te ajudar!"
+                                />
+                                <p className="text-[10px] text-slate-400 mt-1 ml-1">Enviada ao iniciar um novo atendimento. Se vazia, usa mensagem padrão.</p>
                             </div>
 
                             <div className="pt-4 border-t border-slate-100 dark:border-white/5">

@@ -86,16 +86,20 @@ export class DepartmentsService {
     async checkBusinessHours(departmentId: string): Promise<boolean> {
         const department = await this.prisma.department.findUnique({
             where: { id: departmentId },
-            select: { businessHours: true, isActive: true }
+            select: { businessHours: true, isActive: true, timezone: true }
         });
 
         if (!department || !department.isActive) return false;
         if (!department.businessHours) return true; // If no hours defined, assume always open
 
+        // Usar timezone do departamento para obter hora local correta
+        const timezone = (department as any).timezone || 'America/Sao_Paulo';
         const now = new Date();
+        const localDate = new Date(now.toLocaleString('en-US', { timeZone: timezone }));
+
         const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-        const currentDay = days[now.getDay()];
-        const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        const currentDay = days[localDate.getDay()];
+        const currentTime = `${String(localDate.getHours()).padStart(2, '0')}:${String(localDate.getMinutes()).padStart(2, '0')}`;
 
         const schedule = (department.businessHours as any)[currentDay];
 

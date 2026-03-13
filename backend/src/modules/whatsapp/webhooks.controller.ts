@@ -1,11 +1,9 @@
-import { Controller, Post, Body, Logger, Inject, forwardRef, HttpCode, BadRequestException } from '@nestjs/common';
+import { Controller, Post, Body, Logger, Inject, forwardRef, HttpCode } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../../database/prisma.service';
-import { WhatsAppService } from './whatsapp.service';
 import { ChatService } from '../chat/chat.service';
-import { DepartmentsService } from '../departments/departments.service';
 import { ChatGateway } from '../chat/chat.gateway';
 import { Public } from '../../common/decorators/public.decorator';
 import { CryptoService } from '../../common/services/crypto.service';
@@ -37,8 +35,6 @@ export class WebhooksController {
 
     constructor(
         private prisma: PrismaService,
-        private whatsappService: WhatsAppService,
-        private departmentsService: DepartmentsService,
         @Inject(forwardRef(() => ChatService)) private chatService: ChatService,
         @Inject(forwardRef(() => ChatGateway)) private chatGateway: ChatGateway,
         private crypto: CryptoService,
@@ -113,8 +109,13 @@ export class WebhooksController {
                 ? JSON.parse(department.businessHours)
                 : department.businessHours;
 
+            // Usar timezone do departamento (padrão: America/Sao_Paulo)
+            const timezone = department.timezone || 'America/Sao_Paulo';
+
+            // Converter hora atual para o fuso do departamento
             const now = new Date();
-            const dayOfWeek = now.getDay().toString(); // 0=Dom, 6=Sáb
+            const localDate = new Date(now.toLocaleString('en-US', { timeZone: timezone }));
+            const dayOfWeek = localDate.getDay().toString(); // 0=Dom, 6=Sáb
             const dayConfig = bh[dayOfWeek];
 
             if (!dayConfig || !dayConfig.start || !dayConfig.end) {
@@ -125,7 +126,7 @@ export class WebhooksController {
             const [startH, startM] = dayConfig.start.split(':').map(Number);
             const [endH, endM] = dayConfig.end.split(':').map(Number);
 
-            const currentMinutes = now.getHours() * 60 + now.getMinutes();
+            const currentMinutes = localDate.getHours() * 60 + localDate.getMinutes();
             const startMinutes = startH * 60 + startM;
             const endMinutes = endH * 60 + endM;
 
@@ -445,13 +446,12 @@ export class WebhooksController {
 
             if (outOfHoursMsg) {
                 // Fora do horário comercial: enviar mensagem específica
-                await this.whatsappService.sendMessage(connection.id, phoneNumber, outOfHoursMsg, companyId);
+                // chatService.sendMessage já envia via WhatsApp internamente (sendExternalMessage)
                 await this.chatService.sendMessage(ticket.id, outOfHoursMsg, true, 'TEXT', undefined, companyId, 'AGENT');
             } else {
                 // Dentro do horário: enviar greeting padrão
                 const greeting = department.greetingMessage
                     || `Olá! Seu atendimento foi iniciado no setor ${department.name}. Aguarde, em breve alguém irá te ajudar.`;
-                await this.whatsappService.sendMessage(connection.id, phoneNumber, greeting, companyId);
                 await this.chatService.sendMessage(ticket.id, greeting, true, 'TEXT', undefined, companyId, 'AGENT');
             }
 

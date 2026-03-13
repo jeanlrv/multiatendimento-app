@@ -220,23 +220,37 @@ export class ChatService {
             // Buscar departamentos disponíveis para injetar instruções de roteamento
             const departments = await this.prisma.department.findMany({
                 where: { companyId: ticket.companyId },
-                select: { name: true },
+                select: { id: true, name: true },
             });
-            const deptNames = departments.map(d => d.name).join(', ');
+            // Excluir o departamento ATUAL para evitar loop de auto-transferência
+            const otherDepts = departments.filter(d => d.id !== ticket.departmentId);
+            const deptNames = otherDepts.length > 0
+                ? otherDepts.map(d => d.name).join(', ')
+                : '(nenhum outro departamento disponível)';
+            const currentDeptName = ticket.department?.name ?? 'desconhecido';
+
+            // Data/hora local no fuso do departamento
+            const deptTimezone = (ticket.department as any)?.timezone || 'America/Sao_Paulo';
+            const nowLocal = new Date(new Date().toLocaleString('en-US', { timeZone: deptTimezone }));
+            const dateStr = nowLocal.toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+            const timeStr = nowLocal.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
             const routingInstructions = [
                 '========================================',
                 '[INSTRUÇÕES DE ROTEAMENTO — NÃO EXIBA AO CLIENTE]',
                 '========================================',
+                `Data e hora atual: ${dateStr}, ${timeStr} (${deptTimezone})`,
+                `Você está ATUALMENTE no departamento: ${currentDeptName}`,
                 'Você pode usar EXCLUSIVAMENTE um dos comandos abaixo quando necessário:',
                 '',
                 `• [TRANSFERIR:NomeDoDepartamento] — transfere para outro departamento (IA do destino assume)`,
                 `• [HUMANO] — transfere para um atendente humano neste mesmo departamento`,
                 `• [FINALIZAR] — encerra o atendimento (use apenas quando tudo estiver resolvido)`,
                 '',
-                `Departamentos disponíveis: ${deptNames}`,
+                `Departamentos para onde você pode transferir: ${deptNames}`,
                 '',
                 'REGRAS IMPORTANTES:',
-                '1. Use [TRANSFERIR:X] quando o cliente precisa de um departamento diferente.',
+                '1. Use [TRANSFERIR:X] SOMENTE para departamentos da lista acima — NUNCA para o seu departamento atual.',
                 '2. Use [HUMANO] quando você não consegue resolver e o cliente precisa de uma pessoa.',
                 '3. Use [FINALIZAR] apenas quando o atendimento estiver completamente concluído.',
                 '4. Os comandos substituem COMPLETAMENTE sua resposta — não inclua texto adicional.',
@@ -263,6 +277,11 @@ export class ChatService {
                     },
                 });
                 if (targetDept) {
+                    // Guard: não transferir para o mesmo departamento atual
+                    if (targetDept.id === ticket.departmentId) {
+                        this.logger.warn(`IA tentou transferir para o mesmo departamento atual "${deptName}" — ignorado`);
+                        return;
+                    }
                     await this.prisma.ticket.update({
                         where: { id: ticketId },
                         data: { departmentId: targetDept.id },
@@ -311,10 +330,22 @@ export class ChatService {
                 return; // Não enviar o texto do comando ao cliente
             }
 
-            await this.sendMessage(ticketId, aiResponse, true, 'TEXT', undefined, ticket.companyId, 'AI');
+            await this.sendMessage(ticketId, this.sanitizeForWhatsApp(aiResponse), true, 'TEXT', undefined, ticket.companyId, 'AI');
         } catch (error) {
             this.logger.error(`Erro ao processar resposta de IA: ${error.message}`);
         }
+    }
+
+    /** Converte markdown padrão para formato WhatsApp antes de enviar */
+    private sanitizeForWhatsApp(text: string): string {
+        return text
+            .replace(/\*\*(.+?)\*\*/gs, '*$1*')          // **bold** → *bold*
+            .replace(/__(.+?)__/gs, '_$1_')                // __italic__ → _italic_
+            .replace(/^#{1,6}\s+(.+)$/gm, '*$1*')         // # Heading → *Heading*
+            .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')       // [link](url) → link
+            .replace(/`{3}[\s\S]*?`{3}/g, '')              // remover blocos de código
+            .replace(/`([^`]+)`/g, '$1')                   // `inline code` → texto
+            .trim();
     }
 
     async getTicketMessages(ticketId: string, companyId: string, limit: number = 50) {

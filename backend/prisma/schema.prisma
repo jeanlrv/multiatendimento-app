@@ -119,6 +119,7 @@ model Department {
   outOfHoursMessage String?  @db.Text
   greetingMessage   String?  @db.Text
   businessHours     Json?
+  timezone          String   @default("America/Sao_Paulo")
   autoDistribute    Boolean  @default(true)
   isActive          Boolean  @default(true)
   companyId         String

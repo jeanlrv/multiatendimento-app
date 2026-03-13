@@ -18,6 +18,7 @@ import { CreateScheduleModal } from '@/components/chat/CreateScheduleModal';
 import { SlaIndicator } from '@/components/chat/SlaIndicator';
 import { translateStatus, getStatusColor } from '@/lib/translations';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
+import { useNotificationSound } from '@/hooks/useNotificationSound';
 import { SentimentIndicator } from '@/components/chat/SentimentIndicator';
 import { MessageBubble } from '@/components/chat/MessageBubble';
 import { BulkActionBar } from '@/components/tickets/BulkActionBar';
@@ -175,6 +176,7 @@ export default function TicketsPage() {
     const { user } = useAuth();
     const router = useRouter();
     const searchParams = useSearchParams();
+    const { play: playSound } = useNotificationSound();
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const [selectedTicketIndex, setSelectedTicketIndex] = useState(0);
@@ -647,8 +649,7 @@ export default function TicketsPage() {
                     const selectedId = selectedTicketRef.current?.id;
                     if (selectedId !== ticketId) {
                         ticket.unreadMessages = (ticket.unreadMessages || 0) + 1;
-                        const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2354/2354-preview.mp3');
-                        audio.play().catch(() => { });
+                        playSound('message');
                         if (Notification.permission === 'granted') {
                             new Notification(`Mensagem de ${ticket.contact.name}`, {
                                 body: message.content || '📎 Mídia',
@@ -666,8 +667,7 @@ export default function TicketsPage() {
         };
 
         const handleMention = (data: { ticketId: string, messageId: string, mentionContent: string }) => {
-            const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3');
-            audio.play().catch(() => { });
+            playSound('mention');
             toast(`Você foi mencionado!`, {
                 description: data.mentionContent,
                 action: {
@@ -701,8 +701,7 @@ export default function TicketsPage() {
             setMessages(prev => {
                 if (prev.find(m => m.id === message.id)) return prev;
                 if (!message.fromMe) {
-                    const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2354/2354-preview.mp3');
-                    audio.play().catch(() => { });
+                    playSound('message');
                 }
                 return [...prev, message];
             });
@@ -854,15 +853,17 @@ export default function TicketsPage() {
                     </div>
                     <div className="flex-1 min-w-0 transition-transform flex flex-col gap-2">
                         <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-1.5 min-w-0">
-                                <h3 className={`text-[13px] font-black tracking-tight leading-none truncate ${selectedTicket?.id === ticket.id ? 'text-primary' : 'text-slate-800 dark:text-white'}`}>
+                            <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                                <h3 className={`text-[13px] font-black tracking-tight leading-none truncate flex-1 min-w-0 ${selectedTicket?.id === ticket.id ? 'text-primary' : 'text-slate-800 dark:text-white'}`} title={ticket.contact.name}>
                                     {ticket.contact.name || 'Contato'}
                                 </h3>
                                 <span className="text-[9px] font-mono text-slate-400 bg-slate-100 dark:bg-white/5 px-1 py-0.5 rounded-md shrink-0">
                                     #{ticket.id.substring(ticket.id.length - 4).toUpperCase()}
                                 </span>
                                 {ticket.unreadMessages > 0 && (
-                                    <span className="h-1.5 w-1.5 bg-primary rounded-full animate-ping shrink-0" />
+                                    <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 bg-primary text-white text-[10px] font-black rounded-full shrink-0 shadow-sm shadow-primary/40 leading-none">
+                                        {ticket.unreadMessages > 99 ? '99+' : ticket.unreadMessages}
+                                    </span>
                                 )}
                             </div>
                             <div className="flex flex-col items-end gap-0.5 shrink-0">
@@ -1159,6 +1160,11 @@ export default function TicketsPage() {
                                     <Bot size={10} className="text-blue-500 shrink-0" />
                                     <span className="text-[9px] font-black uppercase tracking-widest text-blue-600 dark:text-blue-400">Em Atend. IA</span>
                                     <span className="text-[8px] font-black bg-blue-500 text-white rounded-full px-1.5 py-0.5 leading-none">{aiTickets.length}</span>
+                                    {aiTickets.reduce((s: number, t: any) => s + (t.unreadMessages || 0), 0) > 0 && (
+                                        <span className="text-[8px] font-black bg-primary text-white rounded-full px-1.5 py-0.5 leading-none animate-pulse">
+                                            {aiTickets.reduce((s: number, t: any) => s + (t.unreadMessages || 0), 0)} não lidas
+                                        </span>
+                                    )}
                                 </div>
                                 <ChevronDown size={11} className={`text-blue-400 transition-transform duration-200 ${aiSectionOpen ? '' : '-rotate-90'}`} />
                             </button>
@@ -1173,6 +1179,11 @@ export default function TicketsPage() {
                                     <User size={10} className="text-amber-500 shrink-0" />
                                     <span className="text-[9px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-400">Em Atend. Humano</span>
                                     <span className="text-[8px] font-black bg-amber-500 text-white rounded-full px-1.5 py-0.5 leading-none">{humanTickets.length}</span>
+                                    {humanTickets.reduce((s: number, t: any) => s + (t.unreadMessages || 0), 0) > 0 && (
+                                        <span className="text-[8px] font-black bg-primary text-white rounded-full px-1.5 py-0.5 leading-none animate-pulse">
+                                            {humanTickets.reduce((s: number, t: any) => s + (t.unreadMessages || 0), 0)} não lidas
+                                        </span>
+                                    )}
                                 </div>
                                 <ChevronDown size={11} className={`text-amber-400 transition-transform duration-200 ${humanSectionOpen ? '' : '-rotate-90'}`} />
                             </button>
@@ -1189,8 +1200,7 @@ export default function TicketsPage() {
                 onDragOver={onDragOver}
                 onDragLeave={onDragLeave}
                 onDrop={onDrop}
-                className={`flex-1 w-full flex flex-col liquid-glass md:rounded-2xl relative transition-all duration-300 ${!selectedTicket ? 'hidden md:flex' : 'flex absolute inset-0 md:relative z-20 md:z-auto bg-slate-50 dark:bg-gray-900 md:bg-transparent dark:md:bg-transparent'}`}
-                style={{ overflow: 'visible' }}
+                className={`flex-1 w-full flex flex-col liquid-glass md:rounded-2xl relative transition-all duration-300 overflow-hidden ${!selectedTicket ? 'hidden md:flex' : 'flex absolute inset-0 md:relative z-20 md:z-auto bg-slate-50 dark:bg-gray-900 md:bg-transparent dark:md:bg-transparent'}`}
             >
                 {/* Overlay de Drag and Drop */}
                 <AnimatePresence>
@@ -1292,7 +1302,7 @@ export default function TicketsPage() {
                                     <div className="min-w-0 flex-1">
                                         <div className="flex items-center gap-1.5 flex-wrap">
                                             <div className="flex items-center gap-2">
-                                                <h3 className="font-black text-sm md:text-base text-slate-900 dark:text-white tracking-tight leading-none truncate max-w-[120px] md:max-w-[200px]">{selectedTicket.contact.name}</h3>
+                                                <h3 className="font-black text-sm md:text-base text-slate-900 dark:text-white tracking-tight leading-none truncate max-w-[160px] md:max-w-[280px] lg:max-w-none" title={selectedTicket.contact.name}>{selectedTicket.contact.name}</h3>
                                                 <span className="text-[10px] font-mono text-primary bg-primary/10 px-1.5 py-0.5 rounded-md border border-primary/20">
                                                     #{selectedTicket.id.substring(selectedTicket.id.length - 6).toUpperCase()}
                                                 </span>
@@ -1432,7 +1442,7 @@ export default function TicketsPage() {
 
                                     {/* Modo IA / Humano */}
                                     <div className="flex items-center bg-slate-100/50 dark:bg-white/5 p-0.5 rounded-xl border border-white/50 dark:border-white/5 backdrop-blur-md shrink-0">
-                                        {[{ key: 'AI', icon: <Bot size={11} />, label: 'IA', color: 'bg-blue-500 shadow-blue-500/30' }, { key: 'HUMANO', icon: <User size={11} />, label: 'Humano', color: 'bg-amber-500 shadow-amber-500/30' }].map(({ key: m, icon, label, color }) => (
+                                        {[{ key: 'AI', icon: <Bot size={12} />, label: 'IA', color: 'bg-blue-500 shadow-blue-500/30' }, { key: 'HUMANO', icon: <User size={12} />, label: 'Humano', color: 'bg-amber-500 shadow-amber-500/30' }].map(({ key: m, icon, label, color }) => (
                                             <button
                                                 key={m}
                                                 onClick={async () => {
@@ -1444,14 +1454,14 @@ export default function TicketsPage() {
                                                         toast.error('Erro ao alternar modo');
                                                     }
                                                 }}
-                                                className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${selectedTicket.mode === m
+                                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${selectedTicket.mode === m
                                                     ? `${color} text-white shadow-md`
                                                     : 'text-slate-400 hover:text-slate-600 dark:hover:text-white'
                                                     }`}
                                                 title={`Ativar modo ${label}`}
                                             >
                                                 {icon}
-                                                <span className="hidden md:inline">{label}</span>
+                                                <span>{label}</span>
                                             </button>
                                         ))}
                                     </div>
@@ -1832,16 +1842,16 @@ export default function TicketsPage() {
                             </div>
                         </div>
 
-                        <div className="flex-1 flex overflow-hidden border-x border-b border-slate-200 dark:border-white/10 md:rounded-b-2xl shadow-xl">
+                        <div className="flex-1 min-h-0 flex overflow-hidden border-x border-b border-slate-200 dark:border-white/10 md:rounded-b-2xl shadow-xl">
                                 {/* Mensagens (agora dentro de uma div flex) */}
-                                <div className="flex-1 flex flex-col overflow-hidden relative">
+                                <div className="flex-1 min-h-0 flex flex-col overflow-hidden relative">
                                     <div
                                         ref={messagesContainerRef}
                                         onScroll={(e) => {
                                             const el = e.currentTarget;
                                             setShowScrollBottom(el.scrollTop + el.clientHeight < el.scrollHeight - 250);
                                         }}
-                                        className="flex-1 overflow-y-auto custom-scrollbar p-4 md:p-6 space-y-4"
+                                        className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-4 md:p-6 space-y-4"
                                     >
                                         {loadingMessages ? (
                                             <div className="space-y-5 py-2">

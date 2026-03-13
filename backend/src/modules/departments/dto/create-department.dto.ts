@@ -62,6 +62,16 @@ export class CreateDepartmentDto {
     @IsOptional()
     businessHours?: any;
 
+    @ApiProperty({ description: 'Fuso horário (IANA, ex: America/Sao_Paulo)', required: false, default: 'America/Sao_Paulo' })
+    @IsString()
+    @IsOptional()
+    timezone?: string;
+
+    @ApiProperty({ description: 'Mensagem de saudação ao iniciar atendimento', required: false })
+    @IsString()
+    @IsOptional()
+    greetingMessage?: string;
+
     @ApiProperty({ description: 'Se deve distribuir tickets automaticamente', required: false, default: true })
     @IsBoolean()
     @IsOptional()
