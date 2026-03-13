@@ -385,8 +385,9 @@ export class TicketsService {
         });
 
         const csatEnabled = csatEnabledSetting?.value === 'true' || csatEnabledSetting?.value === '"true"';
-        const csatMessage = csatMessageSetting?.value
-            ? csatMessageSetting.value.replace(/^"|"$/g, '') // remover aspas do JSON.stringify
+        const rawCsatMessage = csatMessageSetting?.value;
+        const csatMessage = rawCsatMessage
+            ? String(rawCsatMessage).replace(/^"|"$/g, '') // remover aspas do JSON.stringify
             : null;
 
         if (!csatEnabled || !csatMessage) {
