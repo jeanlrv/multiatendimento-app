@@ -81,6 +81,14 @@
   body {
     @apply bg-background text-foreground antialiased transition-colors duration-500;
   }
+
+  /* Escalamento responsivo — aumenta densidade em telas Full HD+ */
+  @media (min-width: 1536px) {
+    html { font-size: 16.5px; }
+  }
+  @media (min-width: 1920px) {
+    html { font-size: 17px; }
+  }
 }
 
 /* ============================= */

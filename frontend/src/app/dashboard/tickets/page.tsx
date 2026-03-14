@@ -2042,12 +2042,12 @@ export default function TicketsPage() {
                                                             className={`max-w-[70%] ${msg.messageType === 'INTERNAL'
                                                                 ? 'bg-amber-100 dark:bg-amber-900/40 border-2 border-dashed border-amber-300 dark:border-amber-700/50 text-amber-900 dark:text-amber-100 rounded-3xl'
                                                                 : msg.fromMe
-                                                                    ? 'bg-primary text-white rounded-[1.5rem] rounded-br-[0.2rem] shadow-[0_10px_30px_-10px_rgba(56,189,248,0.5)]'
+                                                                    ? 'bg-primary text-white rounded-[1.5rem] rounded-br-[0.2rem]'
                                                                     : 'liquid-glass rounded-[1.5rem] rounded-bl-[0.2rem] border border-slate-200 dark:border-white/5'
                                                                 } px-6 py-4 relative group`}
                                                             style={msg.messageType !== 'INTERNAL' ? (
                                                                 msg.fromMe
-                                                                    ? { backgroundColor: bubbleColors.sent }
+                                                                    ? { backgroundColor: bubbleColors.sent, boxShadow: `0 10px 30px -10px ${bubbleColors.sent}80` }
                                                                     : (bubbleColors.received ? { backgroundColor: bubbleColors.received } : undefined)
                                                             ) : undefined}
                                                         >

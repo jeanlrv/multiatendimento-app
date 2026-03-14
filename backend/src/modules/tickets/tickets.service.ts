@@ -320,6 +320,10 @@ export class TicketsService {
                 ...(updateTicketDto.priority && { priority: updateTicketDto.priority as TicketPriority }),
                 ...(updateTicketDto.assignedUserId && { assignedUserId: updateTicketDto.assignedUserId }),
                 ...(updateTicketDto.departmentId && { departmentId: updateTicketDto.departmentId }),
+                // Transferência manual: pausa IA automaticamente para não sobrepor atendimento humano
+                ...(updateTicketDto.departmentId &&
+                    updateTicketDto.departmentId !== oldTicket.departmentId &&
+                    !updateTicketDto.mode && { mode: 'MANUAL' }),
                 ...(updateTicketDto.subject && { subject: updateTicketDto.subject }),
                 ...(updateTicketDto.mode && { mode: updateTicketDto.mode }),
                 // Se estiver reabrindo, limpa datas de fechamento

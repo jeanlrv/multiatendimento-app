@@ -64,7 +64,7 @@ const SidebarContent = React.memo(({
                     <Link
                         key={item.label}
                         href={item.path}
-                        className={`group flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'} p-3 rounded-2xl transition-all duration-300 relative ${isActive
+                        className={`group flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'} p-3 xl:p-3.5 rounded-2xl transition-all duration-300 relative ${isActive
                             ? 'bg-primary text-white shadow-lg shadow-primary/30 font-bold scale-[1.02]'
                             : 'text-gray-500 dark:text-gray-400 hover:bg-white/50 dark:hover:bg-white/5 hover:translate-x-1'
                             }`}
@@ -75,7 +75,7 @@ const SidebarContent = React.memo(({
                             <span className={`text-xl transition-transform group-hover:scale-110 ${isActive ? 'filter-none' : 'grayscale group-hover:grayscale-0'}`}>
                                 {item.icon}
                             </span>
-                            {!sidebarCollapsed && <span className="text-sm">{item.label}</span>}
+                            {!sidebarCollapsed && <span className="text-sm xl:text-[0.9rem]">{item.label}</span>}
                         </div>
                         {count > 0 && !sidebarCollapsed && (
                             <span className={`min-w-[20px] h-5 px-1.5 flex items-center justify-center rounded-full text-[10px] font-black tabular-nums ${isActive ? 'bg-white/25 text-white' : 'bg-primary text-white'}`}>
@@ -258,7 +258,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <Toaster position="top-right" richColors closeButton />
 
                 {/* ── SIDEBAR DESKTOP (md+) ────────────────────────────────── */}
-                <aside className={`${sidebarCollapsed ? 'w-20' : 'w-72'} flex-shrink-0 hidden md:flex flex-col relative z-30 transition-all duration-300`}>
+                <aside className={`${sidebarCollapsed ? 'w-20' : 'w-72 xl:w-80'} flex-shrink-0 hidden md:flex flex-col relative z-30 transition-all duration-300`}>
                     <div className="absolute inset-0 liquid-glass !rounded-none border-r border-slate-200 dark:border-white/5 shadow-2xl pointer-events-none" />
                     <div className="relative z-10 w-full h-full flex flex-col pointer-events-auto">
                         <SidebarContent
@@ -329,7 +329,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <div className="flex-1 flex flex-col relative z-10 min-w-0 min-h-0">
 
                     {/* ── HEADER ───────────────────────────────────────────── */}
-                    <header className="h-14 md:h-20 flex items-center justify-between px-3 md:px-8 relative z-20 flex-shrink-0 border-b border-slate-200/60 dark:border-white/5 liquid-glass shadow-sm">
+                    <header className="h-14 md:h-20 xl:h-[72px] flex items-center justify-between px-3 md:px-8 xl:px-10 relative z-20 flex-shrink-0 border-b border-slate-200/60 dark:border-white/5 liquid-glass shadow-sm">
                         <div className="flex items-center gap-2 md:gap-8">
                             {/* Botão hamburger — só mobile */}
                             <button
@@ -401,7 +401,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
                     {/* ── CONTEÚDO DAS PÁGINAS ─────────────────────────────── */}
                     {/* min-h-0: obrigatório em flex child para scroll funcionar no Safari/iOS */}
-                    <main className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 px-3 md:px-6 pt-1 pb-[64px] md:pb-6 custom-scrollbar">
+                    <main className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 px-3 md:px-6 xl:px-8 2xl:px-10 pt-1 pb-[64px] md:pb-8 custom-scrollbar">
                         {children}
                     </main>
                 </div>
