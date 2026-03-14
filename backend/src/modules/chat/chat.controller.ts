@@ -4,6 +4,7 @@ import { ChatService } from './chat.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Company } from '../../common/decorators/company.decorator';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { MessageType } from '@prisma/client';
 
 @ApiTags('Chat')
 @Controller('chat')
@@ -52,7 +53,7 @@ export class ChatController {
             ticketId,
             body.content,
             true, // Mensagem enviada pelo atendente (fromMe)
-            body.type,
+            (body.type as MessageType) || MessageType.TEXT,
             body.mediaUrl,
             companyId,
             'AGENT',

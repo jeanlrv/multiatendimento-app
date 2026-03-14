@@ -7,6 +7,7 @@ import { ChatService } from '../chat/chat.service';
 import { ChatGateway } from '../chat/chat.gateway';
 import { Public } from '../../common/decorators/public.decorator';
 import { CryptoService } from '../../common/services/crypto.service';
+import { MessageType } from '@prisma/client';
 
 /**
  * Mapeamento de status Z-API → status interno do sistema.
@@ -164,46 +165,46 @@ export class WebhooksController {
      * A Z-API envia campos específicos por tipo: text, image, audio, video, document, etc.
      */
     private extractMessageContent(payload: any): {
-        messageType: string;
+        messageType: MessageType;
         content: string;
         mediaUrl?: string;
     } {
         if (payload.text?.message) {
-            return { messageType: 'TEXT', content: payload.text.message };
+            return { messageType: MessageType.TEXT, content: payload.text.message };
         }
         if (payload.image) {
             const url = typeof payload.image === 'string' ? payload.image : (payload.image?.imageUrl || payload.image?.url);
-            return { messageType: 'IMAGE', content: payload.image?.caption || '[Imagem]', mediaUrl: url };
+            return { messageType: MessageType.IMAGE, content: payload.image?.caption || '[Imagem]', mediaUrl: url };
         }
         if (payload.audio) {
             const url = typeof payload.audio === 'string' ? payload.audio : (payload.audio?.audioUrl || payload.audio?.url);
-            return { messageType: 'AUDIO', content: '[Áudio]', mediaUrl: url };
+            return { messageType: MessageType.AUDIO, content: '[Áudio]', mediaUrl: url };
         }
         if (payload.video) {
             const url = typeof payload.video === 'string' ? payload.video : (payload.video?.videoUrl || payload.video?.url);
-            return { messageType: 'VIDEO', content: payload.video?.caption || '[Vídeo]', mediaUrl: url };
+            return { messageType: MessageType.VIDEO, content: payload.video?.caption || '[Vídeo]', mediaUrl: url };
         }
         if (payload.document) {
             const url = typeof payload.document === 'string' ? payload.document : (payload.document?.documentUrl || payload.document?.url);
-            return { messageType: 'DOCUMENT', content: payload.document?.fileName || '[Documento]', mediaUrl: url };
+            return { messageType: MessageType.DOCUMENT, content: payload.document?.fileName || '[Documento]', mediaUrl: url };
         }
         if (payload.sticker) {
             const url = typeof payload.sticker === 'string' ? payload.sticker : payload.sticker?.stickerUrl;
-            return { messageType: 'STICKER', content: '[Sticker]', mediaUrl: url };
+            return { messageType: MessageType.STICKER, content: '[Sticker]', mediaUrl: url };
         }
         if (payload.location) {
             const { latitude, longitude } = payload.location;
-            return { messageType: 'LOCATION', content: `[Localização: ${latitude}, ${longitude}]` };
+            return { messageType: MessageType.LOCATION, content: `[Localização: ${latitude}, ${longitude}]` };
         }
         if (payload.contact) {
-            return { messageType: 'CONTACT', content: '[Contato compartilhado]' };
+            return { messageType: MessageType.CONTACT, content: '[Contato compartilhado]' };
         }
         // Resposta a botão ou lista interativa
         if (payload.buttonResponse?.selectedButtonLabel || payload.listResponse?.selectedTitle) {
             const text = payload.buttonResponse?.selectedButtonLabel || payload.listResponse?.selectedTitle;
-            return { messageType: 'TEXT', content: text };
+            return { messageType: MessageType.TEXT, content: text };
         }
-        return { messageType: 'TEXT', content: '' };
+        return { messageType: MessageType.TEXT, content: '' };
     }
 
     /**
@@ -453,7 +454,7 @@ export class WebhooksController {
                 // Dentro do horário: enviar greeting padrão
                 const greeting = department.greetingMessage
                     || `Olá! Seu atendimento foi iniciado no setor ${department.name}. Aguarde, em breve alguém irá te ajudar.`;
-                await this.chatService.sendMessage(ticket.id, greeting, true, 'TEXT', undefined, companyId, 'AGENT');
+                await this.chatService.sendMessage(ticket.id, greeting, true, MessageType.TEXT, undefined, companyId, 'AGENT');
             }
 
             // CORREÇÃO BUG 1: Salvar a primeira mensagem do cliente no ticket

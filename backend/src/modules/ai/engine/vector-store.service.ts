@@ -249,8 +249,9 @@ export class VectorStoreService {
                         LIMIT ${topK * 2}
                     `;
 
-                    this.logger.log(`${loggerPrefix} ${ftsResults?.length || 0} resultados via FTS`);
-                    const ftsChunks = (ftsResults || []).map((result: any) => {
+                    const ftsResultsArr = ftsResults as any[];
+                    this.logger.log(`${loggerPrefix} ${ftsResultsArr?.length || 0} resultados via FTS`);
+                    const ftsChunks = (ftsResultsArr || []).map((result: any) => {
                         const sqlScore = parseFloat(result.score) || 0.5;
                         return {
                             id: result.id,

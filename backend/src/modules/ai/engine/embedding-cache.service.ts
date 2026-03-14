@@ -77,40 +77,18 @@ export class EmbeddingCacheService implements OnModuleInit {
     }
 
     /**
-     * Verifica se um chunk já foi processado (usando hash do conteúdo)
+     * Verifica se um chunk já foi processado (usando hash do conteúdo — verificação em memória)
      */
     async isChunkProcessed(contentHash: string): Promise<boolean> {
-        // Verificar no banco de dados
-        const existingChunk = await this.prisma.documentChunk.findFirst({
-            where: {
-                contentHash,
-            },
-            select: { id: true },
-        });
-
-        return !!existingChunk;
+        return this.memoryCache.has(contentHash);
     }
 
     /**
-     * Obtém embeddings duplicados para evitar recálculo
+     * Obtém embeddings duplicados para evitar recálculo (verificação em memória)
      */
-    async findDuplicateChunks(contentHash: string, knowledgeBaseId: string) {
-        const chunks = await this.prisma.documentChunk.findMany({
-            where: {
-                contentHash,
-                knowledgeBaseId,
-            },
-            include: {
-                document: {
-                    include: {
-                        knowledgeBase: true,
-                    },
-                },
-            },
-            take: 10,
-        });
-
-        return chunks;
+    async findDuplicateChunks(contentHash: string, _knowledgeBaseId: string) {
+        const cached = this.memoryCache.get(contentHash);
+        return cached ? [{ id: cached.chunkId, embedding: cached.embedding }] : [];
     }
 
     /**

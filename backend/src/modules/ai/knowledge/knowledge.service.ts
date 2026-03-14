@@ -684,6 +684,10 @@ export class KnowledgeService {
             _count: true
         });
 
+        const totalDocuments = await this.prisma.document.count({
+            where: { knowledgeBaseId: id },
+        });
+
         const kbDocIds = await this.prisma.document.findMany({
             where: { knowledgeBaseId: id },
             select: { id: true },
@@ -698,7 +702,7 @@ export class KnowledgeService {
         return {
             id: base.id,
             name: base.name,
-            totalDocuments: base._count.documents,
+            totalDocuments,
             documentsByStatus,
             totalChunks: totalChunks._count,
             estimatedTokens: totalTokens
