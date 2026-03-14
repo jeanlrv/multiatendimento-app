@@ -1442,4 +1442,41 @@ Resposta:`;
         const augmented = `[ARQUIVO ANEXADO: ${file.originalname}]\n${text}\n\n${message || 'Analise o arquivo acima.'}`;
         return this.chat(companyId, agentId, augmented, history);
     }
+
+    async searchKnowledge(companyId: string, agentId: string, query: string, topK = 8) {
+        const agent = await this.prisma.aIAgent.findFirst({ where: { id: agentId, companyId } });
+        if (!agent) throw new NotFoundException('Agente não encontrado');
+        if (!agent.knowledgeBaseId) return { results: [], message: 'Agente sem base de conhecimento configurada.' };
+
+        const kb = await this.prisma.knowledgeBase.findFirst({ where: { id: agent.knowledgeBaseId, companyId } });
+        if (!kb) return { results: [], message: 'Base de conhecimento não encontrada.' };
+
+        try {
+            const chunks = await this.vectorStoreService.searchSimilarity(
+                this.prisma, companyId, query, agent.knowledgeBaseId, topK,
+                kb.embeddingProvider || 'qwen', kb.embeddingModel || undefined,
+            );
+
+            const results = await Promise.all(chunks.map(async (chunk) => {
+                const doc = await this.prisma.document.findUnique({
+                    where: { id: chunk.metadata?.documentId || '' },
+                    select: { title: true, type: true, createdAt: true },
+                }).catch(() => null);
+
+                return {
+                    id: chunk.id,
+                    content: chunk.content,
+                    score: chunk.score,
+                    title: doc?.title || 'Documento',
+                    sourceType: doc?.type || 'TEXT',
+                    createdAt: doc?.createdAt,
+                };
+            }));
+
+            return { results, kbName: kb.name };
+        } catch (err: any) {
+            this.logger.error(`searchKnowledge error: ${err.message}`);
+            return { results: [], message: 'Erro ao executar busca semântica.' };
+        }
+    }
 }

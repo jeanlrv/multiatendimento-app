@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateTicketDto } from './dto/create-ticket.dto';
 import { UpdateTicketDto } from './dto/update-ticket.dto';
@@ -8,6 +8,8 @@ import { AIService } from '../ai/ai.service';
 import { AuditService } from '../audit/audit.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { EvaluationsService } from '../evaluations/evaluations.service';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 
 @Injectable()
 export class TicketsService {
@@ -19,6 +21,7 @@ export class TicketsService {
         private evaluationsService: EvaluationsService,
         private auditService: AuditService,
         private eventEmitter: EventEmitter2,
+        @InjectQueue('scheduling') private schedulingQueue: Queue,
     ) { }
 
     async create(companyId: string, createTicketDto: CreateTicketDto) {
@@ -187,6 +190,65 @@ export class TicketsService {
         };
     }
 
+    async exportCsv(companyId: string, filters: any): Promise<string> {
+        const { status, departmentId, assignedUserId, search, priority, connectionId, tags, startDate, endDate } = filters;
+
+        const where: any = {
+            companyId,
+            ...(status && { status }),
+            ...(departmentId && { departmentId: typeof departmentId === 'string' && departmentId.includes(',') ? { in: departmentId.split(',') } : departmentId }),
+            ...(assignedUserId && { assignedUserId }),
+            ...(priority && { priority }),
+            ...(connectionId && { connectionId }),
+        };
+
+        if (search) {
+            where.OR = [
+                { contact: { name: { contains: search, mode: 'insensitive' } } },
+                { contact: { phoneNumber: { contains: search } } },
+                { subject: { contains: search, mode: 'insensitive' } },
+            ];
+        }
+
+        if (tags) {
+            const tagIds = Array.isArray(tags) ? tags : [tags];
+            const validTagIds = tagIds.filter((id: string) => id && id.trim() !== '');
+            if (validTagIds.length > 0) {
+                where.tags = { some: { tagId: { in: validTagIds } } };
+            }
+        }
+
+        if (startDate || endDate) {
+            where.createdAt = {
+                ...(startDate && { gte: new Date(startDate) }),
+                ...(endDate && { lte: new Date(endDate) }),
+            };
+        }
+
+        const tickets = await this.prisma.ticket.findMany({
+            where,
+            include: { contact: true, department: true, assignedUser: true },
+            orderBy: [{ lastMessageAt: 'desc' }, { updatedAt: 'desc' }],
+        });
+
+        const escape = (v: any) => String(v ?? '').replace(/"/g, '""');
+        const header = ['ID', 'Protocolo', 'Status', 'Prioridade', 'Contato', 'Telefone', 'Agente', 'Departamento', 'Criado em', 'Atualizado em'];
+        const rows = tickets.map(t => [
+            t.id,
+            '#' + t.id.slice(-6).toUpperCase(),
+            t.status,
+            t.priority,
+            t.contact.name,
+            t.contact.phoneNumber,
+            t.assignedUser?.name || '',
+            t.department.name,
+            t.createdAt.toLocaleDateString('pt-BR'),
+            t.updatedAt.toLocaleDateString('pt-BR'),
+        ]);
+
+        return [header, ...rows].map(r => r.map(c => `"${escape(c)}"`).join(',')).join('\n');
+    }
+
     async findOne(companyId: string, id: string) {
         const ticket = await this.prisma.ticket.findFirst({
             where: { id, companyId },
@@ -210,6 +272,43 @@ export class TicketsService {
         }
 
         return ticket;
+    }
+
+    async getPublicTicket(id: string) {
+        const ticket = await this.prisma.ticket.findUnique({
+            where: { id },
+            include: {
+                contact: { select: { name: true } },
+                department: { select: { name: true } },
+                messages: {
+                    where: { fromMe: false },
+                    orderBy: { sentAt: 'asc' },
+                    select: {
+                        id: true,
+                        content: true,
+                        sentAt: true,
+                        fromMe: true,
+                        type: true,
+                    },
+                    take: 100,
+                },
+            },
+        });
+
+        if (!ticket) {
+            throw new NotFoundException(`Ticket não encontrado`);
+        }
+
+        return {
+            id: ticket.id,
+            status: ticket.status,
+            subject: ticket.subject,
+            createdAt: ticket.createdAt,
+            resolvedAt: ticket.resolvedAt,
+            contact: ticket.contact,
+            department: ticket.department,
+            messages: ticket.messages,
+        };
     }
 
     async update(companyId: string, id: string, updateTicketDto: UpdateTicketDto, actorUserId?: string) {
@@ -485,5 +584,86 @@ export class TicketsService {
         }
 
         return result;
+    }
+
+    async scheduleMessage(companyId: string, ticketId: string, userId: string, content: string, scheduledAt: string) {
+        const ticket = await this.prisma.ticket.findFirst({ where: { id: ticketId, companyId } });
+        if (!ticket) throw new NotFoundException('Ticket não encontrado');
+
+        const sendAt = new Date(scheduledAt);
+        if (sendAt.getTime() <= Date.now()) throw new BadRequestException('Data/hora de agendamento deve ser no futuro');
+
+        const scheduled = await this.prisma.scheduledMessage.create({
+            data: { ticketId, companyId, userId, content, scheduledAt: sendAt },
+        });
+
+        const delay = sendAt.getTime() - Date.now();
+        const job = await this.schedulingQueue.add(
+            'send-scheduled-message',
+            { scheduledMessageId: scheduled.id, ticketId, companyId },
+            { delay, jobId: `scheduled-msg-${scheduled.id}` },
+        );
+
+        await this.prisma.scheduledMessage.update({
+            where: { id: scheduled.id },
+            data: { jobId: job.id?.toString() },
+        });
+
+        return scheduled;
+    }
+
+    async getScheduledMessages(companyId: string, ticketId: string) {
+        return this.prisma.scheduledMessage.findMany({
+            where: { ticketId, companyId, status: 'PENDING' },
+            orderBy: { scheduledAt: 'asc' },
+        });
+    }
+
+    async cancelScheduledMessage(companyId: string, id: string) {
+        const msg = await this.prisma.scheduledMessage.findFirst({ where: { id, companyId } });
+        if (!msg) throw new NotFoundException('Mensagem agendada não encontrada');
+
+        if (msg.jobId) {
+            const job = await this.schedulingQueue.getJob(msg.jobId);
+            if (job) await job.remove();
+        }
+
+        return this.prisma.scheduledMessage.update({ where: { id }, data: { status: 'CANCELLED' } });
+    }
+
+    async mergeTicket(companyId: string, sourceId: string, targetId: string, userId: string) {
+        if (sourceId === targetId) throw new BadRequestException('Tickets devem ser diferentes');
+
+        const [source, target] = await Promise.all([
+            this.prisma.ticket.findFirst({ where: { id: sourceId, companyId } }),
+            this.prisma.ticket.findFirst({ where: { id: targetId, companyId } }),
+        ]);
+
+        if (!source) throw new NotFoundException('Ticket de origem não encontrado');
+        if (!target) throw new NotFoundException('Ticket de destino não encontrado');
+
+        await this.prisma.$transaction(async (tx) => {
+            // Transfer messages
+            await tx.message.updateMany({ where: { ticketId: sourceId }, data: { ticketId: targetId } });
+
+            // Transfer tags (skip duplicates)
+            const sourceTags = await tx.ticketTag.findMany({ where: { ticketId: sourceId } });
+            const targetTags = await tx.ticketTag.findMany({ where: { ticketId: targetId }, select: { tagId: true } });
+            const existingTagIds = new Set(targetTags.map(t => t.tagId));
+            const newTags = sourceTags.filter(t => !existingTagIds.has(t.tagId));
+            if (newTags.length > 0) {
+                await tx.ticketTag.createMany({ data: newTags.map(t => ({ ticketId: targetId, tagId: t.tagId })) });
+            }
+
+            // Transfer scheduled messages
+            await tx.scheduledMessage.updateMany({ where: { ticketId: sourceId }, data: { ticketId: targetId } });
+
+            // Close source ticket
+            await tx.ticket.update({ where: { id: sourceId }, data: { status: TicketStatus.RESOLVED, closedAt: new Date() } });
+        });
+
+        this.auditService.log({ action: 'ticket.merged', entity: 'Ticket', entityId: targetId, changes: { sourceId }, userId, companyId });
+
+        return this.prisma.ticket.findUnique({ where: { id: targetId }, include: { contact: true, department: true, assignedUser: true } });
     }
 }

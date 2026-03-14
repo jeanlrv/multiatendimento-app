@@ -22,9 +22,11 @@ import {
     FileText,
     CheckCircle,
     AlertCircle,
+    GitMerge,
 } from "lucide-react";
 import { toast } from "sonner";
 import { ContactsService, Contact } from "@/services/contacts";
+import { api } from "@/services/api";
 
 export default function ContactsPage() {
     const [contacts, setContacts] = useState<Contact[]>([]);
@@ -40,6 +42,10 @@ export default function ContactsPage() {
     const [editingContact, setEditingContact] = useState<Contact | null>(null);
     const [downloadingCSV, setDownloadingCSV] = useState(false);
     const [showImportModal, setShowImportModal] = useState(false);
+    const [mergingContact, setMergingContact] = useState<Contact | null>(null);
+    const [mergeSearch, setMergeSearch] = useState('');
+    const [mergeResults, setMergeResults] = useState<Contact[]>([]);
+    const [isMerging, setIsMerging] = useState(false);
 
     // Debounce: só busca 400ms após parar de digitar, reseta página para 1
     useEffect(() => {
@@ -79,6 +85,29 @@ export default function ContactsPage() {
         } catch {
             toast.error("Erro ao excluir contato");
         }
+    };
+
+    const searchMergeContacts = async (q: string) => {
+        if (q.length < 2) { setMergeResults([]); return; }
+        try {
+            const res = await ContactsService.findAll(q, 1);
+            setMergeResults((res.data || []).filter((c: Contact) => c.id !== mergingContact?.id));
+        } catch { setMergeResults([]); }
+    };
+
+    const handleMergeContact = async (targetId: string) => {
+        if (!mergingContact) return;
+        setIsMerging(true);
+        try {
+            await api.post(`/contacts/${mergingContact.id}/merge`, { targetContactId: targetId });
+            toast.success('Contatos mesclados com sucesso!');
+            setMergingContact(null);
+            setMergeSearch('');
+            setMergeResults([]);
+            if (selected?.id === mergingContact.id) setSelected(null);
+            fetchContacts();
+        } catch { toast.error('Erro ao mesclar contatos'); }
+        finally { setIsMerging(false); }
     };
 
     const handleDownloadCSV = async () => {
@@ -262,6 +291,18 @@ export default function ContactsPage() {
                                                 <button
                                                     onClick={(e) => {
                                                         e.stopPropagation();
+                                                        setMergingContact(c);
+                                                        setMergeSearch('');
+                                                        setMergeResults([]);
+                                                    }}
+                                                    className="p-3 bg-white dark:bg-black/20 hover:bg-violet-50 dark:hover:bg-violet-500/10 rounded-[1rem] transition-all text-violet-500 shadow-sm md:shadow-none"
+                                                    title="Mesclar contato"
+                                                >
+                                                    <GitMerge className="w-4 h-4 md:w-5 md:h-5" />
+                                                </button>
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
                                                         handleDelete(c.id);
                                                     }}
                                                     className="p-3 bg-white dark:bg-black/20 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-[1rem] transition-all text-rose-500 shadow-sm md:shadow-none"
@@ -315,6 +356,53 @@ export default function ContactsPage() {
                         setIsModalOpen(true);
                     }}
                 />
+            )}
+
+            {/* Modal: Mesclar Contato */}
+            {mergingContact && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[200] flex items-center justify-center p-4" onClick={() => setMergingContact(null)}>
+                    <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-white/10 w-full max-w-md overflow-hidden" onClick={e => e.stopPropagation()}>
+                        <div className="p-5 border-b border-slate-100 dark:border-white/10 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <GitMerge size={16} className="text-violet-500" />
+                                <h2 className="text-sm font-black uppercase tracking-widest text-slate-800 dark:text-white">Mesclar Contato</h2>
+                            </div>
+                            <button onClick={() => setMergingContact(null)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/10 text-slate-400"><X size={14} /></button>
+                        </div>
+                        <div className="p-5 space-y-4">
+                            <div className="p-3 rounded-xl bg-violet-50 dark:bg-violet-950/30 border border-violet-100 dark:border-violet-800 text-xs text-violet-700 dark:text-violet-300">
+                                Os tickets e agendamentos de <strong>{mergingContact.name}</strong> serão transferidos para o contato de destino. O contato de origem será excluído.
+                            </div>
+                            <input
+                                value={mergeSearch}
+                                onChange={e => { setMergeSearch(e.target.value); searchMergeContacts(e.target.value); }}
+                                placeholder="Buscar contato de destino..."
+                                className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/30"
+                            />
+                            <div className="max-h-52 overflow-y-auto space-y-2">
+                                {mergeResults.length === 0 && mergeSearch.length >= 2 && (
+                                    <p className="text-xs text-center text-slate-400 py-4">Nenhum contato encontrado</p>
+                                )}
+                                {mergeResults.map(c => (
+                                    <button
+                                        key={c.id}
+                                        onClick={() => handleMergeContact(c.id)}
+                                        disabled={isMerging}
+                                        className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-violet-50 dark:hover:bg-violet-950/20 text-left transition-all border border-transparent hover:border-violet-200 dark:hover:border-violet-800 disabled:opacity-50"
+                                    >
+                                        <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-black text-sm flex-shrink-0">
+                                            {c.name?.charAt(0) || '#'}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{c.name}</p>
+                                            <p className="text-[11px] text-slate-400">{c.phoneNumber}</p>
+                                        </div>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );
@@ -615,6 +703,7 @@ function ContactModal({
     onSuccess: (updated?: Contact) => void;
 }) {
     const [loading, setLoading] = useState(false);
+    const [duplicates, setDuplicates] = useState<{ id: string; name: string; phoneNumber: string }[]>([]);
     const [formData, setFormData] = useState({
         name: contact?.name || "",
         phoneNumber: contact?.phoneNumber || "",
@@ -622,6 +711,21 @@ function ContactModal({
         notes: contact?.notes || "",
         information: contact?.information || "",
     });
+
+    const checkDuplicate = async (phone: string) => {
+        if (!phone || phone.length < 8) { setDuplicates([]); return; }
+        try {
+            const params = new URLSearchParams({ phone });
+            if (contact?.id) params.set('excludeId', contact.id);
+            const res = await fetch(`/api/contacts/check-duplicate?${params.toString()}`, {
+                headers: { Authorization: `Bearer ${document.cookie.match(/token=([^;]+)/)?.[1] || ''}` },
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setDuplicates(data.duplicates || []);
+            }
+        } catch { setDuplicates([]); }
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -710,9 +814,21 @@ function ContactModal({
                             required
                             value={formData.phoneNumber}
                             onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
-                            className="w-full p-4 md:p-5 rounded-2xl bg-white/50 dark:bg-black/20 border border-slate-200 dark:border-white/10 focus:ring-2 focus:ring-primary/50 outline-none transition-all font-bold text-slate-900 dark:text-white"
+                            onBlur={(e) => checkDuplicate(e.target.value)}
+                            className={`w-full p-4 md:p-5 rounded-2xl bg-white/50 dark:bg-black/20 border focus:ring-2 focus:ring-primary/50 outline-none transition-all font-bold text-slate-900 dark:text-white ${duplicates.length > 0 ? 'border-amber-400 dark:border-amber-500' : 'border-slate-200 dark:border-white/10'}`}
                             placeholder="5511999999999"
                         />
+                        {duplicates.length > 0 && (
+                            <div className="mt-2 flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl">
+                                <AlertCircle size={14} className="text-amber-600 shrink-0 mt-0.5" />
+                                <div>
+                                    <p className="text-[11px] font-bold text-amber-700 dark:text-amber-400">Possíveis duplicados:</p>
+                                    {duplicates.map(d => (
+                                        <p key={d.id} className="text-[11px] text-amber-600 dark:text-amber-500">{d.name} · {d.phoneNumber}</p>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </div>
                     <div className="space-y-2">
                         <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-2 block">

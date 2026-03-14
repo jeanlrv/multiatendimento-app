@@ -98,6 +98,32 @@ export class WorkflowsService implements OnModuleInit {
         });
     }
 
+    async getTemplates() {
+        return this.prisma.workflowRule.findMany({
+            where: { isTemplate: true },
+            orderBy: { name: 'asc' },
+        });
+    }
+
+    async createFromTemplate(templateId: string, companyId: string) {
+        const template = await this.prisma.workflowRule.findFirst({
+            where: { id: templateId, isTemplate: true },
+        });
+        if (!template) throw new NotFoundException('Template não encontrado');
+
+        const { id: _, createdAt, updatedAt, runCount, isTemplate, ...data } = template;
+        return this.prisma.workflowRule.create({
+            data: {
+                ...data,
+                companyId,
+                name: `${template.name}`,
+                isActive: false,
+                isTemplate: false,
+                runCount: 0,
+            },
+        });
+    }
+
     async duplicateRule(id: string, companyId: string) {
         const original = await this.prisma.workflowRule.findFirst({
             where: { id, companyId },

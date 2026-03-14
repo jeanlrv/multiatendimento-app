@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     Star, MessageSquare, TrendingUp, TrendingDown, Minus, User, Calendar, Bot,
     Eye, X, Hash, Phone, Building2, UserCheck, Clock, BarChart2, Smile, Meh, Frown,
-    MessageCircle, ChevronDown, ChevronUp
+    MessageCircle, ChevronDown, ChevronUp, Download, Filter
 } from 'lucide-react';
 
 interface Evaluation {
@@ -284,6 +284,8 @@ export default function EvaluationsPage() {
     const [evaluations, setEvaluations] = useState<Evaluation[]>([]);
     const [loading, setLoading] = useState(true);
     const [selected, setSelected] = useState<Evaluation | null>(null);
+    const [filterSentiment, setFilterSentiment] = useState('');
+    const [filterRating, setFilterRating] = useState('');
 
     useEffect(() => { fetchEvaluations(); }, []);
 
@@ -298,7 +300,7 @@ export default function EvaluationsPage() {
         }
     };
 
-    // Stats
+    // Stats (always from full list)
     const total = evaluations.length;
     const withRating = evaluations.filter(e => e.customerRating);
     const avgCsat = withRating.length ? (withRating.reduce((s, e) => s + (e.customerRating ?? 0), 0) / withRating.length) : null;
@@ -307,13 +309,58 @@ export default function EvaluationsPage() {
     const negativeCount = evaluations.filter(e => e.aiSentiment === 'NEGATIVE').length;
     const neutralCount = evaluations.filter(e => e.aiSentiment === 'NEUTRAL').length;
 
+    // Filtered list for the cards grid
+    const filteredEvaluations = evaluations.filter(e => {
+        if (filterSentiment && e.aiSentiment !== filterSentiment) return false;
+        if (filterRating && e.customerRating !== parseInt(filterRating)) return false;
+        return true;
+    });
+
+    const exportCSV = () => {
+        const rows = [
+            ['ID Ticket', 'Assunto', 'Contato', 'Telefone', 'Agente', 'Departamento', 'Sentimento', 'Score IA', 'Rating CSAT', 'Feedback', 'Data'],
+            ...filteredEvaluations.map(e => [
+                e.ticket.id,
+                e.ticket.subject || '',
+                e.ticket.contact.name,
+                e.ticket.contact.phoneNumber,
+                e.ticket.assignedUser?.name || '',
+                e.ticket.department.name,
+                e.aiSentiment,
+                e.aiSentimentScore?.toFixed(2) || '',
+                e.customerRating?.toString() || '',
+                (e.customerFeedback || '').replace(/"/g, '""'),
+                new Date(e.createdAt).toLocaleDateString('pt-BR'),
+            ]),
+        ];
+        const csv = rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n');
+        const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `avaliacoes_${new Date().toISOString().slice(0, 10)}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    };
+
     return (
         <div className="liquid-glass aurora min-h-[calc(100dvh-6rem)] md:min-h-[calc(100vh-8rem)] p-4 md:p-8 rounded-[2rem] md:rounded-[3rem] shadow-2xl space-y-8">
 
             {/* Header */}
-            <div>
-                <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Qualidade & Satisfação</h1>
-                <p className="text-gray-500 dark:text-gray-400 mt-1">Monitore o desempenho da equipe e o sentimento dos clientes via IA.</p>
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+                <div>
+                    <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Qualidade & Satisfação</h1>
+                    <p className="text-gray-500 dark:text-gray-400 mt-1">Monitore o desempenho da equipe e o sentimento dos clientes via IA.</p>
+                </div>
+                {!loading && total > 0 && (
+                    <button
+                        onClick={exportCSV}
+                        className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold transition-colors shadow-md shadow-emerald-500/20"
+                    >
+                        <Download size={14} />
+                        Exportar CSV
+                    </button>
+                )}
             </div>
 
             {/* Stats bar */}
@@ -353,6 +400,46 @@ export default function EvaluationsPage() {
                 </div>
             )}
 
+            {/* Filter bar */}
+            {!loading && total > 0 && (
+                <div className="flex items-center gap-3 flex-wrap">
+                    <div className="flex items-center gap-1.5 text-[11px] font-bold text-gray-500 uppercase tracking-widest">
+                        <Filter size={13} />Filtros
+                    </div>
+                    <select
+                        value={filterSentiment}
+                        onChange={e => setFilterSentiment(e.target.value)}
+                        className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-1.5 text-xs font-semibold outline-none"
+                    >
+                        <option value="">Sentimento (todos)</option>
+                        <option value="POSITIVE">Positivo</option>
+                        <option value="NEUTRAL">Neutro</option>
+                        <option value="NEGATIVE">Negativo</option>
+                    </select>
+                    <select
+                        value={filterRating}
+                        onChange={e => setFilterRating(e.target.value)}
+                        className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-1.5 text-xs font-semibold outline-none"
+                    >
+                        <option value="">Rating CSAT (todos)</option>
+                        {[5,4,3,2,1].map(r => <option key={r} value={r}>{r} estrela{r !== 1 ? 's' : ''}</option>)}
+                    </select>
+                    {(filterSentiment || filterRating) && (
+                        <button
+                            onClick={() => { setFilterSentiment(''); setFilterRating(''); }}
+                            className="text-[11px] font-bold text-rose-500 hover:opacity-70 transition-opacity"
+                        >
+                            Limpar
+                        </button>
+                    )}
+                    {(filterSentiment || filterRating) && (
+                        <span className="ml-auto text-[11px] text-gray-400 font-medium">
+                            {filteredEvaluations.length} de {total} avaliações
+                        </span>
+                    )}
+                </div>
+            )}
+
             {/* Cards */}
             {loading ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -360,18 +447,22 @@ export default function EvaluationsPage() {
                         <div key={i} className="h-72 bg-gray-100 dark:bg-gray-800 animate-pulse rounded-3xl" />
                     ))}
                 </div>
-            ) : evaluations.length === 0 ? (
+            ) : filteredEvaluations.length === 0 ? (
                 <div className="bg-white dark:bg-gray-900 rounded-3xl p-12 text-center border border-gray-100 dark:border-gray-800">
                     <div className="w-16 h-16 bg-blue-50 dark:bg-blue-900/20 rounded-2xl flex items-center justify-center mx-auto mb-4 text-blue-600">
                         <Star size={32} />
                     </div>
-                    <h3 className="text-lg font-bold">Nenhuma avaliação ainda</h3>
-                    <p className="text-gray-500 max-w-sm mx-auto mt-2">As avaliações aparecerão aqui assim que os tickets forem encerrados e analisados pela IA.</p>
+                    <h3 className="text-lg font-bold">{total === 0 ? 'Nenhuma avaliação ainda' : 'Nenhuma avaliação para os filtros selecionados'}</h3>
+                    <p className="text-gray-500 max-w-sm mx-auto mt-2">
+                        {total === 0
+                            ? 'As avaliações aparecerão aqui assim que os tickets forem encerrados e analisados pela IA.'
+                            : 'Tente outros filtros para ver mais resultados.'}
+                    </p>
                 </div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     <AnimatePresence>
-                        {evaluations.map((ev, index) => {
+                        {filteredEvaluations.map((ev, index) => {
                             const sentCfg = SENTIMENT_CONFIG[ev.aiSentiment] ?? SENTIMENT_CONFIG.NEUTRAL;
                             const SentimentIcon = sentCfg.icon;
                             return (

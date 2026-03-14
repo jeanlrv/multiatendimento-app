@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateContactDto } from './dto/create-contact.dto';
 import { UpdateContactDto } from './dto/update-contact.dto';
@@ -56,6 +56,20 @@ export class ContactsService {
                 highRisk: highRiskCount,
             },
         };
+    }
+
+    async checkDuplicate(companyId: string, phone: string, excludeId?: string) {
+        const normalized = phone.replace(/[\s\-\+\(\)]/g, '');
+        const contacts = await this.prisma.contact.findMany({
+            where: {
+                companyId,
+                phoneNumber: { contains: normalized },
+                ...(excludeId && { id: { not: excludeId } }),
+            },
+            select: { id: true, name: true, phoneNumber: true },
+            take: 3,
+        });
+        return { duplicates: contacts };
     }
 
     async findOne(companyId: string, id: string) {
@@ -141,6 +155,41 @@ export class ContactsService {
         }
 
         return { created, updated, failed, errors: errors.slice(0, 20) };
+    }
+
+    async mergeContact(companyId: string, sourceId: string, targetId: string) {
+        if (sourceId === targetId) throw new BadRequestException('Contatos devem ser diferentes');
+
+        const [source, target] = await Promise.all([
+            this.prisma.contact.findFirst({ where: { id: sourceId, companyId } }),
+            this.prisma.contact.findFirst({ where: { id: targetId, companyId } }),
+        ]);
+
+        if (!source) throw new NotFoundException('Contato de origem não encontrado');
+        if (!target) throw new NotFoundException('Contato de destino não encontrado');
+
+        await this.prisma.$transaction(async (tx) => {
+            // Reassign all tickets from source to target
+            await tx.ticket.updateMany({ where: { contactId: sourceId }, data: { contactId: targetId } });
+            // Reassign schedules
+            await tx.schedule.updateMany({ where: { contactId: sourceId }, data: { contactId: targetId } });
+            // Reassign broadcast recipients
+            await tx.broadcastRecipient.updateMany({ where: { contactId: sourceId }, data: { contactId: targetId } });
+            // Merge notes/info into target
+            const mergedNotes = [target.notes, source.notes].filter(Boolean).join('\n---\n') || null;
+            await tx.contact.update({
+                where: { id: targetId },
+                data: {
+                    email: target.email || source.email,
+                    notes: mergedNotes,
+                    information: target.information || source.information,
+                },
+            });
+            // Delete source
+            await tx.contact.delete({ where: { id: sourceId } });
+        });
+
+        return this.prisma.contact.findUnique({ where: { id: targetId } });
     }
 
     async exportCSV(companyId: string): Promise<string> {

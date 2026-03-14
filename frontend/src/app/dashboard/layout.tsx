@@ -19,6 +19,7 @@ import { NotificationBell } from '@/components/NotificationBell';
 import { Users as UsersIcon } from 'lucide-react';
 import { subscribeToPush } from '@/lib/push-notifications';
 import { motion, AnimatePresence } from 'framer-motion';
+import { CommandPalette } from '@/components/CommandPalette';
 
 const SidebarContent = React.memo(({
     sidebarCollapsed,
@@ -224,6 +225,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         { label: 'Base de Conhecimento', path: '/dashboard/ai-knowledge', icon: '🧠' },
         { label: 'Busca Inteligente', path: '/dashboard/ai-search', icon: '🔍' },
         { label: 'Métricas de IA', path: '/dashboard/ai-metrics', icon: '📊' },
+        { label: 'Broadcast', path: '/dashboard/broadcast', icon: '📡' },
         { label: 'Automações', path: '/dashboard/workflows', icon: '⚡' },
         { label: 'Colaboração', path: '/dashboard/collab', icon: '💬' },
         { label: 'Agenda', path: '/dashboard/scheduling', icon: '📅' },
@@ -455,6 +457,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 {presenceSidebarOpen && <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[90]" onClick={() => setPresenceSidebarOpen(false)} />}
 
                 <InternalChatWidget />
+                <CommandPalette />
             </div>
         </SessionTimeoutGuard>
     );

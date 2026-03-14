@@ -33,6 +33,38 @@ export class ReportsController {
         return this.reportsService.getAgentPerformance(companyId, startDate, endDate);
     }
 
+    @Get('satisfaction-trend')
+    @RequirePermission(Permission.REPORTS_READ)
+    @ApiOperation({ summary: 'Tendência de satisfação por dia' })
+    getSatisfactionTrend(
+        @Company() companyId: string,
+        @Query('days') days?: string,
+    ) {
+        return this.reportsService.getSatisfactionTrend(companyId, days ? Number(days) : 30);
+    }
+
+    @Get('sla-compliance')
+    @RequirePermission(Permission.REPORTS_READ)
+    @ApiOperation({ summary: 'Conformidade de SLA por dia' })
+    getSlaCompliance(
+        @Company() companyId: string,
+        @Query('startDate') startDate?: string,
+        @Query('endDate') endDate?: string,
+    ) {
+        return this.reportsService.getSlaCompliance(companyId, startDate, endDate);
+    }
+
+    @Get('resolution-time')
+    @RequirePermission(Permission.REPORTS_READ)
+    @ApiOperation({ summary: 'Tempo médio de resolução por agente' })
+    getResolutionTime(
+        @Company() companyId: string,
+        @Query('startDate') startDate?: string,
+        @Query('endDate') endDate?: string,
+    ) {
+        return this.reportsService.getResolutionTime(companyId, startDate, endDate);
+    }
+
     @Get('audit/internal-chat')
     @RequirePermission(Permission.AUDIT_READ)
     @ApiOperation({ summary: 'Auditoria de mensagens do chat interno' })

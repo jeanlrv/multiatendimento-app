@@ -70,6 +70,86 @@ export class ReportsService {
         }));
     }
 
+    async getSatisfactionTrend(companyId: string, days = 30) {
+        const since = new Date();
+        since.setDate(since.getDate() - Number(days));
+
+        const evaluations = await this.prisma.evaluation.findMany({
+            where: { ticket: { companyId }, createdAt: { gte: since } },
+            select: { createdAt: true, aiSentimentScore: true, aiSentiment: true, customerRating: true },
+            orderBy: { createdAt: 'asc' },
+        });
+
+        const grouped = new Map<string, { scores: number[]; ratings: number[]; positive: number; negative: number; neutral: number }>();
+        for (const ev of evaluations) {
+            const date = ev.createdAt.toISOString().slice(0, 10);
+            if (!grouped.has(date)) grouped.set(date, { scores: [], ratings: [], positive: 0, negative: 0, neutral: 0 });
+            const d = grouped.get(date)!;
+            d.scores.push(ev.aiSentimentScore);
+            if (ev.customerRating) d.ratings.push(ev.customerRating);
+            if (ev.aiSentiment === 'POSITIVE') d.positive++;
+            else if (ev.aiSentiment === 'NEGATIVE') d.negative++;
+            else d.neutral++;
+        }
+
+        return Array.from(grouped.entries()).map(([date, d]) => ({
+            date,
+            avgScore: d.scores.length ? +(d.scores.reduce((a, b) => a + b, 0) / d.scores.length).toFixed(2) : null,
+            avgRating: d.ratings.length ? +(d.ratings.reduce((a, b) => a + b, 0) / d.ratings.length).toFixed(2) : null,
+            positive: d.positive, negative: d.negative, neutral: d.neutral, total: d.scores.length,
+        }));
+    }
+
+    async getSlaCompliance(companyId: string, startDate?: string, endDate?: string) {
+        const dateRange = buildDateRange(startDate, endDate);
+        const where: any = { companyId, resolvedAt: { not: null } };
+        if (dateRange) where.createdAt = dateRange;
+
+        const tickets = await this.prisma.ticket.findMany({
+            where,
+            select: { createdAt: true, resolvedAt: true, department: { select: { slaResolutionMin: true } } },
+        });
+
+        const grouped = new Map<string, { compliant: number; breached: number }>();
+        for (const t of tickets) {
+            const date = t.createdAt.toISOString().slice(0, 10);
+            if (!grouped.has(date)) grouped.set(date, { compliant: 0, breached: 0 });
+            const d = grouped.get(date)!;
+            const slaMin = t.department?.slaResolutionMin || 1440;
+            const resolutionMin = (t.resolvedAt!.getTime() - t.createdAt.getTime()) / 60000;
+            if (resolutionMin <= slaMin) d.compliant++;
+            else d.breached++;
+        }
+
+        return Array.from(grouped.entries())
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([date, d]) => ({ date, ...d, total: d.compliant + d.breached }));
+    }
+
+    async getResolutionTime(companyId: string, startDate?: string, endDate?: string) {
+        const dateRange = buildDateRange(startDate, endDate);
+        const where: any = { companyId, status: 'RESOLVED', resolvedAt: { not: null }, assignedUserId: { not: null } };
+        if (dateRange) where.resolvedAt = dateRange;
+
+        const tickets = await this.prisma.ticket.findMany({
+            where,
+            select: { createdAt: true, resolvedAt: true, assignedUser: { select: { name: true } } },
+        });
+
+        const agentMap = new Map<string, { totalMin: number; count: number }>();
+        for (const t of tickets) {
+            const name = t.assignedUser?.name || 'Sem agente';
+            if (!agentMap.has(name)) agentMap.set(name, { totalMin: 0, count: 0 });
+            const d = agentMap.get(name)!;
+            d.totalMin += (t.resolvedAt!.getTime() - t.createdAt.getTime()) / 60000;
+            d.count++;
+        }
+
+        return Array.from(agentMap.entries())
+            .map(([agentName, d]) => ({ agentName, avgMinutes: Math.round(d.totalMin / d.count), count: d.count }))
+            .sort((a, b) => a.avgMinutes - b.avgMinutes);
+    }
+
     async getInternalChatAudit(
         companyId: string,
         query?: string,

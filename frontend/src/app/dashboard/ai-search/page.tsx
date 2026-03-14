@@ -54,33 +54,22 @@ export default function AISearchPage() {
             setSearchHistory(newHistory);
             localStorage.setItem('aiSearchHistory', JSON.stringify(newHistory));
 
-            // TODO: Implementar busca semântica real usando o endpoint de chat
-            // Por enquanto, vamos simular resultados
-            const mockResults = [
-                {
-                    id: '1',
-                    title: 'Política de Atendimento',
-                    content: 'O atendimento deve ser realizado em até 5 minutos durante o horário comercial...',
-                    sourceType: 'PDF',
-                    relevance: 0.95
-                },
-                {
-                    id: '2',
-                    title: 'Procedimentos de Suporte',
-                    content: 'Para resolver problemas técnicos, siga os passos: 1. Identificar o problema...',
-                    sourceType: 'DOCX',
-                    relevance: 0.87
-                },
-                {
-                    id: '3',
-                    title: 'FAQ - Perguntas Frequentes',
-                    content: 'P: Qual o horário de atendimento? R: Seg a Sex, das 8h às 18h...',
-                    sourceType: 'TEXT',
-                    relevance: 0.72
-                }
-            ];
+            const { api } = await import('@/services/api');
+            const response = await api.post('/ai/search', {
+                query: searchQuery,
+                agentId: selectedAgent,
+                topK: 8,
+            });
 
-            setResults(mockResults);
+            const data = response.data;
+            setResults((data.results || []).map((r: any) => ({
+                id: r.id,
+                title: r.title || 'Documento',
+                content: r.content,
+                sourceType: r.sourceType || 'TEXT',
+                relevance: r.score,
+                createdAt: r.createdAt,
+            })));
         } catch (error) {
             console.error('Erro na busca:', error);
         } finally {

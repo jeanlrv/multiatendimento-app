@@ -23,6 +23,9 @@ export class SchedulingProcessor extends WorkerHost {
         if (job.name === 'send-reminder') {
             return this.handleSendReminder(job.data);
         }
+        if (job.name === 'send-scheduled-message') {
+            return this.handleSendScheduledMessage(job.data);
+        }
         this.logger.warn(`Job desconhecido na fila scheduling: ${job.name}`);
     }
 
@@ -63,5 +66,30 @@ export class SchedulingProcessor extends WorkerHost {
         );
 
         return { success: true, scheduleId: schedule.id };
+    }
+
+    private async handleSendScheduledMessage(data: { scheduledMessageId: string; ticketId: string; companyId: string }) {
+        this.logger.log(`Enviando mensagem agendada: ${data.scheduledMessageId}`);
+
+        const msg = await this.prisma.scheduledMessage.findUnique({ where: { id: data.scheduledMessageId } });
+        if (!msg || msg.status !== 'PENDING') {
+            this.logger.log(`Mensagem agendada ${data.scheduledMessageId} não está mais pendente — ignorando`);
+            return;
+        }
+
+        this.eventEmitter.emit('scheduled_message.fire', {
+            ticketId: data.ticketId,
+            content: msg.content,
+            companyId: data.companyId,
+            scheduledMessageId: msg.id,
+        });
+
+        await this.prisma.scheduledMessage.update({
+            where: { id: data.scheduledMessageId },
+            data: { status: 'SENT' },
+        });
+
+        this.logger.log(`Mensagem agendada ${data.scheduledMessageId} marcada como enviada`);
+        return { success: true };
     }
 }

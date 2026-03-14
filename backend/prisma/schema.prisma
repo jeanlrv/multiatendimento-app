@@ -61,6 +61,7 @@ model User {
   notifications        Notification[]      @relation("NotifiedUser")
   conversations        Conversation[]
   pushSubscriptions    PushSubscription[]
+  scheduledMessages    ScheduledMessage[]
 
   @@index([email])
   @@map("users")
@@ -225,6 +226,7 @@ model Contact {
   company   Company    @relation(fields: [companyId], references: [id])
   tickets   Ticket[]
   schedules Schedule[]
+  broadcastRecipients BroadcastRecipient[]
 
   // CSAT Survey
   csatPending  Boolean @default(false)
@@ -294,6 +296,12 @@ model Company {
   // Configurações de providers de IA por empresa
   providerConfigs ProviderConfig[]
 
+  // Mensagens agendadas
+  scheduledMessages ScheduledMessage[]
+
+  // Broadcast
+  broadcasts Broadcast[]
+
   // CSAT Survey
   csatEnabled Boolean @default(false)
   csatMessage String? @db.Text
@@ -336,9 +344,10 @@ model Ticket {
   assignedUser     User?             @relation("AssignedUser", fields: [assignedUserId], references: [id])
   whatsappInstance WhatsAppInstance? @relation(fields: [connectionId], references: [id])
 
-  messages   Message[]
-  tags       TicketTag[]
-  evaluation Evaluation?
+  messages          Message[]
+  tags              TicketTag[]
+  evaluation        Evaluation?
+  scheduledMessages ScheduledMessage[]
 
   @@index([companyId, status])
   @@index([companyId, updatedAt])
@@ -1102,6 +1111,73 @@ model SavedFilter {
   @@index([userId])
   @@index([companyId])
   @@map("saved_filters")
+}
+
+// ============================================
+// BROADCAST (ENVIO EM MASSA)
+// ============================================
+
+model Broadcast {
+  id           String   @id @default(uuid())
+  name         String
+  message      String   @db.Text
+  status       String   @default("DRAFT") // DRAFT | RUNNING | PAUSED | COMPLETED | FAILED
+  companyId    String
+  connectionId String?  // WhatsApp instance a usar
+  totalContacts Int     @default(0)
+  sentCount     Int     @default(0)
+  failedCount   Int     @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  company    Company           @relation(fields: [companyId], references: [id])
+  recipients BroadcastRecipient[]
+
+  @@index([companyId])
+  @@map("broadcasts")
+}
+
+model BroadcastRecipient {
+  id          String   @id @default(uuid())
+  broadcastId String
+  contactId   String
+  status      String   @default("PENDING") // PENDING | SENT | FAILED
+  sentAt      DateTime?
+  error       String?
+  createdAt   DateTime @default(now())
+
+  broadcast Broadcast @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  contact   Contact   @relation(fields: [contactId], references: [id])
+
+  @@index([broadcastId])
+  @@index([contactId])
+  @@map("broadcast_recipients")
+}
+
+// ============================================
+// MENSAGENS AGENDADAS
+// ============================================
+
+model ScheduledMessage {
+  id          String   @id @default(uuid())
+  ticketId    String
+  companyId   String
+  userId      String?
+  content     String   @db.Text
+  scheduledAt DateTime
+  status      String   @default("PENDING") // PENDING | SENT | CANCELLED | FAILED
+  jobId       String?  // BullMQ job ID para cancelamento
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  ticket  Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id])
+  user    User?   @relation(fields: [userId], references: [id])
+
+  @@index([ticketId])
+  @@index([companyId])
+  @@index([scheduledAt])
+  @@map("scheduled_messages")
 }
 
 // ============================================

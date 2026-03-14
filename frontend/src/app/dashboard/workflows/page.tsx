@@ -52,7 +52,9 @@ export default function WorkflowsPage() {
     } = useWorkflows();
 
     const [activeTab, setActiveTab] =
-        useState<'rules' | 'history' | 'builder' | 'analytics'>('rules');
+        useState<'rules' | 'history' | 'builder' | 'analytics' | 'templates'>('rules');
+    const [templates, setTemplates] = useState<any[]>([]);
+    const [loadingTemplates, setLoadingTemplates] = useState(false);
 
     const [ruleSearch, setRuleSearch] = useState('');
     const [executionStatusFilter, setExecutionStatusFilter] = useState('');
@@ -73,6 +75,23 @@ export default function WorkflowsPage() {
     const [newRuleDescription, setNewRuleDescription] = useState('');
 
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const loadTemplates = async () => {
+        setLoadingTemplates(true);
+        try {
+            const res = await workflowService.getTemplates();
+            setTemplates(res);
+        } catch { setTemplates([]); }
+        finally { setLoadingTemplates(false); }
+    };
+
+    const handleUseTemplate = async (templateId: string) => {
+        try {
+            await workflowService.createFromTemplate(templateId);
+            toast.success('Workflow criado a partir do template!');
+            setActiveTab('rules');
+        } catch { toast.error('Erro ao usar template'); }
+    };
 
     const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -327,6 +346,13 @@ export default function WorkflowsPage() {
                     className={`px-4 py-2 font-bold text-sm transition-colors ${activeTab === 'builder' ? 'text-primary border-b-2 border-primary' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
                 >
                     Editor Visual
+                </button>
+
+                <button
+                    onClick={() => { setActiveTab('templates'); loadTemplates(); }}
+                    className={`px-4 py-2 font-bold text-sm transition-colors ${activeTab === 'templates' ? 'text-primary border-b-2 border-primary' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                >
+                    🧩 Templates
                 </button>
             </div>
 
@@ -612,6 +638,52 @@ export default function WorkflowsPage() {
                                     </div>
                                 </div>
                             </>
+                        )}
+                    </motion.div>
+                )}
+                {/* =========================
+                   TEMPLATES
+                ========================= */}
+
+                {activeTab === 'templates' && (
+                    <motion.div
+                        key="templates"
+                        initial={{ opacity: 0, y: 12 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -12 }}
+                        transition={{ duration: 0.2 }}
+                        className="p-2"
+                    >
+                        {loadingTemplates ? (
+                            <div className="flex items-center justify-center py-16">
+                                <div className="h-8 w-8 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                            </div>
+                        ) : templates.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center py-20 text-slate-400 gap-3">
+                                <span className="text-5xl opacity-30">🧩</span>
+                                <p className="text-sm font-medium">Nenhum template disponível</p>
+                                <p className="text-xs text-slate-400 max-w-xs text-center">Os templates são workflows com <code className="bg-slate-100 dark:bg-white/10 px-1 rounded">isTemplate=true</code> no banco de dados.</p>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {templates.map(t => (
+                                    <div key={t.id} className="p-5 rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900/50 flex flex-col gap-3 hover:border-primary/30 transition-all">
+                                        <div className="flex items-start justify-between">
+                                            <div>
+                                                <h3 className="text-sm font-black text-slate-900 dark:text-white">{t.name}</h3>
+                                                {t.description && <p className="text-[11px] text-slate-400 mt-0.5">{t.description}</p>}
+                                            </div>
+                                            <span className="text-xs bg-primary/10 text-primary font-bold px-2 py-0.5 rounded-full">Template</span>
+                                        </div>
+                                        <button
+                                            onClick={() => handleUseTemplate(t.id)}
+                                            className="mt-auto w-full py-2.5 rounded-xl bg-primary text-white text-sm font-black hover:bg-primary/90 transition-all shadow-lg shadow-primary/20"
+                                        >
+                                            Usar Template
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
                         )}
                     </motion.div>
                 )}

@@ -126,5 +126,15 @@ export const workflowService = {
             `/workflows/${ruleId}/versions/${versionId}/restore`
         );
         return response.data;
-    }
+    },
+
+    async getTemplates(): Promise<any[]> {
+        const res = await api.get('/workflows/templates');
+        return res.data;
+    },
+
+    async createFromTemplate(templateId: string): Promise<WorkflowRule> {
+        const res = await api.post(`/workflows/templates/${templateId}/use`);
+        return res.data;
+    },
 };

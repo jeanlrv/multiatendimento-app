@@ -319,6 +319,18 @@ export class AIController {
         return this.notificationService.getNotificationStats(req.user.companyId);
     }
 
+    // ========== KB Search ==========
+
+    @Post('search')
+    @RequirePermission(Permission.AI_READ)
+    @ApiOperation({ summary: 'Busca semântica na base de conhecimento de um agente' })
+    async searchKnowledge(
+        @Req() req: any,
+        @Body() body: { query: string; agentId: string; topK?: number },
+    ) {
+        return this.aiService.searchKnowledge(req.user.companyId, body.agentId, body.query, body.topK || 8);
+    }
+
     @Get('debug-knowledge')
     @Public()
     @ApiOperation({ summary: 'Endpoint provisório para depurar estado da Base de Conhecimento RAG' })

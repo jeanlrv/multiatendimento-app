@@ -10,9 +10,10 @@ import { AuditModule } from '../audit/audit.module';
 
 @Module({
     imports: [
-        BullModule.registerQueue({
-            name: 'tickets-monitor',
-        }),
+        BullModule.registerQueue(
+            { name: 'tickets-monitor' },
+            { name: 'scheduling' },
+        ),
         DatabaseModule,
         AIModule,
         EvaluationsModule,

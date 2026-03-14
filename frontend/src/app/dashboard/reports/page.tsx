@@ -4,12 +4,12 @@ import { useState, useEffect } from 'react';
 import { api } from '@/services/api';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-    LineChart, Line, Cell, PieChart, Pie
+    LineChart, Line, Cell, PieChart, Pie, Legend
 } from 'recharts';
 import {
     Download, FileText, Table as TableIcon, Calendar,
     Filter, Search, ArrowUpRight, MessageSquare,
-    CheckCircle, BarChart3, ShieldAlert
+    CheckCircle, BarChart3, ShieldAlert, TrendingUp, Shield, Clock
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
@@ -21,6 +21,10 @@ export default function ReportsPage() {
     const [stats, setStats] = useState<any>(null);
     const [performance, setPerformance] = useState<any[]>([]);
     const [auditLogs, setAuditLogs] = useState<any[]>([]);
+    const [satisfactionTrend, setSatisfactionTrend] = useState<any[]>([]);
+    const [slaCompliance, setSlaCompliance] = useState<any[]>([]);
+    const [resolutionTime, setResolutionTime] = useState<any[]>([]);
+    const [trendDays, setTrendDays] = useState(30);
     const [loading, setLoading] = useState(true);
     const [dateRange, setDateRange] = useState({ startDate: '', endDate: '' });
     const [auditQuery, setAuditQuery] = useState('');
@@ -29,23 +33,32 @@ export default function ReportsPage() {
         fetchData();
     }, [dateRange]);
 
+    useEffect(() => {
+        api.get('/reports/satisfaction-trend', { params: { days: trendDays } })
+            .then(r => setSatisfactionTrend(r.data))
+            .catch(() => {});
+    }, [trendDays]);
+
     const fetchData = async () => {
         setLoading(true);
         const params = { ...dateRange };
-        const [statsResult, perfResult, auditResult] = await Promise.allSettled([
+        const [statsResult, perfResult, auditResult, slaResult, rtResult, trendResult] = await Promise.allSettled([
             api.get('/reports/stats', { params }),
             api.get('/reports/performance', { params }),
             api.get('/reports/audit/internal-chat', { params: { ...params, query: auditQuery } }),
+            api.get('/reports/sla-compliance', { params }),
+            api.get('/reports/resolution-time', { params }),
+            api.get('/reports/satisfaction-trend', { params: { days: trendDays } }),
         ]);
 
         if (statsResult.status === 'fulfilled') setStats(statsResult.value.data);
         else toast.error('Erro ao carregar estatísticas');
-
         if (perfResult.status === 'fulfilled') setPerformance(perfResult.value.data);
-        else toast.error('Erro ao carregar dados de performance');
-
         if (auditResult.status === 'fulfilled') setAuditLogs(auditResult.value.data);
         else setAuditLogs([]);
+        if (slaResult.status === 'fulfilled') setSlaCompliance(slaResult.value.data);
+        if (rtResult.status === 'fulfilled') setResolutionTime(rtResult.value.data);
+        if (trendResult.status === 'fulfilled') setSatisfactionTrend(trendResult.value.data);
 
         setLoading(false);
     };
@@ -182,7 +195,105 @@ export default function ReportsPage() {
                     </div>
                 </div>
 
-                {/* Audit Logs */}
+                {/* Resolution Time by Agent */}
+                <div className="p-8 bg-white dark:bg-slate-900 rounded-[3rem] border border-slate-200 dark:border-white/5 shadow-2xl">
+                    <div className="flex items-center gap-3 mb-8">
+                        <Clock className="text-amber-500" />
+                        <h3 className="text-xl font-black italic tracking-tighter">Tempo Médio de Resolução</h3>
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">(em minutos)</span>
+                    </div>
+                    <div className="h-[300px]">
+                        {loading ? (
+                            <div className="w-full h-full bg-slate-100 dark:bg-white/5 animate-pulse rounded-2xl" />
+                        ) : resolutionTime.length === 0 ? (
+                            <div className="flex items-center justify-center h-full opacity-30 text-[11px] font-black uppercase tracking-widest">Sem dados</div>
+                        ) : (
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={resolutionTime} layout="vertical">
+                                    <CartesianGrid strokeDasharray="3 3" horizontal={false} strokeOpacity={0.1} />
+                                    <XAxis type="number" axisLine={false} tickLine={false} tick={{ fontSize: 10 }} />
+                                    <YAxis dataKey="agentName" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 900 }} width={90} />
+                                    <Tooltip
+                                        formatter={(v: any) => [`${v} min`, 'Média']}
+                                        contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '16px', color: '#fff' }}
+                                    />
+                                    <Bar dataKey="avgMinutes" radius={[0, 10, 10, 0]} fill="#F59E0B" />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {/* Row 2: Satisfaction Trend + SLA Compliance */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {/* Satisfaction Trend */}
+                <div className="p-8 bg-white dark:bg-slate-900 rounded-[3rem] border border-slate-200 dark:border-white/5 shadow-2xl">
+                    <div className="flex items-center justify-between mb-6">
+                        <div className="flex items-center gap-3">
+                            <TrendingUp className="text-emerald-500" />
+                            <h3 className="text-xl font-black italic tracking-tighter">Tendência de Satisfação</h3>
+                        </div>
+                        <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-white/5 rounded-xl p-1">
+                            {[7, 30, 90].map(d => (
+                                <button
+                                    key={d}
+                                    onClick={() => setTrendDays(d)}
+                                    className={`px-3 py-1 rounded-lg text-[10px] font-black transition-all ${trendDays === d ? 'bg-white dark:bg-primary text-slate-900 dark:text-white shadow' : 'text-slate-400'}`}
+                                >
+                                    {d}d
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                    <div className="h-[280px]">
+                        {satisfactionTrend.length === 0 ? (
+                            <div className="flex items-center justify-center h-full opacity-30 text-[11px] font-black uppercase tracking-widest">Sem dados</div>
+                        ) : (
+                            <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={satisfactionTrend}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} strokeOpacity={0.1} />
+                                    <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 9 }} />
+                                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 9 }} domain={[0, 10]} />
+                                    <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '16px', color: '#fff' }} />
+                                    <Legend wrapperStyle={{ fontSize: 10 }} />
+                                    <Line type="monotone" dataKey="avgScore" stroke="#3B82F6" strokeWidth={2} dot={false} name="Score IA" />
+                                    <Line type="monotone" dataKey="positive" stroke="#10B981" strokeWidth={2} dot={false} name="Positivos" />
+                                    <Line type="monotone" dataKey="negative" stroke="#EF4444" strokeWidth={2} dot={false} name="Negativos" />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        )}
+                    </div>
+                </div>
+
+                {/* SLA Compliance */}
+                <div className="p-8 bg-white dark:bg-slate-900 rounded-[3rem] border border-slate-200 dark:border-white/5 shadow-2xl">
+                    <div className="flex items-center gap-3 mb-6">
+                        <Shield className="text-primary" />
+                        <h3 className="text-xl font-black italic tracking-tighter">Conformidade de SLA</h3>
+                    </div>
+                    <div className="h-[280px]">
+                        {slaCompliance.length === 0 ? (
+                            <div className="flex items-center justify-center h-full opacity-30 text-[11px] font-black uppercase tracking-widest">Sem dados</div>
+                        ) : (
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={slaCompliance}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} strokeOpacity={0.1} />
+                                    <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 9 }} />
+                                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 9 }} />
+                                    <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '16px', color: '#fff' }} />
+                                    <Legend wrapperStyle={{ fontSize: 10 }} />
+                                    <Bar dataKey="compliant" stackId="a" fill="#10B981" radius={[0, 0, 0, 0]} name="Dentro do SLA" />
+                                    <Bar dataKey="breached" stackId="a" fill="#EF4444" radius={[6, 6, 0, 0]} name="SLA Violado" />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* Audit Logs */}
                 <div className="p-8 bg-white dark:bg-slate-900 rounded-[3rem] border border-slate-200 dark:border-white/5 shadow-2xl flex flex-col">
                     <div className="flex items-center justify-between mb-6">
                         <div className="flex items-center gap-3">

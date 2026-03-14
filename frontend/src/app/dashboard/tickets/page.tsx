@@ -7,7 +7,7 @@ import { getSocket } from '@/lib/socket';
 import { api } from '@/services/api';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trash2, Send, Phone, User, Clock, CheckCheck, Check, Paperclip, MoreVertical, ArrowRightLeft, Smile, Search, SlidersHorizontal, MessageSquare, Bot, Sparkles, AlertTriangle, Plus, X, Mic, Tag as TagIcon, Info, Calendar, ArrowLeft, Copy, Edit3, CornerUpLeft, UploadCloud, ChevronDown, Keyboard, Wand2, PhoneCall, Volume2, Palette } from 'lucide-react';
+import { Trash2, Send, Phone, User, Clock, CheckCheck, Check, Paperclip, MoreVertical, ArrowRightLeft, Smile, Search, SlidersHorizontal, MessageSquare, Bot, Sparkles, AlertTriangle, Plus, X, Mic, Tag as TagIcon, Info, Calendar, ArrowLeft, Copy, Edit3, CornerUpLeft, UploadCloud, ChevronDown, Keyboard, Wand2, PhoneCall, Volume2, Palette, Download, CalendarClock, ExternalLink } from 'lucide-react';
 import { AudioRecorder } from '@/components/chat/AudioRecorder';
 import { toast } from 'sonner';
 import { io, Socket } from 'socket.io-client';
@@ -94,6 +94,7 @@ export default function TicketsPage() {
     const [loading, setLoading] = useState(true);
     const [loadingMessages, setLoadingMessages] = useState(false);
     const [filter, setFilter] = useState('OPEN');
+    const [showOnlyUnread, setShowOnlyUnread] = useState(false);
     const [showContactHistory, setShowContactHistory] = useState(false);
     const [contactHistory, setContactHistory] = useState<any[]>([]);
     const [loadingHistory, setLoadingHistory] = useState(false);
@@ -131,6 +132,14 @@ export default function TicketsPage() {
     const emojiPickerRef = useRef<HTMLDivElement>(null);
     const [showShortcutsModal, setShowShortcutsModal] = useState(false);
     const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
+    const [showScheduleMsgModal, setShowScheduleMsgModal] = useState(false);
+    const [scheduleMsgDateTime, setScheduleMsgDateTime] = useState('');
+    const [schedulingMsg, setSchedulingMsg] = useState(false);
+    const [scheduledMessages, setScheduledMessages] = useState<{ id: string; content: string; scheduledAt: string }[]>([]);
+    const [showMergeModal, setShowMergeModal] = useState(false);
+    const [mergeSearch, setMergeSearch] = useState('');
+    const [mergeResults, setMergeResults] = useState<Ticket[]>([]);
+    const [merging, setMerging] = useState(false);
 
     // Cores personalizáveis dos balões
     const [bubbleColors, setBubbleColors] = useState<{ sent: string; received: string }>(() => {
@@ -326,6 +335,7 @@ export default function TicketsPage() {
     const handleSelectTicket = async (ticket: Ticket) => {
         setSelectedTicket(ticket);
         fetchMessages(ticket.id);
+        loadScheduledMessages(ticket.id);
         if (showContactHistory) {
             fetchContactHistory(ticket.contactId);
         }
@@ -371,6 +381,64 @@ export default function TicketsPage() {
         } finally {
             setSending(false);
         }
+    };
+
+    const searchMergeTickets = async (q: string) => {
+        if (q.length < 2) { setMergeResults([]); return; }
+        try {
+            const res = await api.get(`/tickets?search=${encodeURIComponent(q)}&limit=10`);
+            setMergeResults((res.data?.data || res.data || []).filter((t: Ticket) => t.id !== selectedTicket?.id));
+        } catch { setMergeResults([]); }
+    };
+
+    const handleMerge = async (targetId: string) => {
+        if (!selectedTicket) return;
+        setMerging(true);
+        try {
+            await api.post(`/tickets/${selectedTicket.id}/merge`, { targetTicketId: targetId });
+            toast.success('Tickets mesclados com sucesso!');
+            setShowMergeModal(false);
+            setMergeSearch('');
+            setMergeResults([]);
+            fetchTickets();
+            setSelectedTicket(null);
+        } catch { toast.error('Erro ao mesclar tickets'); }
+        finally { setMerging(false); }
+    };
+
+    const loadScheduledMessages = async (ticketId: string) => {
+        try {
+            const res = await api.get(`/tickets/${ticketId}/scheduled-messages`);
+            setScheduledMessages(res.data);
+        } catch { setScheduledMessages([]); }
+    };
+
+    const handleScheduleMessage = async () => {
+        if (!newMessage.trim() || !selectedTicket || !scheduleMsgDateTime) return;
+        setSchedulingMsg(true);
+        try {
+            await api.post(`/tickets/${selectedTicket.id}/schedule-message`, {
+                content: newMessage,
+                scheduledAt: new Date(scheduleMsgDateTime).toISOString(),
+            });
+            toast.success(`Mensagem agendada para ${new Date(scheduleMsgDateTime).toLocaleString('pt-BR')}`);
+            setNewMessage('');
+            setShowScheduleMsgModal(false);
+            setScheduleMsgDateTime('');
+            loadScheduledMessages(selectedTicket.id);
+        } catch {
+            toast.error('Erro ao agendar mensagem');
+        } finally {
+            setSchedulingMsg(false);
+        }
+    };
+
+    const handleCancelScheduledMessage = async (msgId: string) => {
+        try {
+            await api.delete(`/tickets/${selectedTicket!.id}/scheduled-messages/${msgId}`);
+            setScheduledMessages(prev => prev.filter(m => m.id !== msgId));
+            toast.success('Mensagem agendada cancelada');
+        } catch { toast.error('Erro ao cancelar mensagem agendada'); }
     };
 
     const handleSendAudio = async (blob: Blob) => {
@@ -810,8 +878,40 @@ export default function TicketsPage() {
         );
     };
 
-    const aiTickets = filter === 'IN_PROGRESS' ? tickets.filter((t: any) => t.mode === 'AI' || t.mode === 'HIBRIDO') : [];
-    const humanTickets = filter === 'IN_PROGRESS' ? tickets.filter((t: any) => t.mode === 'HUMANO') : [];
+    const handleExportCsv = async () => {
+        const params = new URLSearchParams();
+        if (filter) params.set('status', filter);
+        if (searchTerm) params.set('search', searchTerm);
+        if (advancedFilters.priority) params.set('priority', advancedFilters.priority);
+        if (advancedFilters.connectionId) params.set('connectionId', advancedFilters.connectionId);
+        if (advancedFilters.assignedUserId) params.set('assignedUserId', advancedFilters.assignedUserId);
+        if (advancedFilters.departments.length) params.set('departmentId', advancedFilters.departments.join(','));
+        if (advancedFilters.startDate) params.set('startDate', advancedFilters.startDate);
+        if (advancedFilters.endDate) params.set('endDate', advancedFilters.endDate);
+        advancedFilters.tags.forEach(t => params.append('tags', t));
+
+        try {
+            const token = document.cookie.match(/token=([^;]+)/)?.[1] || localStorage.getItem('token') || '';
+            const res = await fetch(`/api/tickets/export?${params.toString()}`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!res.ok) throw new Error('Falha ao exportar');
+            const text = await res.text();
+            const blob = new Blob([text], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `tickets_${new Date().toISOString().slice(0, 10)}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+        } catch {
+            toast.error('Erro ao exportar tickets');
+        }
+    };
+
+    const displayedTickets = showOnlyUnread ? tickets.filter((t: any) => (t.unreadMessages || 0) > 0) : tickets;
+    const aiTickets = filter === 'IN_PROGRESS' ? displayedTickets.filter((t: any) => t.mode === 'AI' || t.mode === 'HIBRIDO') : [];
+    const humanTickets = filter === 'IN_PROGRESS' ? displayedTickets.filter((t: any) => t.mode === 'HUMANO') : [];
 
     const renderTicketCard = (ticket: any) => (
         <motion.button
@@ -956,12 +1056,21 @@ export default function TicketsPage() {
                             </div>
                             <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tighter italic">Fluxo Aero</h2>
                         </div>
-                        <button
-                            onClick={() => setIsCreateModalOpen(true)}
-                            className="p-3 bg-primary hover:bg-primary/90 text-white rounded-2xl shadow-xl shadow-primary/20 transition-all active:scale-95 flex items-center gap-2 font-black text-[10px] uppercase tracking-widest"
-                        >
-                            <Plus className="h-4 w-4" /> Novo
-                        </button>
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={handleExportCsv}
+                                title="Exportar CSV"
+                                className="p-3 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-2xl transition-all active:scale-95"
+                            >
+                                <Download className="h-4 w-4" />
+                            </button>
+                            <button
+                                onClick={() => setIsCreateModalOpen(true)}
+                                className="p-3 bg-primary hover:bg-primary/90 text-white rounded-2xl shadow-xl shadow-primary/20 transition-all active:scale-95 flex items-center gap-2 font-black text-[10px] uppercase tracking-widest"
+                            >
+                                <Plus className="h-4 w-4" /> Novo
+                            </button>
+                        </div>
                     </div>
 
                     {/* Barra de Busca */}
@@ -1137,6 +1246,20 @@ export default function TicketsPage() {
                             </button>
                         ))}
                     </div>
+                    {/* Toggle Não Lidas */}
+                    <button
+                        onClick={() => setShowOnlyUnread(v => !v)}
+                        className={`mt-2 w-full flex items-center justify-center gap-1.5 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest border transition-all ${showOnlyUnread
+                            ? 'bg-rose-500 border-rose-500 text-white shadow-lg shadow-rose-500/20'
+                            : 'bg-transparent border-slate-200 dark:border-white/10 text-slate-500 hover:border-rose-300 hover:text-rose-500'
+                            }`}
+                    >
+                        <span className={`h-2 w-2 rounded-full ${showOnlyUnread ? 'bg-white' : 'bg-rose-500'}`} />
+                        Não lidas
+                        {showOnlyUnread && tickets.filter(t => (t.unreadMessages || 0) > 0).length > 0 && (
+                            <span className="bg-white/30 px-1 rounded-md">{tickets.filter(t => (t.unreadMessages || 0) > 0).length}</span>
+                        )}
+                    </button>
                 </div>
 
                 {/* Lista Scrollável */}
@@ -1154,7 +1277,7 @@ export default function TicketsPage() {
                                 <div className="h-2 w-full bg-slate-200 dark:bg-white/10 rounded-lg" />
                             </div>
                         ))
-                    ) : tickets.length === 0 ? (
+                    ) : displayedTickets.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-20 text-center opacity-40">
                             <Bot className="h-12 w-12 mb-4" />
                             <p className="text-xs font-black uppercase tracking-widest">Vazio</p>
@@ -1200,7 +1323,7 @@ export default function TicketsPage() {
                             {humanSectionOpen && humanTickets.map((ticket: any) => renderTicketCard(ticket))}
                         </>
                     ) : (
-                        tickets.map((ticket: any) => renderTicketCard(ticket))
+                        displayedTickets.map((ticket: any) => renderTicketCard(ticket))
                     )}
                 </div>
             </div>
@@ -1718,6 +1841,31 @@ export default function TicketsPage() {
                                                 </div>
                                             </div>
                                         )}
+
+                                        <div className="w-[1px] h-6 bg-slate-200 dark:bg-white/10 mx-1" />
+
+                                        {/* Mesclar */}
+                                        <button
+                                            onClick={() => { setShowMergeModal(true); setMergeSearch(''); setMergeResults([]); }}
+                                            className="flex items-center gap-2 px-3 py-2 bg-violet-100 dark:bg-violet-950/30 hover:bg-violet-200 dark:hover:bg-violet-900/40 text-violet-700 dark:text-violet-300 rounded-xl transition-all active:scale-95"
+                                            title="Mesclar com outro ticket"
+                                        >
+                                            <ArrowRightLeft className="h-4 w-4 shrink-0" />
+                                            <span className="text-[9px] font-black uppercase tracking-widest hidden sm:block">Mesclar</span>
+                                        </button>
+
+                                        {/* Portal do Cliente */}
+                                        <button
+                                            onClick={() => {
+                                                const url = `${window.location.origin}/portal/${selectedTicket.id}`;
+                                                navigator.clipboard.writeText(url).then(() => toast.success('Link do portal copiado!'));
+                                            }}
+                                            className="flex items-center gap-2 px-3 py-2 bg-sky-100 dark:bg-sky-950/30 hover:bg-sky-200 dark:hover:bg-sky-900/40 text-sky-700 dark:text-sky-300 rounded-xl transition-all active:scale-95"
+                                            title="Copiar link do Portal do Cliente"
+                                        >
+                                            <ExternalLink className="h-4 w-4 shrink-0" />
+                                            <span className="text-[9px] font-black uppercase tracking-widest hidden sm:block">Portal</span>
+                                        </button>
 
                                         <div className="w-[1px] h-6 bg-slate-200 dark:bg-white/10 mx-1" />
 
@@ -2353,6 +2501,13 @@ export default function TicketsPage() {
                                                                 <Calendar className="h-5 w-5" />
                                                             </button>
                                                             <button
+                                                                onClick={() => { if (!newMessage.trim()) { toast.error('Digite a mensagem primeiro'); return; } setShowScheduleMsgModal(true); }}
+                                                                className="p-2.5 text-violet-500 hover:text-violet-600 transition-all hover:scale-110"
+                                                                title="Agendar envio desta mensagem"
+                                                            >
+                                                                <CalendarClock className="h-5 w-5" />
+                                                            </button>
+                                                            <button
                                                                 onClick={() => setIsRecording(true)}
                                                                 className="p-2.5 text-slate-400 hover:text-red-500 transition-all hover:scale-110"
                                                                 title="Gravar áudio"
@@ -2666,6 +2821,156 @@ export default function TicketsPage() {
                                             </div>
                                         </div>
                                     ))}
+                                </div>
+                            </motion.div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
+                {/* Modal: Agendar Mensagem */}
+                <AnimatePresence>
+                    {showScheduleMsgModal && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[200] flex items-center justify-center p-4"
+                            onClick={() => setShowScheduleMsgModal(false)}
+                        >
+                            <motion.div
+                                initial={{ scale: 0.95, opacity: 0, y: -10 }}
+                                animate={{ scale: 1, opacity: 1, y: 0 }}
+                                exit={{ scale: 0.95, opacity: 0, y: -10 }}
+                                transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+                                onClick={(e) => e.stopPropagation()}
+                                className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-white/10 w-full max-w-sm overflow-hidden"
+                            >
+                                <div className="p-5 border-b border-slate-100 dark:border-white/10 flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <CalendarClock size={16} className="text-violet-500" />
+                                        <h2 className="text-sm font-black uppercase tracking-widest text-slate-800 dark:text-white">Agendar Mensagem</h2>
+                                    </div>
+                                    <button onClick={() => setShowScheduleMsgModal(false)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/10 text-slate-400">
+                                        <X size={14} />
+                                    </button>
+                                </div>
+                                <div className="p-5 space-y-4">
+                                    <div>
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Mensagem</p>
+                                        <div className="p-3 rounded-xl bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-800 text-sm text-slate-700 dark:text-slate-300 line-clamp-3">
+                                            {newMessage}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Enviar em</p>
+                                        <input
+                                            type="datetime-local"
+                                            value={scheduleMsgDateTime}
+                                            onChange={(e) => setScheduleMsgDateTime(e.target.value)}
+                                            min={new Date(Date.now() + 60000).toISOString().slice(0, 16)}
+                                            className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-800 text-sm font-medium text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/30"
+                                        />
+                                    </div>
+                                    {scheduleMsgDateTime && (
+                                        <p className="text-[11px] text-slate-500 flex items-center gap-1">
+                                            <Clock size={11} />
+                                            Será enviada em {new Date(scheduleMsgDateTime).toLocaleString('pt-BR')}
+                                        </p>
+                                    )}
+                                </div>
+                                <div className="px-5 pb-5 flex gap-2">
+                                    <button onClick={() => setShowScheduleMsgModal(false)} className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-white/10 text-sm font-bold text-slate-500 hover:bg-slate-50 dark:hover:bg-white/5 transition-all">
+                                        Cancelar
+                                    </button>
+                                    <button
+                                        onClick={handleScheduleMessage}
+                                        disabled={!scheduleMsgDateTime || schedulingMsg}
+                                        className="flex-1 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-sm font-black transition-all shadow-lg shadow-violet-500/20 disabled:opacity-50 flex items-center justify-center gap-2"
+                                    >
+                                        {schedulingMsg ? <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <><CalendarClock size={14} /> Agendar</>}
+                                    </button>
+                                </div>
+
+                                {/* Mensagens agendadas pendentes */}
+                                {scheduledMessages.length > 0 && (
+                                    <div className="px-5 pb-5 border-t border-slate-100 dark:border-white/10 pt-4">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Agendadas ({scheduledMessages.length})</p>
+                                        <div className="space-y-2 max-h-32 overflow-y-auto">
+                                            {scheduledMessages.map(m => (
+                                                <div key={m.id} className="flex items-start gap-2 p-2 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/10">
+                                                    <Clock size={12} className="text-violet-500 mt-0.5 shrink-0" />
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-[11px] font-bold text-slate-700 dark:text-slate-300 truncate">{m.content}</p>
+                                                        <p className="text-[10px] text-slate-400">{new Date(m.scheduledAt).toLocaleString('pt-BR')}</p>
+                                                    </div>
+                                                    <button onClick={() => handleCancelScheduledMessage(m.id)} className="p-1 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/30 text-slate-300 hover:text-rose-500 transition-colors shrink-0">
+                                                        <X size={12} />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </motion.div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
+                {/* Modal: Mesclar Ticket */}
+                <AnimatePresence>
+                    {showMergeModal && selectedTicket && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[200] flex items-center justify-center p-4"
+                            onClick={() => setShowMergeModal(false)}
+                        >
+                            <motion.div
+                                initial={{ scale: 0.95, opacity: 0, y: -10 }}
+                                animate={{ scale: 1, opacity: 1, y: 0 }}
+                                exit={{ scale: 0.95, opacity: 0, y: -10 }}
+                                transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+                                onClick={e => e.stopPropagation()}
+                                className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-white/10 w-full max-w-md overflow-hidden"
+                            >
+                                <div className="p-5 border-b border-slate-100 dark:border-white/10 flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <ArrowRightLeft size={16} className="text-violet-500" />
+                                        <h2 className="text-sm font-black uppercase tracking-widest text-slate-800 dark:text-white">Mesclar Ticket</h2>
+                                    </div>
+                                    <button onClick={() => setShowMergeModal(false)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/10 text-slate-400"><X size={14} /></button>
+                                </div>
+                                <div className="p-5 space-y-4">
+                                    <div className="p-3 rounded-xl bg-violet-50 dark:bg-violet-950/30 border border-violet-100 dark:border-violet-800 text-xs text-violet-700 dark:text-violet-300">
+                                        As mensagens e tags do ticket <strong>#{selectedTicket.id.slice(-6)}</strong> serão transferidas para o ticket de destino. O ticket de origem será fechado.
+                                    </div>
+                                    <input
+                                        value={mergeSearch}
+                                        onChange={e => { setMergeSearch(e.target.value); searchMergeTickets(e.target.value); }}
+                                        placeholder="Buscar ticket de destino..."
+                                        className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/30"
+                                    />
+                                    <div className="max-h-52 overflow-y-auto space-y-2">
+                                        {mergeResults.length === 0 && mergeSearch.length >= 2 && (
+                                            <p className="text-xs text-center text-slate-400 py-4">Nenhum ticket encontrado</p>
+                                        )}
+                                        {mergeResults.map(t => (
+                                            <button
+                                                key={t.id}
+                                                onClick={() => handleMerge(t.id)}
+                                                disabled={merging}
+                                                className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-violet-50 dark:hover:bg-violet-950/20 text-left transition-all border border-transparent hover:border-violet-200 dark:hover:border-violet-800 disabled:opacity-50"
+                                            >
+                                                <div className="h-8 w-8 rounded-xl bg-violet-100 dark:bg-violet-950/40 flex items-center justify-center text-sm">{(t as any).department?.emoji || '💬'}</div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{(t as any).contact?.name || 'Sem contato'}</p>
+                                                    <p className="text-[10px] text-slate-400 truncate">{t.subject || 'Sem assunto'} · {(t as any).department?.name}</p>
+                                                </div>
+                                                <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-slate-100 dark:bg-white/10 text-slate-500 shrink-0">#{t.id.slice(-6)}</span>
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
                             </motion.div>
                         </motion.div>

@@ -36,6 +36,8 @@ import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
 import { TenantGuard } from './modules/auth/guards/tenant.guard';
 import { PermissionsGuard } from './modules/auth/guards/permissions.guard';
 import { QuickRepliesModule } from './modules/quick-replies/quick-replies.module';
+import { SearchModule } from './modules/search/search.module';
+import { BroadcastModule } from './modules/broadcast/broadcast.module';
 
 @Module({
     imports: [
@@ -144,6 +146,8 @@ import { QuickRepliesModule } from './modules/quick-replies/quick-replies.module
             serveRoot: '/public',
         }),
         QuickRepliesModule,
+        SearchModule,
+        BroadcastModule,
     ],
     controllers: [],
     providers: [

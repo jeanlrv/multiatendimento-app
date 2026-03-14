@@ -17,6 +17,20 @@ import { RequirePermission } from '../../common/decorators/permissions.decorator
 export class WorkflowsController {
     constructor(private readonly workflowsService: WorkflowsService) { }
 
+    @Get('templates')
+    @RequirePermission(Permission.WORKFLOWS_READ)
+    @ApiOperation({ summary: 'Listar templates de workflow disponíveis' })
+    getTemplates() {
+        return this.workflowsService.getTemplates();
+    }
+
+    @Post('templates/:id/use')
+    @RequirePermission(Permission.WORKFLOWS_CREATE)
+    @ApiOperation({ summary: 'Criar workflow a partir de um template' })
+    createFromTemplate(@Company() companyId: string, @Param('id') id: string) {
+        return this.workflowsService.createFromTemplate(id, companyId);
+    }
+
     @Get()
     @RequirePermission(Permission.WORKFLOWS_READ)
     @ApiOperation({ summary: 'Listar todas as regras de workflow' })

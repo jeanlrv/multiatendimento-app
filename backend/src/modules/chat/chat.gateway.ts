@@ -13,6 +13,7 @@ import { JwtService } from '@nestjs/jwt';
 import { createAdapter } from '@socket.io/redis-adapter';
 import { Redis } from 'ioredis';
 import { PrismaService } from '../../database/prisma.service';
+import { OnEvent } from '@nestjs/event-emitter';
 
 @WebSocketGateway({
     cors: {
@@ -245,5 +246,10 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect, On
 
         // Também notifica na sala da empresa para outros supervisores verem (opcional)
         this.server.to(`company:${companyId}`).emit('globalMention', data);
+    }
+
+    @OnEvent('broadcast.progress')
+    handleBroadcastProgress(data: { companyId: string; broadcastId: string; sentCount: number; failedCount: number; totalContacts: number; status: string }) {
+        this.server.to(`company:${data.companyId}`).emit('broadcast_progress', data);
     }
 }

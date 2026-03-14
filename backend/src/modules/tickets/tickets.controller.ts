@@ -1,4 +1,5 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Query, Req } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Query, Req, Res } from '@nestjs/common';
+import { Response } from 'express';
 import { TicketsService } from './tickets.service';
 import { CreateTicketDto } from './dto/create-ticket.dto';
 import { UpdateTicketDto, TicketStatus } from './dto/update-ticket.dto';
@@ -7,6 +8,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { Permission } from '../auth/constants/permissions';
 import { RequirePermission } from '../../common/decorators/permissions.decorator';
+import { Public } from '../../common/decorators/public.decorator';
 
 @ApiTags('Tickets')
 @Controller('tickets')
@@ -94,6 +96,52 @@ export class TicketsController {
         });
     }
 
+    @Get('export')
+    @RequirePermission(Permission.TICKETS_READ)
+    @ApiOperation({ summary: 'Exportar tickets em CSV' })
+    async exportCsv(
+        @Req() req: any,
+        @Res() res: Response,
+        @Query('status') status?: TicketStatus,
+        @Query('departmentId') departmentId?: string,
+        @Query('assignedUserId') assignedUserId?: string,
+        @Query('search') search?: string,
+        @Query('priority') priority?: string,
+        @Query('connectionId') connectionId?: string,
+        @Query('tags') tags?: string | string[],
+        @Query('startDate') startDate?: string,
+        @Query('endDate') endDate?: string,
+    ) {
+        const user = req.user;
+        const userPermissions: string[] = user.permissions || [];
+        const hasReadAllPermission = userPermissions.includes(Permission.TICKETS_READ_ALL);
+        const departamentosPermitidos = user.departments?.map((d: any) => d.id) || [];
+
+        let filtroDepartamentos = departmentId;
+        if (!hasReadAllPermission) {
+            const filtrados = departmentId
+                ? departmentId.split(',').filter(id => departamentosPermitidos.includes(id))
+                : departamentosPermitidos;
+            filtroDepartamentos = filtrados.join(',') || undefined;
+        }
+
+        const csv = await this.ticketsService.exportCsv(user.companyId, {
+            status, departmentId: filtroDepartamentos, assignedUserId, search, priority, connectionId, tags, startDate, endDate,
+        });
+
+        const filename = `tickets_${new Date().toISOString().slice(0, 10)}.csv`;
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.send('\uFEFF' + csv);
+    }
+
+    @Get('public/:id')
+    @Public()
+    @ApiOperation({ summary: 'Portal do cliente — visualizar ticket sem autenticação' })
+    getPublicTicket(@Param('id') id: string) {
+        return this.ticketsService.getPublicTicket(id);
+    }
+
     @Get(':id')
     @RequirePermission(Permission.TICKETS_READ)
     @ApiOperation({ summary: 'Obter detalhes de um ticket' })
@@ -141,5 +189,33 @@ export class TicketsController {
     @ApiOperation({ summary: 'Executar ações em lote nos tickets' })
     bulkAction(@Req() req: any, @Body() bulkDto: BulkTicketActionDto) {
         return this.ticketsService.bulkAction(req.user.companyId, bulkDto);
+    }
+
+    @Post(':id/schedule-message')
+    @RequirePermission(Permission.TICKETS_UPDATE)
+    @ApiOperation({ summary: 'Agendar mensagem para envio futuro' })
+    scheduleMessage(@Req() req: any, @Param('id') id: string, @Body() body: { content: string; scheduledAt: string }) {
+        return this.ticketsService.scheduleMessage(req.user.companyId, id, req.user.id, body.content, body.scheduledAt);
+    }
+
+    @Get(':id/scheduled-messages')
+    @RequirePermission(Permission.TICKETS_READ)
+    @ApiOperation({ summary: 'Listar mensagens agendadas de um ticket' })
+    getScheduledMessages(@Req() req: any, @Param('id') id: string) {
+        return this.ticketsService.getScheduledMessages(req.user.companyId, id);
+    }
+
+    @Delete(':id/scheduled-messages/:msgId')
+    @RequirePermission(Permission.TICKETS_UPDATE)
+    @ApiOperation({ summary: 'Cancelar mensagem agendada' })
+    cancelScheduledMessage(@Req() req: any, @Param('msgId') msgId: string) {
+        return this.ticketsService.cancelScheduledMessage(req.user.companyId, msgId);
+    }
+
+    @Post(':id/merge')
+    @RequirePermission(Permission.TICKETS_UPDATE)
+    @ApiOperation({ summary: 'Mesclar ticket com outro (transfere mensagens e tags para o destino)' })
+    mergeTicket(@Req() req: any, @Param('id') id: string, @Body() body: { targetTicketId: string }) {
+        return this.ticketsService.mergeTicket(req.user.companyId, id, body.targetTicketId, req.user.id);
     }
 }

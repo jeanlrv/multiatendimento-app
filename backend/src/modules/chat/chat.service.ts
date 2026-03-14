@@ -5,7 +5,7 @@ import { WhatsAppService } from '../whatsapp/whatsapp.service';
 import { AIService } from '../ai/ai.service';
 import { EvaluationsService } from '../evaluations/evaluations.service';
 import { MessageType } from '@prisma/client';
-import { EventEmitter2 } from '@nestjs/event-emitter';
+import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 
 @Injectable()
 export class ChatService {
@@ -630,5 +630,19 @@ export class ChatService {
         });
 
         return { transcription: updatedMessage.transcription };
+    }
+
+    @OnEvent('scheduled_message.fire')
+    async handleScheduledMessage(data: { ticketId: string; content: string; companyId: string; scheduledMessageId: string }) {
+        this.logger.log(`Disparando mensagem agendada ${data.scheduledMessageId} no ticket ${data.ticketId}`);
+        try {
+            await this.sendMessage(data.ticketId, data.content, true, MessageType.TEXT, undefined, data.companyId, 'AGENT');
+        } catch (err) {
+            this.logger.error(`Erro ao enviar mensagem agendada ${data.scheduledMessageId}: ${err.message}`);
+            await this.prisma.scheduledMessage.update({
+                where: { id: data.scheduledMessageId },
+                data: { status: 'FAILED' },
+            });
+        }
     }
 }

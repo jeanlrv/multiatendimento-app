@@ -53,6 +53,16 @@ export class ContactsController {
         return this.contactsService.exportCSV(companyId);
     }
 
+    @Get('check-duplicate')
+    @ApiOperation({ summary: 'Verificar duplicidade de contato por telefone' })
+    checkDuplicate(
+        @Company() companyId: string,
+        @Query('phone') phone: string,
+        @Query('excludeId') excludeId?: string,
+    ) {
+        return this.contactsService.checkDuplicate(companyId, phone, excludeId);
+    }
+
     @Get(':id')
     @ApiOperation({ summary: 'Obter detalhes de um contato' })
     findOne(@Company() companyId: string, @Param('id') id: string) {
@@ -73,5 +83,11 @@ export class ContactsController {
     @ApiOperation({ summary: 'Excluir um contato' })
     remove(@Company() companyId: string, @Param('id') id: string) {
         return this.contactsService.remove(companyId, id);
+    }
+
+    @Post(':id/merge')
+    @ApiOperation({ summary: 'Mesclar contato com outro (transfere tickets e agenda para o destino)' })
+    mergeContact(@Company() companyId: string, @Param('id') id: string, @Body() body: { targetContactId: string }) {
+        return this.contactsService.mergeContact(companyId, id, body.targetContactId);
     }
 }
