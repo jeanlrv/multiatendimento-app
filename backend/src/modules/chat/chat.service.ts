@@ -235,12 +235,31 @@ export class ChatService {
             const dateStr = nowLocal.toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
             const timeStr = nowLocal.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
+            // Bloco especial para fora do expediente
+            const outOfHours = this.isOutsideBusinessHours(ticket.department);
+            const outOfHoursBlock = outOfHours ? [
+                '',
+                '⚠️ CONTEXTO — FORA DO HORÁRIO COMERCIAL:',
+                '- O cliente entrou em contato fora do horário de atendimento humano.',
+                '- A mensagem de aviso de fora do expediente JÁ foi enviada automaticamente pelo sistema.',
+                '- Você é um assistente de IA disponível 24 horas.',
+                '- VERIFIQUE O HISTÓRICO DA CONVERSA e siga as regras:',
+                '  a) Se a IA AINDA NÃO perguntou se o cliente deseja atendimento: apresente-se brevemente',
+                '     como assistente virtual disponível mesmo fora do horário e pergunte se deseja continuar.',
+                '  b) Se o cliente JÁ CONFIRMOU que quer atendimento (disse sim/quero/pode/etc.):',
+                '     atenda normalmente sem mencionar horário comercial novamente.',
+                '  c) Se o cliente JÁ RECUSOU ou se despediu (disse não/depois/tchau/ok/etc.):',
+                '     responda com uma despedida cordial e use [FINALIZAR].',
+                '',
+            ].join('\n') : '';
+
             const routingInstructions = [
                 '========================================',
                 '[INSTRUÇÕES DE ROTEAMENTO — NÃO EXIBA AO CLIENTE]',
                 '========================================',
                 `Data e hora atual: ${dateStr}, ${timeStr} (${deptTimezone})`,
                 `Você está ATUALMENTE no departamento: ${currentDeptName}`,
+                outOfHoursBlock,
                 'Você pode usar EXCLUSIVAMENTE um dos comandos abaixo quando necessário:',
                 '',
                 `• [TRANSFERIR:NomeDoDepartamento] — transfere para outro departamento (IA do destino assume)`,
@@ -289,6 +308,13 @@ export class ChatService {
                         select: { id: true, name: true, aiAgentId: true },
                     });
 
+                    // Notificação breve e orgânica antes da transferência
+                    await this.sendMessage(
+                        ticketId,
+                        `Um momento, estou direcionando você para o setor de *${targetDept.name}*... 🔄`,
+                        true, 'TEXT', undefined, ticket.companyId, 'AI'
+                    );
+
                     await this.prisma.ticket.update({
                         where: { id: ticketId },
                         data: { departmentId: targetDept.id },
@@ -302,17 +328,16 @@ export class ChatService {
 
                     this.logger.log(`IA transferiu ticket ${ticketId} para departamento "${deptName}"`);
 
-                    // Se o novo departamento tem IA, ela responde imediatamente com contexto
-                    // (sem enviar mensagem de "encaminhando" — a própria IA do destino se apresenta)
                     if (newDeptFull?.aiAgentId) {
+                        // Nova IA assume e se apresenta imediatamente
                         this.handleAIResponseAfterTransfer(ticketId, content, ticket.department?.name ?? currentDeptName, ticket.companyId).catch(err =>
                             this.logger.error(`Erro ao acionar IA pós-transferência: ${err.message}`)
                         );
                     } else {
-                        // Destino sem IA — avisar o cliente e colocar em espera humana
+                        // Destino sem IA — cliente aguarda humano
                         await this.sendMessage(
                             ticketId,
-                            `Você foi encaminhado para o departamento *${targetDept.name}*. Em breve um atendente irá te ajudar! 🔄`,
+                            `Você foi encaminhado para *${targetDept.name}*. Em breve um atendente irá te ajudar! 👤`,
                             true, 'TEXT', undefined, ticket.companyId, 'AI'
                         );
                     }
@@ -378,7 +403,7 @@ export class ChatService {
             });
 
             const history = messages
-                .filter(m => !m.content.startsWith('Vou te encaminhar') && !m.content.startsWith('Você foi encaminhado'))
+                .filter(m => !m.content.startsWith('Um momento, estou direcionando') && !m.content.startsWith('Você foi encaminhado'))
                 .reverse()
                 .map(m => ({ role: m.fromMe ? 'assistant' : 'user', content: m.content }));
 
@@ -400,9 +425,10 @@ export class ChatService {
                 '========================================',
                 `Data e hora atual: ${dateStr}, ${timeStr} (${deptTimezone})`,
                 `Você está ATUALMENTE no departamento: ${ticket.department.name}`,
-                `Este cliente acabou de ser transferido do departamento: ${fromDeptName}`,
-                'Apresente-se brevemente e atenda a necessidade do cliente de forma natural e direta.',
-                'NÃO mencione que houve transferência a menos que o cliente pergunte.',
+                `Este cliente foi transferido do departamento "${fromDeptName}".`,
+                'Uma breve mensagem de redirecionamento JÁ foi enviada pelo sistema.',
+                'Apresente-se como assistente deste setor e atenda a necessidade do cliente de forma direta e natural.',
+                'NÃO diga "recebi sua transferência" ou similar — apenas se apresente e resolva.',
                 '',
                 `• [TRANSFERIR:NomeDoDepartamento] — transfere para outro departamento`,
                 `• [HUMANO] — transfere para um atendente humano`,
@@ -413,7 +439,13 @@ export class ChatService {
             ].join('\n');
 
             const aiResponse = await this.aiService.chat(companyId, ticket.department.aiAgentId, lastClientMessage, history, undefined, transferContext);
-            if (!aiResponse) return;
+            if (!aiResponse) {
+                // Fallback garantido: cliente nunca fica sem resposta após transferência
+                this.logger.warn(`IA pós-transferência retornou vazio para ticket ${ticketId} — usando fallback`);
+                const fallback = `Olá! Sou o assistente do setor *${ticket.department.name}*. Como posso ajudá-lo?`;
+                await this.sendMessage(ticketId, fallback, true, 'TEXT', undefined, companyId, 'AI');
+                return;
+            }
 
             // Processar comandos de roteamento na resposta do novo agente
             const transferMatch = aiResponse.match(/\[TRANSFERIR:([^\]]+)\]/i);
@@ -430,6 +462,24 @@ export class ChatService {
         } catch (error) {
             this.logger.error(`Erro na IA pós-transferência: ${error.message}`);
         }
+    }
+
+    /** Retorna true se o departamento estiver fora do horário comercial */
+    private isOutsideBusinessHours(department: any): boolean {
+        if (!department?.businessHours) return false;
+        try {
+            const bh = typeof department.businessHours === 'string'
+                ? JSON.parse(department.businessHours)
+                : department.businessHours;
+            const timezone = department.timezone || 'America/Sao_Paulo';
+            const localDate = new Date(new Date().toLocaleString('en-US', { timeZone: timezone }));
+            const dayConfig = bh[localDate.getDay().toString()];
+            if (!dayConfig?.start || !dayConfig?.end) return true; // dia fechado
+            const cur = localDate.getHours() * 60 + localDate.getMinutes();
+            const [sh, sm] = dayConfig.start.split(':').map(Number);
+            const [eh, em] = dayConfig.end.split(':').map(Number);
+            return cur < sh * 60 + sm || cur >= eh * 60 + em;
+        } catch { return false; }
     }
 
     /** Converte markdown padrão para formato WhatsApp antes de enviar */
