@@ -86,7 +86,9 @@ export default function BroadcastPage() {
 
     // WebSocket: real-time broadcast progress
     useEffect(() => {
-        const socket = getSocket();
+        const token = localStorage.getItem('token');
+        if (!token) return;
+        const socket = getSocket(token);
         const handler = (data: any) => {
             setLiveProgress(prev => ({
                 ...prev,
