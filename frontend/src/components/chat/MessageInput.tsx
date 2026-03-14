@@ -11,6 +11,7 @@ interface MessageInputProps {
     onFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
     onAudioUpload?: (blob: Blob) => void;
     uploading: boolean;
+    onTriggerMacro?: () => void;
 }
 
 export const MessageInput: React.FC<MessageInputProps> = ({
@@ -20,6 +21,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     onFileUpload,
     onAudioUpload,
     uploading,
+    onTriggerMacro,
 }) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -84,7 +86,9 @@ export const MessageInput: React.FC<MessageInputProps> = ({
                             </button>
                             <button
                                 type="button"
-                                className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-white/50 dark:bg-white/5 text-gray-400 border border-white/20 hover:text-blue-500 transition-all"
+                                onClick={onTriggerMacro}
+                                disabled={!onTriggerMacro}
+                                className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-white/50 dark:bg-white/5 text-gray-400 border border-white/20 hover:text-blue-500 transition-all disabled:opacity-40 disabled:cursor-default"
                             >
                                 / Atalhos
                             </button>

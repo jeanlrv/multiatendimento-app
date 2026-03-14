@@ -187,11 +187,11 @@ export class NotificationService implements OnModuleInit {
      * Obtém estatísticas de notificações
      */
     async getNotificationStats(companyId: string) {
-        const processed = await (this.prisma as any).notification.count({
+        const processed = await this.prisma.notification.count({
             where: { companyId },
         });
 
-        const unread = await (this.prisma as any).notification.count({
+        const unread = await this.prisma.notification.count({
             where: {
                 companyId,
                 readAt: null,

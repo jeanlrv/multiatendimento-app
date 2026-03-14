@@ -9,6 +9,7 @@ const withPWA = withPWAInit({
     register: true,
     skipWaiting: true,
     buildExcludes: [/middleware-manifest\.json$/],
+    customWorkerDir: 'worker', // Injeta worker/index.js no sw.js — handlers de Web Push
 });
 
 const nextConfig = {

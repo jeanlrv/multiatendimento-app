@@ -3,6 +3,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import * as path from 'path';
 import * as os from 'os';
+import * as fs from 'fs';
 import { KnowledgeService } from './knowledge.service';
 import { CreateKnowledgeBaseDto } from './dto/create-knowledge.dto';
 import { AddDocumentDto } from './dto/add-document.dto';
@@ -104,7 +105,6 @@ export class KnowledgeController {
             return res.redirect(doc.contentUrl);
         } else if (doc.contentUrl) {
             // Se for arquivo local
-            const fs = require('fs');
             if (!fs.existsSync(doc.contentUrl)) {
                 return res.status(404).json({ message: 'Arquivo físico não encontrado no servidor' });
             }

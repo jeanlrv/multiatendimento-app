@@ -31,7 +31,7 @@ export class WhatsAppService {
     }
 
     async findAll(companyId: string) {
-        const connections = await (this.prisma as any).whatsAppInstance.findMany({
+        const connections = await this.prisma.whatsAppInstance.findMany({
             where: { companyId },
             include: { department: true },
             orderBy: { createdAt: 'desc' },
@@ -41,7 +41,7 @@ export class WhatsAppService {
     }
 
     async findOne(id: string, companyId: string) {
-        const connection = await (this.prisma as any).whatsAppInstance.findUnique({
+        const connection = await this.prisma.whatsAppInstance.findUnique({
             where: { id, companyId },
             include: { department: true },
         });
@@ -55,7 +55,7 @@ export class WhatsAppService {
 
     // Método para uso interno (envio de mensagens, etc) sem máscara
     async getInternal(id: string, companyId: string) {
-        const connection = await (this.prisma as any).whatsAppInstance.findUnique({
+        const connection = await this.prisma.whatsAppInstance.findUnique({
             where: { id, companyId },
         });
 
@@ -128,7 +128,7 @@ export class WhatsAppService {
         // Usa o primeiro departamento selecionado como departmentId (FK legada para roteamento)
         const primaryDeptId = departmentIds.length > 0 ? departmentIds[0] : undefined;
 
-        const connection = await (this.prisma as any).whatsAppInstance.create({
+        const connection = await this.prisma.whatsAppInstance.create({
             data: {
                 ...data,
                 zapiToken: data.zapiToken ? this.cryptoService.encrypt(data.zapiToken) : undefined,
@@ -168,7 +168,7 @@ export class WhatsAppService {
             updateData.zapiClientToken = this.cryptoService.encrypt(updateData.zapiClientToken);
         }
 
-        return (this.prisma as any).whatsAppInstance.update({
+        return this.prisma.whatsAppInstance.update({
             where: { id },
             data: updateData,
             include: { department: true },
@@ -177,7 +177,7 @@ export class WhatsAppService {
 
     async remove(id: string, companyId: string) {
         await this.findOne(id, companyId);
-        return (this.prisma as any).whatsAppInstance.delete({ where: { id } });
+        return this.prisma.whatsAppInstance.delete({ where: { id } });
     }
 
     async getQrCode(id: string, companyId: string) {
@@ -237,7 +237,7 @@ export class WhatsAppService {
             const newStatus = isConnected ? 'CONNECTED' : 'DISCONNECTED';
 
             // Sincronizar status com o banco de dados
-            await (this.prisma as any).whatsAppInstance.update({
+            await this.prisma.whatsAppInstance.update({
                 where: { id },
                 data: { status: newStatus },
             });

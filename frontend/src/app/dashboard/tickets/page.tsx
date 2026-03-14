@@ -474,6 +474,14 @@ export default function TicketsPage() {
         }
     };
 
+    const substituteVars = (content: string) => {
+        if (!selectedTicket) return content;
+        return content
+            .replace(/\{\{nome\}\}/gi, selectedTicket.contact.name ?? '')
+            .replace(/\{\{protocolo\}\}/gi, '#' + selectedTicket.id.slice(-6).toUpperCase())
+            .replace(/\{\{telefone\}\}/gi, selectedTicket.contact.phoneNumber ?? '');
+    };
+
     const handleMessageChange = (val: string) => {
         setNewMessage(val);
 
@@ -2152,6 +2160,17 @@ export default function TicketsPage() {
                                                             <span className="text-[9px] font-black uppercase tracking-widest hidden lg:block">Privado</span>
                                                         </button>
 
+                                                        {/* Botão para abrir menu de macros */}
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => { setShowMacroMenu(true); setMacroFilter(''); setMacroSelectedIndex(0); }}
+                                                            className="p-2 rounded-xl transition-all flex items-center gap-1.5 border text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 border-transparent hover:text-primary"
+                                                            title="Respostas Rápidas"
+                                                        >
+                                                            <Sparkles size={16} />
+                                                            <span className="text-[9px] font-black uppercase tracking-widest hidden lg:block">/ Macros</span>
+                                                        </button>
+
                                                         {/* Popover de Macros */}
                                                         <AnimatePresence>
                                                             {showMacroMenu && (
@@ -2176,8 +2195,8 @@ export default function TicketsPage() {
                                                                                 className={`w-full text-left p-3 rounded-xl transition-all ${idx === macroSelectedIndex ? 'bg-primary/10 border-primary/20 scale-[0.98]' : 'hover:bg-slate-50 dark:hover:bg-white/5 border-transparent'} border`}
                                                                                 onClick={() => {
                                                                                     const lastSlashIndex = newMessage.lastIndexOf('/');
-                                                                                    const beforeSlash = newMessage.slice(0, lastSlashIndex);
-                                                                                    const newText = beforeSlash + macro.content;
+                                                                                    const beforeSlash = lastSlashIndex >= 0 ? newMessage.slice(0, lastSlashIndex) : '';
+                                                                                    const newText = beforeSlash + substituteVars(macro.content);
                                                                                     setNewMessage(newText);
                                                                                     if (selectedTicket) localStorage.setItem(`draft_${selectedTicket.id}`, newText);
                                                                                     setShowMacroMenu(false);
@@ -2262,8 +2281,8 @@ export default function TicketsPage() {
                                                                             if (filteredMacros[macroSelectedIndex]) {
                                                                                 const macro = filteredMacros[macroSelectedIndex];
                                                                                 const lastSlashIndex = newMessage.lastIndexOf('/');
-                                                                                const beforeSlash = newMessage.slice(0, lastSlashIndex);
-                                                                                const newText = beforeSlash + macro.content;
+                                                                                const beforeSlash = lastSlashIndex >= 0 ? newMessage.slice(0, lastSlashIndex) : '';
+                                                                                const newText = beforeSlash + substituteVars(macro.content);
                                                                                 setNewMessage(newText);
                                                                                 if (selectedTicket) localStorage.setItem(`draft_${selectedTicket.id}`, newText);
                                                                                 setShowMacroMenu(false);

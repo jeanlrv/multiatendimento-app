@@ -10,6 +10,7 @@ import { ProviderConfigService } from '../settings/provider-config.service';
 import { Observable } from 'rxjs';
 import { v4 as uuidv4 } from 'uuid';
 import axios from 'axios';
+import { OpenAI, toFile } from 'openai';
 
 @Injectable()
 export class AIService {
@@ -40,7 +41,7 @@ export class AIService {
 
     // AIAgent CRUD
     async createAgent(companyId: string, data: CreateAIAgentDto) {
-        return (this.prisma as any).aIAgent.create({
+        return this.prisma.aIAgent.create({
             data: {
                 ...data,
                 companyId,
@@ -50,13 +51,13 @@ export class AIService {
     }
 
     async findAllAgents(companyId: string) {
-        return (this.prisma as any).aIAgent.findMany({
+        return this.prisma.aIAgent.findMany({
             where: { companyId }
         });
     }
 
     async findOneAgent(companyId: string, id: string) {
-        return (this.prisma as any).aIAgent.findFirst({
+        return this.prisma.aIAgent.findFirst({
             where: { id, companyId }
         });
     }
@@ -74,14 +75,14 @@ export class AIService {
             (updateData as any).embedId = uuidv4();
         }
 
-        return (this.prisma as any).aIAgent.update({
+        return this.prisma.aIAgent.update({
             where: { id },
             data: updateData
         });
     }
 
     async removeAgent(companyId: string, id: string) {
-        return (this.prisma as any).aIAgent.deleteMany({
+        return this.prisma.aIAgent.deleteMany({
             where: { id, companyId }
         });
     }
@@ -133,7 +134,7 @@ export class AIService {
      */
     private async checkCostAlert(companyId: string, estimatedCost: number): Promise<void> {
         try {
-            const company = await (this.prisma as any).company.findUnique({
+            const company = await this.prisma.company.findUnique({
                 where: { id: companyId },
                 select: { dailyCostAlertUsd: true },
             });
@@ -141,14 +142,14 @@ export class AIService {
 
             const startOfDay = new Date();
             startOfDay.setHours(0, 0, 0, 0);
-            const dailyCost = await (this.prisma as any).aIUsage.aggregate({
+            const dailyCost = await this.prisma.aIUsage.aggregate({
                 where: { companyId, createdAt: { gte: startOfDay } },
                 _sum: { cost: true },
             });
             const totalDailyCost = (dailyCost._sum.cost ?? 0) + estimatedCost;
             if (totalDailyCost >= company.dailyCostAlertUsd) {
                 // Cria notificação de alerta no banco (deduplicada: apenas uma por dia)
-                const existingAlert = await (this.prisma as any).notification.findFirst({
+                const existingAlert = await this.prisma.notification.findFirst({
                     where: {
                         companyId,
                         event: 'ai.cost_alert',
@@ -156,7 +157,7 @@ export class AIService {
                     },
                 });
                 if (!existingAlert) {
-                    await (this.prisma as any).notification.create({
+                    await this.prisma.notification.create({
                         data: {
                             companyId,
                             type: 'WARNING',
@@ -215,7 +216,7 @@ export class AIService {
                     llmConfig?.baseUrl || undefined,
                 );
 
-                await (this.prisma as any).conversation.updateMany({
+                await this.prisma.conversation.updateMany({
                     where: { id: conversationId, companyId },
                     data: {
                         summary,
@@ -263,12 +264,12 @@ export class AIService {
         const wordCount = message.trim().split(/\s+/).length;
         // Budget maior para queries mais longas ou complexas
         if (charCount > 300 || wordCount > 50) {
-            return { chunkLimit: 20 }; // Query longa/complexa: mais contexto
+            return { chunkLimit: 25 }; // Query longa/complexa: mais contexto
         }
         if (charCount > 100 || wordCount > 15) {
-            return { chunkLimit: 15 }; // Query média
+            return { chunkLimit: 20 }; // Query média
         }
-        return { chunkLimit: 10 };    // Query curta: ainda assim contexto razoável
+        return { chunkLimit: 15 };    // Mesmo queries curtas precisam de contexto suficiente
     }
 
     /** Guarda contra overflow de context window: trunca o contexto RAG se necessário */
@@ -276,20 +277,13 @@ export class AIService {
         const maxChars = this.MODEL_CONTEXT_CHARS[modelId] ?? this.DEFAULT_MAX_CONTEXT_CHARS;
         const fixedChars = systemPrompt.length + message.length +
             history.reduce((s, h) => s + (h.content?.length || 0), 0);
-        const budgetForContext = maxChars * 0.5 - fixedChars; // máx 50% do contexto para RAG
+        const budgetForContext = maxChars * 0.65 - fixedChars; // máx 65% do contexto para RAG
         if (budgetForContext <= 0) return '';
         if (context.length > budgetForContext) {
             this.logger.warn(`[ContextOverflow] Contexto RAG truncado de ${context.length} para ${budgetForContext} chars (modelo: ${modelId})`);
             return context.substring(0, budgetForContext);
         }
         return context;
-    }
-
-    private cosineSimilarity(a: number[], b: number[]): number {
-        let dot = 0, normA = 0, normB = 0;
-        for (let i = 0; i < a.length; i++) { dot += a[i] * b[i]; normA += a[i] * a[i]; normB += b[i] * b[i]; }
-        const denom = Math.sqrt(normA) * Math.sqrt(normB);
-        return denom === 0 ? 0 : dot / denom;
     }
 
     /**
@@ -299,11 +293,11 @@ export class AIService {
      */
     private async checkTokenLimits(companyId: string, agentId?: string) {
         const [company, agent] = await Promise.all([
-            (this.prisma as any).company.findUnique({
+            this.prisma.company.findUnique({
                 where: { id: companyId },
                 select: { limitTokens: true, limitTokensPerHour: true, limitTokensPerDay: true }
             }),
-            agentId ? (this.prisma as any).aIAgent.findUnique({
+            agentId ? this.prisma.aIAgent.findUnique({
                 where: { id: agentId },
                 select: { limitTokensPerDay: true }
             }) : null
@@ -316,15 +310,15 @@ export class AIService {
         const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
 
         const [hourlyUsage, dailyUsage, totalTokens] = await Promise.all([
-            (this.prisma as any).aIUsage.aggregate({
+            this.prisma.aIUsage.aggregate({
                 where: { companyId, createdAt: { gte: startOfHour } },
                 _sum: { tokens: true }
             }),
-            (this.prisma as any).aIUsage.aggregate({
+            this.prisma.aIUsage.aggregate({
                 where: { companyId, createdAt: { gte: startOfDay } },
                 _sum: { tokens: true }
             }),
-            (this.prisma as any).aIUsage.aggregate({
+            this.prisma.aIUsage.aggregate({
                 where: { companyId },
                 _sum: { tokens: true }
             }),
@@ -397,7 +391,7 @@ export class AIService {
                 for (const [key, cached] of this.semanticCache.entries()) {
                     if (key.startsWith(cacheKeyPrefix)) {
                         if (Date.now() - cached.timestamp > this.CACHE_TTL_MS) { this.semanticCache.delete(key); continue; }
-                        if (this.cosineSimilarity(promptEmbedding, cached.embedding) > 0.95) {
+                        if (this.vectorStoreService.cosineSimilarity(promptEmbedding, cached.embedding) > 0.95) {
                             this.logger.log(`[Cache HIT] Similarity > 0.95 para agente ${agent.name}`);
                             return cached.response;
                         }
@@ -443,7 +437,7 @@ export class AIService {
             // Sumarização progressiva: carrega resumo da conversa se disponível
             let conversationSummary: string | undefined;
             if (conversationId) {
-                const conv = await (this.prisma as any).conversation.findFirst({
+                const conv = await this.prisma.conversation.findFirst({
                     where: { id: conversationId, companyId },
                     select: { summary: true, summaryMessageCount: true },
                 });
@@ -454,7 +448,7 @@ export class AIService {
             // pois os chunks foram indexados com o provider da KB.
             let context = '';
             if (agent.knowledgeBaseId) {
-                const kb = await (this.prisma as any).knowledgeBase.findUnique({
+                const kb = await this.prisma.knowledgeBase.findUnique({
                     where: { id: agent.knowledgeBaseId },
                     select: { language: true, embeddingProvider: true, embeddingModel: true },
                 });
@@ -474,8 +468,11 @@ export class AIService {
                 );
                 context = chunks.map((c: any, i: number) => {
                     const docName = c.metadata?.documentName || c.metadata?.source || c.metadata?.filename || '';
-                    const page = c.pageNumber ? ` (pág. ${c.pageNumber})` : '';
-                    const prefix = docName ? `[Fonte ${i + 1}: ${docName}${page}]\n` : '';
+                    const page = c.pageNumber ? ` | pág. ${c.pageNumber}` : '';
+                    const relevance = c.score != null ? ` | relevância: ${Math.round(c.score * 100)}%` : '';
+                    const prefix = docName
+                        ? `[Fonte ${i + 1}: ${docName}${page}${relevance}]\n`
+                        : `[Trecho ${i + 1}${relevance}]\n`;
                     return `${prefix}${c.content}`;
                 }).join('\n---\n');
                 this.logger.log(`[RAG] ${chunks.length} chunks retornados para contexto na KB ${agent.knowledgeBaseId}.`);
@@ -516,20 +513,23 @@ export class AIService {
                 systemPrompt += [
                     '',
                     '========================================',
-                    '[BASE DE CONHECIMENTO]',
+                    '[BASE DE CONHECIMENTO — FONTE OFICIAL]',
                     '========================================',
                     '',
-                    'Você tem acesso a trechos relevantes da base de conhecimento abaixo. Use estas informações como fonte principal.',
+                    'Os trechos abaixo foram recuperados da base de conhecimento da empresa.',
+                    'Eles representam a VERDADE OFICIAL para este atendimento.',
                     '',
-                    'DIRETRIZES:',
-                    '1. Priorize as informações das fontes abaixo em relação ao seu conhecimento geral.',
-                    '2. Sintetize e integre informações de múltiplas fontes para construir respostas completas e coesas.',
-                    '3. Se a informação estiver disponível nas fontes (mesmo parcialmente), use-a e complemente com raciocínio lógico.',
-                    '4. Só diga que não encontrou a informação se as fontes realmente não contiverem nada relevante sobre o tema.',
-                    '5. Não invente dados concretos (números, preços, URLs, datas, nomes específicos) que não estejam nas fontes.',
-                    '6. Responda de forma clara, direta e natural — sem citar mecanicamente "SOURCE_N" no texto.',
+                    'REGRAS OBRIGATÓRIAS DE GROUNDING:',
+                    '1. SEMPRE use as informações dos trechos abaixo como fonte PRIMÁRIA e DEFINITIVA.',
+                    '2. NUNCA substitua informações dos documentos pelo seu conhecimento geral.',
+                    '3. Sintetize e integre múltiplos trechos para construir respostas completas e coesas.',
+                    '4. Se a resposta estiver nos documentos (mesmo parcialmente): use-a, integrando com raciocínio lógico quando necessário.',
+                    '5. NUNCA invente dados concretos (números, preços, URLs, datas, nomes) que não estejam nos trechos.',
+                    '6. Só informe que não possui a informação se os trechos realmente não contiverem nada relevante.',
+                    '7. Responda de forma natural e direta — não cite mecanicamente "[SOURCE_N]" no texto.',
+                    '8. Trecho com maior relevância (%) tem maior confiabilidade — priorize-os em caso de conflito.',
                     '',
-                    'FONTES RECUPERADAS:',
+                    'TRECHOS RECUPERADOS:',
                     formattedContext,
                     '========================================',
                 ].join('\n');
@@ -628,7 +628,7 @@ export class AIService {
                                 this.semanticCache.delete(key);
                                 continue;
                             }
-                            if (this.cosineSimilarity(promptEmbedding, cached.embedding) > 0.95) {
+                            if (this.vectorStoreService.cosineSimilarity(promptEmbedding, cached.embedding) > 0.95) {
                                 this.logger.log(`[Cache HIT] Semantic similarity > 0.95 (MM) abortando geração para agente ${agent.name}`);
                                 return cached.response;
                             }
@@ -713,7 +713,7 @@ export class AIService {
 
         // Buscar chunks relevantes na base de conhecimento
         // Usar o provider da KB (não do agente), pois os chunks foram indexados com o provider da KB.
-        const kb = await (this.prisma as any).knowledgeBase.findUnique({
+        const kb = await this.prisma.knowledgeBase.findUnique({
             where: { id: knowledgeBaseId },
             select: { language: true, embeddingProvider: true, embeddingModel: true },
         });
@@ -818,7 +818,7 @@ Resposta:`;
         const costOut = (this.COST_OUTPUT[baseModelId] ?? this.COST_OUTPUT[modelId] ?? 0) * outputTokens / 1000;
         const estimatedCost = parseFloat((costIn + costOut).toFixed(8));
 
-        await (this.prisma as any).aIUsage.create({
+        await this.prisma.aIUsage.create({
             data: {
                 companyId,
                 tokens: estimatedTokens,
@@ -860,7 +860,6 @@ Resposta:`;
             const audioResponse = await axios.get(mediaUrl, { responseType: 'arraybuffer' });
             const audioBuffer = Buffer.from(audioResponse.data);
 
-            const { OpenAI, toFile } = require('openai');
             const openai = new OpenAI({
                 apiKey: openAiKey || 'local-no-key-required',
                 ...(whisperBaseUrl ? { baseURL: whisperBaseUrl } : {}),
@@ -959,7 +958,7 @@ Resposta:`;
      */
     async copilotSuggest(companyId: string, context: string, agentName: string, contactName: string): Promise<string[]> {
         // Tenta usar o primeiro agente ativo da empresa para herdar as configs de LLM
-        const agent = await (this.prisma as any).aIAgent.findFirst({
+        const agent = await this.prisma.aIAgent.findFirst({
             where: { companyId, isActive: true },
         });
 
@@ -993,7 +992,7 @@ Resposta:`;
      * Retorna o uso acumulado de tokens/IA da empresa.
      */
     async getUsage(companyId: string) {
-        const totalTokens = await (this.prisma as any).aIUsage.aggregate({
+        const totalTokens = await this.prisma.aIUsage.aggregate({
             where: { companyId },
             _sum: { tokens: true, cost: true },
             _count: true,
@@ -1015,7 +1014,7 @@ Resposta:`;
             const usage = await this.getUsage(companyId);
 
             // Uso por dia (últimos 30 dias) - Tempo limite implícito via Promise.race ou apenas try-catch para evitar crash
-            const dailyUsagePromise = (this.prisma as any).$queryRaw`
+            const dailyUsagePromise = this.prisma.$queryRaw`
                 SELECT 
                     DATE("createdAt") as date,
                     SUM(tokens) as tokens,
@@ -1028,7 +1027,7 @@ Resposta:`;
             `;
 
             // Uso por agente
-            const agentUsagePromise = (this.prisma as any).$queryRaw`
+            const agentUsagePromise = this.prisma.$queryRaw`
                 SELECT 
                     a.name as "agentName",
                     a."modelId" as model,
@@ -1039,7 +1038,7 @@ Resposta:`;
             `;
 
             // Uso por modelo
-            const modelUsagePromise = (this.prisma as any).$queryRaw`
+            const modelUsagePromise = this.prisma.$queryRaw`
                 SELECT 
                     a."modelId" as model,
                     COUNT(a.id) as "agentCount"
@@ -1119,7 +1118,7 @@ Resposta:`;
                     for (const [key, cached] of this.semanticCache.entries()) {
                         if (key.startsWith(cacheKeyPrefix)) {
                             if (Date.now() - cached.timestamp > this.CACHE_TTL_MS) { this.semanticCache.delete(key); continue; }
-                            if (this.cosineSimilarity(promptEmbedding, cached.embedding) > 0.95) {
+                            if (this.vectorStoreService.cosineSimilarity(promptEmbedding, cached.embedding) > 0.95) {
                                 this.logger.log(`[Cache HIT/Stream] Similarity > 0.95 para agente ${agent.name}`);
                                 observer.next({ data: { type: 'chunk', content: cached.response } });
                                 observer.next({ data: { type: 'end', content: '' } });
@@ -1148,7 +1147,7 @@ Resposta:`;
 
                 let context = '';
                 if (agent.knowledgeBaseId) {
-                    const kb = await (this.prisma as any).knowledgeBase.findUnique({
+                    const kb = await this.prisma.knowledgeBase.findUnique({
                         where: { id: agent.knowledgeBaseId },
                         select: { language: true, embeddingProvider: true, embeddingModel: true },
                     });

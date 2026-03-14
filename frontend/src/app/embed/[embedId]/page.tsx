@@ -393,21 +393,33 @@ export default function EmbedChatPage() {
                     </div>
                 ))}
 
-                {/* Indicador de digitação — só exibe antes do primeiro token */}
+                {/* Indicador de digitação — exibe antes do primeiro token chegar */}
                 {isLoading && !isStreaming && (
                     <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-                        <AgentAvatar logo={config.brandLogo} name={config.agentName} color={config.brandColor} size={28} />
-                        <div style={{
-                            background: 'white', padding: '12px 14px', borderRadius: '16px 16px 16px 4px',
-                            boxShadow: '0 1px 3px rgba(0,0,0,0.08)', border: '1px solid #eef0f2',
-                            display: 'flex', gap: 4, alignItems: 'center'
-                        }}>
-                            {[0, 150, 300].map(delay => (
-                                <div key={delay} style={{
-                                    width: 7, height: 7, borderRadius: '50%', background: '#9ca3af',
-                                    animation: 'bounce 1.1s ease-in-out infinite', animationDelay: `${delay}ms`
-                                }} />
-                            ))}
+                        <div style={{ position: 'relative', flexShrink: 0 }}>
+                            <AgentAvatar logo={config.brandLogo} name={config.agentName} color={config.brandColor} size={28} />
+                            <div style={{
+                                position: 'absolute', bottom: 0, right: 0, width: 8, height: 8,
+                                borderRadius: '50%', background: config.brandColor,
+                                border: '1.5px solid white', animation: 'pulse 1.2s ease-in-out infinite'
+                            }} />
+                        </div>
+                        <div>
+                            <div style={{
+                                background: 'white', padding: '10px 14px', borderRadius: '16px 16px 16px 4px',
+                                boxShadow: '0 1px 3px rgba(0,0,0,0.08)', border: '1px solid #eef0f2',
+                                display: 'flex', gap: 4, alignItems: 'center'
+                            }}>
+                                {[0, 150, 300].map(delay => (
+                                    <div key={delay} style={{
+                                        width: 7, height: 7, borderRadius: '50%', background: '#9ca3af',
+                                        animation: 'bounce 1.1s ease-in-out infinite', animationDelay: `${delay}ms`
+                                    }} />
+                                ))}
+                            </div>
+                            <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 3, marginLeft: 4, fontWeight: 500 }}>
+                                {config.agentName} está digitando...
+                            </div>
                         </div>
                     </div>
                 )}
@@ -530,6 +542,10 @@ export default function EmbedChatPage() {
                 @keyframes bounce {
                     0%, 80%, 100% { transform: translateY(0); }
                     40% { transform: translateY(-5px); }
+                }
+                @keyframes pulse {
+                    0%, 100% { opacity: 1; transform: scale(1); }
+                    50% { opacity: 0.5; transform: scale(0.8); }
                 }
                 ::-webkit-scrollbar { width: 4px; }
                 ::-webkit-scrollbar-track { background: transparent; }

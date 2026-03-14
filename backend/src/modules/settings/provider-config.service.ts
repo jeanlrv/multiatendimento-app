@@ -63,7 +63,7 @@ export class ProviderConfigService {
     /** Retorna todos os configs da empresa com keys mascaradas */
     async findAllForCompany(companyId: string): Promise<ProviderConfigPublic[]> {
         try {
-            const configs = await (this.prisma as any).providerConfig.findMany({
+            const configs = await this.prisma.providerConfig.findMany({
                 where: { companyId },
                 orderBy: { provider: 'asc' },
             });
@@ -95,7 +95,7 @@ export class ProviderConfigService {
                 payload.apiKey = null;
             }
 
-            const config = await (this.prisma as any).providerConfig.upsert({
+            const config = await this.prisma.providerConfig.upsert({
                 where: { companyId_provider: { companyId, provider } },
                 create: {
                     companyId,
@@ -117,20 +117,20 @@ export class ProviderConfigService {
 
     /** Remove a configuração de um provider */
     async remove(companyId: string, provider: string): Promise<void> {
-        const existing = await (this.prisma as any).providerConfig.findFirst({
+        const existing = await this.prisma.providerConfig.findFirst({
             where: { companyId, provider },
         });
 
         if (!existing) throw new NotFoundException(`Configuração do provider '${provider}' não encontrada.`);
 
-        await (this.prisma as any).providerConfig.delete({
+        await this.prisma.providerConfig.delete({
             where: { id: existing.id },
         });
     }
 
     /** Retorna configs descriptografados para uso interno (factories) */
     async getDecryptedForCompany(companyId: string): Promise<Map<string, ProviderConfigDecrypted>> {
-        const configs = await (this.prisma as any).providerConfig.findMany({
+        const configs = await this.prisma.providerConfig.findMany({
             where: { companyId, isEnabled: true },
         });
 

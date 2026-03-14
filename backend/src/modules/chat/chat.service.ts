@@ -35,7 +35,7 @@ export class ChatService {
         return ticket;
     }
 
-    async sendMessage(ticketId: string, content: string, fromMe: boolean, type: string = 'TEXT', mediaUrl?: string, companyId?: string, origin: 'AGENT' | 'CLIENT' | 'AI' = 'AGENT', quotedMessageId?: string, externalId?: string) {
+    async sendMessage(ticketId: string, content: string, fromMe: boolean, type: MessageType = MessageType.TEXT, mediaUrl?: string, companyId?: string, origin: 'AGENT' | 'CLIENT' | 'AI' = 'AGENT', quotedMessageId?: string, externalId?: string) {
         this.logger.log(`Processando mensagem para o ticket: ${ticketId} (${origin})`);
 
         return await this.prisma.$transaction(async (tx) => {
@@ -45,7 +45,7 @@ export class ChatService {
                     content,
                     fromMe,
                     origin: fromMe ? (origin === 'AI' ? 'AI' : 'AGENT') : 'CLIENT',
-                    messageType: (type as any) || 'TEXT',
+                    messageType: type,
                     mediaUrl,
                     status: 'PENDING',
                     sentAt: new Date(),
@@ -55,7 +55,10 @@ export class ChatService {
             });
 
             const ticket = await tx.ticket.findUnique({
-                where: { id: ticketId },
+                where: {
+                    id: ticketId,
+                    ...(companyId ? { companyId } : {}),
+                },
                 include: { contact: true }
             });
 
@@ -99,7 +102,8 @@ export class ChatService {
     }
 
     private async handleMentions(companyId: string, ticketId: string, content: string, messageId: string) {
-        const mentionRegex = /@(\w+)/g;
+        // Unicode property escapes (\p{L}\p{N}) cobrem nomes com acentos e caracteres internacionais
+        const mentionRegex = /@([\p{L}\p{N}_]+)/gu;
         const matches = [...content.matchAll(mentionRegex)];
 
         if (matches.length > 0) {
@@ -230,14 +234,20 @@ export class ChatService {
             const currentDeptName = ticket.department?.name ?? 'desconhecido';
 
             // Data/hora local no fuso do departamento
-            const deptTimezone = (ticket.department as any)?.timezone || 'America/Sao_Paulo';
-            const nowLocal = new Date(new Date().toLocaleString('en-US', { timeZone: deptTimezone }));
-            const dateStr = nowLocal.toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-            const timeStr = nowLocal.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+            const { deptTimezone, dateStr, timeStr } = this.getDeptLocalDateTime((ticket.department as any)?.timezone);
 
             // Bloco especial para fora do expediente
             const outOfHours = this.isOutsideBusinessHours(ticket.department);
-            const outOfHoursBlock = outOfHours ? [
+            const aiMessagesInHistory = messages.filter(m => m.fromMe).length;
+            // Se já há 2+ mensagens da IA no histórico, o cliente já passou pelo fluxo de consentimento
+            const consentAlreadyHandled = aiMessagesInHistory >= 2;
+
+            const outOfHoursBlock = outOfHours ? (consentAlreadyHandled ? [
+                '',
+                '⚠️ NOTA: Atendimento fora do horário comercial — cliente já em sessão ativa via IA.',
+                'Continue atendendo normalmente. [TRANSFERIR:X] e [HUMANO] funcionam normalmente.',
+                '',
+            ] : [
                 '',
                 '⚠️ CONTEXTO — FORA DO HORÁRIO COMERCIAL:',
                 '- O cliente entrou em contato fora do horário de atendimento humano.',
@@ -247,11 +257,13 @@ export class ChatService {
                 '  a) Se a IA AINDA NÃO perguntou se o cliente deseja atendimento: apresente-se brevemente',
                 '     como assistente virtual disponível mesmo fora do horário e pergunte se deseja continuar.',
                 '  b) Se o cliente JÁ CONFIRMOU que quer atendimento (disse sim/quero/pode/etc.):',
-                '     atenda normalmente sem mencionar horário comercial novamente.',
+                '     atenda normalmente. Use [TRANSFERIR:X] ou [HUMANO] quando necessário — esses comandos',
+                '     funcionam normalmente fora do horário. Departamentos com IA operam 24h.',
                 '  c) Se o cliente JÁ RECUSOU ou se despediu (disse não/depois/tchau/ok/etc.):',
                 '     responda com uma despedida cordial e use [FINALIZAR].',
+                '- IMPORTANTE: Nunca bloqueie transferências para departamentos com IA por causa do horário.',
                 '',
-            ].join('\n') : '';
+            ]).join('\n') : '';
 
             const routingInstructions = [
                 '========================================',
@@ -312,7 +324,7 @@ export class ChatService {
                     await this.sendMessage(
                         ticketId,
                         `Um momento, estou direcionando você para o setor de *${targetDept.name}*... 🔄`,
-                        true, 'TEXT', undefined, ticket.companyId, 'AI'
+                        true, MessageType.TEXT, undefined, ticket.companyId, 'AI'
                     );
 
                     await this.prisma.ticket.update({
@@ -338,7 +350,7 @@ export class ChatService {
                         await this.sendMessage(
                             ticketId,
                             `Você foi encaminhado para *${targetDept.name}*. Em breve um atendente irá te ajudar! 👤`,
-                            true, 'TEXT', undefined, ticket.companyId, 'AI'
+                            true, MessageType.TEXT, undefined, ticket.companyId, 'AI'
                         );
                     }
                 } else {
@@ -356,7 +368,7 @@ export class ChatService {
                 await this.sendMessage(
                     ticketId,
                     'Vou transferir você para um de nossos atendentes. Aguarde um momento! 👤',
-                    true, 'TEXT', undefined, ticket.companyId, 'AI'
+                    true, MessageType.TEXT, undefined, ticket.companyId, 'AI'
                 );
                 this.logger.log(`IA transferiu ticket ${ticketId} para atendimento humano`);
                 return;
@@ -372,7 +384,7 @@ export class ChatService {
                 return; // Não enviar o texto do comando ao cliente
             }
 
-            await this.sendMessage(ticketId, this.sanitizeForWhatsApp(aiResponse), true, 'TEXT', undefined, ticket.companyId, 'AI');
+            await this.sendMessage(ticketId, this.sanitizeForWhatsApp(aiResponse), true, MessageType.TEXT, undefined, ticket.companyId, 'AI');
         } catch (error) {
             this.logger.error(`Erro ao processar resposta de IA: ${error.message}`);
         }
@@ -408,10 +420,7 @@ export class ChatService {
                 .map(m => ({ role: m.fromMe ? 'assistant' : 'user', content: m.content }));
 
             // Contexto de transferência injetado no sufixo do sistema (não exibido ao cliente)
-            const deptTimezone = (ticket.department as any)?.timezone || 'America/Sao_Paulo';
-            const nowLocal = new Date(new Date().toLocaleString('en-US', { timeZone: deptTimezone }));
-            const dateStr = nowLocal.toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-            const timeStr = nowLocal.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+            const { deptTimezone, dateStr, timeStr } = this.getDeptLocalDateTime((ticket.department as any)?.timezone);
 
             const otherDepts = await this.prisma.department.findMany({
                 where: { companyId, NOT: { id: ticket.departmentId } },
@@ -443,25 +452,60 @@ export class ChatService {
                 // Fallback garantido: cliente nunca fica sem resposta após transferência
                 this.logger.warn(`IA pós-transferência retornou vazio para ticket ${ticketId} — usando fallback`);
                 const fallback = `Olá! Sou o assistente do setor *${ticket.department.name}*. Como posso ajudá-lo?`;
-                await this.sendMessage(ticketId, fallback, true, 'TEXT', undefined, companyId, 'AI');
+                await this.sendMessage(ticketId, fallback, true, MessageType.TEXT, undefined, companyId, 'AI');
                 return;
             }
 
             // Processar comandos de roteamento na resposta do novo agente
-            const transferMatch = aiResponse.match(/\[TRANSFERIR:([^\]]+)\]/i);
-            const humanMatch = aiResponse.match(/\[HUMANO\]/i);
-            const finalizeMatch = aiResponse.match(/\[FINALIZAR\]/i);
+            // Nota: não chamamos handleAIResponse() recursivamente para evitar loop infinito de transferências.
+            // Cada agente pós-transferência só pode emitir comandos uma vez (máximo 1 nível de indireção).
+            const transferMatchPost = aiResponse.match(/\[TRANSFERIR:([^\]]+)\]/i);
+            const humanMatchPost = aiResponse.match(/\[HUMANO\]/i);
+            const finalizeMatchPost = aiResponse.match(/\[FINALIZAR\]/i);
 
-            if (transferMatch || humanMatch || finalizeMatch) {
-                // Delegar para o handler principal que já trata esses casos
-                await this.handleAIResponse(ticketId, lastClientMessage);
+            if (humanMatchPost) {
+                await this.prisma.ticket.update({
+                    where: { id: ticketId },
+                    data: { mode: 'HUMANO' },
+                });
+                this.eventEmitter.emit('ticket.status_changed', { ticketId, companyId });
+                await this.sendMessage(ticketId, 'Vou transferir você para um de nossos atendentes. Aguarde um momento! 👤', true, MessageType.TEXT, undefined, companyId, 'AI');
                 return;
             }
 
-            await this.sendMessage(ticketId, this.sanitizeForWhatsApp(aiResponse), true, 'TEXT', undefined, companyId, 'AI');
+            if (finalizeMatchPost) {
+                await this.prisma.ticket.update({
+                    where: { id: ticketId },
+                    data: { status: 'RESOLVED', resolvedAt: new Date() },
+                });
+                this.eventEmitter.emit('ticket.resolved', { ticketId, companyId });
+                return;
+            }
+
+            if (transferMatchPost) {
+                // Transferências encadeadas (AI→AI→AI) são ignoradas após o primeiro salto.
+                // Isso previne loops infinitos. O agente atual assume o atendimento.
+                this.logger.warn(`[IA pós-transferência] Tentativa de transferência encadeada ignorada para ticket ${ticketId} — respondendo normalmente.`);
+            }
+
+            await this.sendMessage(ticketId, this.sanitizeForWhatsApp(aiResponse.replace(/\[TRANSFERIR:[^\]]+\]/gi, '').trim()), true, MessageType.TEXT, undefined, companyId, 'AI');
         } catch (error) {
             this.logger.error(`Erro na IA pós-transferência: ${error.message}`);
         }
+    }
+
+    /**
+     * Retorna data/hora formatada no fuso horário do departamento.
+     * Elimina duplicação entre handleAIResponse e handleAIResponseAfterTransfer.
+     */
+    private getDeptLocalDateTime(timezone: string | undefined): { deptTimezone: string; dateStr: string; timeStr: string } {
+        const deptTimezone = timezone || 'America/Sao_Paulo';
+        const nowLocal = new Date(new Date().toLocaleString('en-US', { timeZone: deptTimezone }));
+        return {
+            deptTimezone,
+            dateStr: nowLocal.toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
+            timeStr: nowLocal.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        };
     }
 
     /** Retorna true se o departamento estiver fora do horário comercial */
@@ -499,12 +543,12 @@ export class ChatService {
         const takeValue = Number(limit) || 50;
         return this.prisma.message.findMany({
             where: { ticketId },
-            orderBy: { sentAt: 'desc' },
+            orderBy: { sentAt: 'asc' },
             take: takeValue,
             include: {
                 quotedMessage: true
             }
-        }).then(messages => messages.reverse());
+        });
     }
 
     async getMessagesCursor(ticketId: string, companyId: string, cursor?: string, limit: number = 50) {

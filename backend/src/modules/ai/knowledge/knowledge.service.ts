@@ -37,7 +37,7 @@ export class KnowledgeService {
     }
 
     async createBase(companyId: string, data: CreateKnowledgeBaseDto) {
-        return (this.prisma as any).knowledgeBase.create({
+        return this.prisma.knowledgeBase.create({
             data: {
                 ...data,
                 companyId,
@@ -46,7 +46,7 @@ export class KnowledgeService {
     }
 
     async findAllBases(companyId: string) {
-        return (this.prisma as any).knowledgeBase.findMany({
+        return this.prisma.knowledgeBase.findMany({
             where: { companyId },
             include: {
                 _count: {
@@ -57,7 +57,7 @@ export class KnowledgeService {
     }
 
     async findOneBase(companyId: string, id: string) {
-        const base = await (this.prisma as any).knowledgeBase.findFirst({
+        const base = await this.prisma.knowledgeBase.findFirst({
             where: { id, companyId },
             include: {
                 documents: {
@@ -87,7 +87,7 @@ export class KnowledgeService {
 
     async removeBase(companyId: string, id: string) {
         // 1. Buscar todos os documentos desta base para limpar arquivos físicos
-        const docs = await (this.prisma as any).document.findMany({
+        const docs = await this.prisma.document.findMany({
             where: { knowledgeBaseId: id, knowledgeBase: { companyId } },
             select: { id: true }
         });
@@ -98,7 +98,7 @@ export class KnowledgeService {
         }
 
         // 3. Remover a base
-        const deleted = await (this.prisma as any).knowledgeBase.deleteMany({
+        const deleted = await this.prisma.knowledgeBase.deleteMany({
             where: { id, companyId }
         });
 
@@ -110,13 +110,13 @@ export class KnowledgeService {
 
     async addDocument(companyId: string, baseId: string, data: AddDocumentDto) {
         // Validação leve
-        const base = await (this.prisma as any).knowledgeBase.findFirst({
+        const base = await this.prisma.knowledgeBase.findFirst({
             where: { id: baseId, companyId },
             select: { id: true }
         });
         if (!base) throw new NotFoundException('Base de conhecimento não encontrada');
 
-        const document = await (this.prisma as any).document.create({
+        const document = await this.prisma.document.create({
             data: {
                 ...data,
                 knowledgeBaseId: baseId,
@@ -142,7 +142,7 @@ export class KnowledgeService {
         title?: string
     ) {
         // Validar base de conhecimento
-        const base = await (this.prisma as any).knowledgeBase.findFirst({
+        const base = await this.prisma.knowledgeBase.findFirst({
             where: { id: baseId, companyId },
             select: { id: true, embeddingProvider: true, embeddingModel: true }
         });
@@ -235,7 +235,7 @@ export class KnowledgeService {
         }
 
         // Criar documento no banco
-        const document = await (this.prisma as any).document.create({
+        const document = await this.prisma.document.create({
             data: {
                 title: title || file.originalname,
                 sourceType,
@@ -302,7 +302,7 @@ export class KnowledgeService {
     }
 
     async getDocumentStatus(companyId: string, documentId: string) {
-        const doc = await (this.prisma as any).document.findFirst({
+        const doc = await this.prisma.document.findFirst({
             where: {
                 id: documentId,
                 knowledgeBase: { companyId }
@@ -329,14 +329,14 @@ export class KnowledgeService {
     }
 
     async removeDocument(companyId: string, documentId: string) {
-        const doc = await (this.prisma as any).document.findFirst({
+        const doc = await this.prisma.document.findFirst({
             where: { id: documentId, knowledgeBase: { companyId } }
         });
 
         if (!doc) return { count: 0 };
 
         // Deletar chunks primeiro
-        await (this.prisma as any).documentChunk.deleteMany({
+        await this.prisma.documentChunk.deleteMany({
             where: { documentId }
         });
 
@@ -362,7 +362,7 @@ export class KnowledgeService {
             }
         }
 
-        const deleted = await (this.prisma as any).document.deleteMany({
+        const deleted = await this.prisma.document.deleteMany({
             where: {
                 id: documentId,
                 knowledgeBase: { companyId }
@@ -375,7 +375,7 @@ export class KnowledgeService {
     async batchRemoveDocuments(companyId: string, documentIds: string[]) {
         if (!documentIds || documentIds.length === 0) return { count: 0 };
 
-        const docs = await (this.prisma as any).document.findMany({
+        const docs = await this.prisma.document.findMany({
             where: {
                 id: { in: documentIds },
                 knowledgeBase: { companyId }
@@ -388,7 +388,7 @@ export class KnowledgeService {
 
         for (const doc of docs) {
             // Remover chunks
-            await (this.prisma as any).documentChunk.deleteMany({
+            await this.prisma.documentChunk.deleteMany({
                 where: { documentId: doc.id }
             });
 
@@ -404,7 +404,7 @@ export class KnowledgeService {
             }
         }
 
-        const deleted = await (this.prisma as any).document.deleteMany({
+        const deleted = await this.prisma.document.deleteMany({
             where: {
                 id: { in: documentIds },
                 knowledgeBase: { companyId }
@@ -419,7 +419,7 @@ export class KnowledgeService {
     }
 
     async getDocumentFile(companyId: string, documentId: string) {
-        const doc = await (this.prisma as any).document.findFirst({
+        const doc = await this.prisma.document.findFirst({
             where: {
                 id: documentId,
                 knowledgeBase: { companyId }
@@ -435,7 +435,7 @@ export class KnowledgeService {
     }
 
     async createBulkDownloadZip(companyId: string, documentIds: string[]) {
-        const docs = await (this.prisma as any).document.findMany({
+        const docs = await this.prisma.document.findMany({
             where: {
                 id: { in: documentIds },
                 knowledgeBase: { companyId }
@@ -478,7 +478,7 @@ export class KnowledgeService {
     async reprocessBase(companyId: string, knowledgeBaseId: string) {
         const base = await this.findOneBase(companyId, knowledgeBaseId);
 
-        const docs = await (this.prisma as any).document.findMany({
+        const docs = await this.prisma.document.findMany({
             where: { knowledgeBaseId: base.id },
             select: { id: true },
         });
@@ -490,12 +490,12 @@ export class KnowledgeService {
         const docIds = docs.map((d: any) => d.id);
 
         // 1. Apaga todos os chunks da base
-        await (this.prisma as any).documentChunk.deleteMany({
+        await this.prisma.documentChunk.deleteMany({
             where: { documentId: { in: docIds } },
         });
 
         // 2. Marca todos os documentos como PENDING
-        await (this.prisma as any).document.updateMany({
+        await this.prisma.document.updateMany({
             where: { id: { in: docIds } },
             data: { status: 'PENDING' },
         });
@@ -508,7 +508,7 @@ export class KnowledgeService {
     }
 
     async reprocessDocument(companyId: string, documentId: string) {
-        const doc = await (this.prisma as any).document.findFirst({
+        const doc = await this.prisma.document.findFirst({
             where: { id: documentId, knowledgeBase: { companyId } }
         });
 
@@ -517,13 +517,13 @@ export class KnowledgeService {
         }
 
         // Atualizar status para PENDING
-        await (this.prisma as any).document.update({
+        await this.prisma.document.update({
             where: { id: documentId },
             data: { status: 'PENDING' }
         });
 
         // Remover chunks existentes
-        await (this.prisma as any).documentChunk.deleteMany({
+        await this.prisma.documentChunk.deleteMany({
             where: { documentId }
         });
 
@@ -556,7 +556,7 @@ export class KnowledgeService {
         if (embeddingProvider !== undefined) updateData.embeddingProvider = embeddingProvider;
         if (embeddingModel !== undefined) updateData.embeddingModel = embeddingModel;
 
-        const updated = await (this.prisma as any).knowledgeBase.update({
+        const updated = await this.prisma.knowledgeBase.update({
             where: { id },
             data: updateData
         });
@@ -568,7 +568,7 @@ export class KnowledgeService {
     async updateBaseDescription(companyId: string, id: string, description: string) {
         const base = await this.findOneBase(companyId, id);
 
-        return (this.prisma as any).knowledgeBase.update({
+        return this.prisma.knowledgeBase.update({
             where: { id },
             data: { description }
         });
@@ -577,7 +577,7 @@ export class KnowledgeService {
     async updateBaseLanguage(companyId: string, id: string, language: string) {
         const base = await this.findOneBase(companyId, id);
 
-        return (this.prisma as any).knowledgeBase.update({
+        return this.prisma.knowledgeBase.update({
             where: { id },
             data: { language }
         });
@@ -586,10 +586,10 @@ export class KnowledgeService {
     // ========== Integração Local (Webhook/Agente Windows) ==========
 
     async enableWebhook(kbId: string, companyId: string): Promise<{ apiKey: string }> {
-        const kb = await (this.prisma as any).knowledgeBase.findFirst({ where: { id: kbId, companyId } });
+        const kb = await this.prisma.knowledgeBase.findFirst({ where: { id: kbId, companyId } });
         if (!kb) throw new NotFoundException('Base de conhecimento não encontrada.');
         const key = kb.webhookApiKey ?? ('kwh_' + randomUUID().replace(/-/g, ''));
-        await (this.prisma as any).knowledgeBase.update({
+        await this.prisma.knowledgeBase.update({
             where: { id: kbId },
             data: { webhookEnabled: true, webhookApiKey: key },
         });
@@ -597,19 +597,19 @@ export class KnowledgeService {
     }
 
     async disableWebhook(kbId: string, companyId: string): Promise<void> {
-        const kb = await (this.prisma as any).knowledgeBase.findFirst({ where: { id: kbId, companyId } });
+        const kb = await this.prisma.knowledgeBase.findFirst({ where: { id: kbId, companyId } });
         if (!kb) throw new NotFoundException('Base de conhecimento não encontrada.');
-        await (this.prisma as any).knowledgeBase.update({
+        await this.prisma.knowledgeBase.update({
             where: { id: kbId },
             data: { webhookEnabled: false },
         });
     }
 
     async rotateWebhookKey(kbId: string, companyId: string): Promise<{ apiKey: string }> {
-        const kb = await (this.prisma as any).knowledgeBase.findFirst({ where: { id: kbId, companyId } });
+        const kb = await this.prisma.knowledgeBase.findFirst({ where: { id: kbId, companyId } });
         if (!kb) throw new NotFoundException('Base de conhecimento não encontrada.');
         const key = 'kwh_' + randomUUID().replace(/-/g, '');
-        await (this.prisma as any).knowledgeBase.update({
+        await this.prisma.knowledgeBase.update({
             where: { id: kbId },
             data: { webhookApiKey: key },
         });
@@ -617,7 +617,7 @@ export class KnowledgeService {
     }
 
     async findKbByWebhookKey(apiKey: string) {
-        const kb = await (this.prisma as any).knowledgeBase.findUnique({
+        const kb = await this.prisma.knowledgeBase.findUnique({
             where: { webhookApiKey: apiKey },
         });
         if (!kb || !kb.webhookEnabled) {
@@ -634,7 +634,7 @@ export class KnowledgeService {
         let doc: any;
 
         try {
-            const existing = await (this.prisma as any).document.findFirst({
+            const existing = await this.prisma.document.findFirst({
                 where: { knowledgeBaseId: kb.id, title },
             });
             if (existing) {
@@ -648,7 +648,7 @@ export class KnowledgeService {
             errorMessage = err?.message ?? 'Erro desconhecido';
             throw err;
         } finally {
-            await (this.prisma as any).kBSyncLog.create({
+            await this.prisma.kBSyncLog.create({
                 data: {
                     id: randomUUID(),
                     knowledgeBaseId: kb.id,
@@ -666,9 +666,9 @@ export class KnowledgeService {
     }
 
     async getSyncLogs(kbId: string, companyId: string, limit = 50) {
-        const kb = await (this.prisma as any).knowledgeBase.findFirst({ where: { id: kbId, companyId } });
+        const kb = await this.prisma.knowledgeBase.findFirst({ where: { id: kbId, companyId } });
         if (!kb) throw new NotFoundException('Base de conhecimento não encontrada.');
-        return (this.prisma as any).kBSyncLog.findMany({
+        return this.prisma.kBSyncLog.findMany({
             where: { knowledgeBaseId: kbId },
             orderBy: { createdAt: 'desc' },
             take: limit,
@@ -678,17 +678,17 @@ export class KnowledgeService {
     async getBaseStats(companyId: string, id: string) {
         const base = await this.findOneBase(companyId, id);
 
-        const documentsByStatus = await (this.prisma as any).document.groupBy({
+        const documentsByStatus = await this.prisma.document.groupBy({
             by: ['status'],
             where: { knowledgeBaseId: id },
             _count: true
         });
 
-        const kbDocIds = await (this.prisma as any).document.findMany({
+        const kbDocIds = await this.prisma.document.findMany({
             where: { knowledgeBaseId: id },
             select: { id: true },
         });
-        const totalChunks = await (this.prisma as any).documentChunk.aggregate({
+        const totalChunks = await this.prisma.documentChunk.aggregate({
             where: { documentId: { in: kbDocIds.map((d: any) => d.id) } },
             _count: true
         });

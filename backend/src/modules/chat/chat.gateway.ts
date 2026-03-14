@@ -155,7 +155,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect, On
         const departamentosPermitidos = user.departments?.map((d: any) => d.id) || [];
 
         // Validar se o ticket pertence à empresa do usuário E ao departamento permitido
-        const ticketExists = await (this.prisma as any).ticket.findFirst({
+        const ticketExists = await this.prisma.ticket.findFirst({
             where: {
                 id: ticketId,
                 companyId: user.companyId,

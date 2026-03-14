@@ -103,3 +103,12 @@ nginx/certs/*.crt
 *.zip
 *.bundle
 repo.bundle*
+
+############################################
+# DEBUG SCRIPTS (credenciais hardcoded)
+############################################
+backend/check_users.ts
+backend/debug_login.ts
+backend/reset_admin.ts
+check_docs3.js
+check_docs4.js

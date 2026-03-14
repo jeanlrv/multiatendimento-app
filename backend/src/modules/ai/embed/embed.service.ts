@@ -74,7 +74,7 @@ export class EmbedService implements OnModuleDestroy {
     }
 
     async getPublicConfig(embedId: string, origin?: string) {
-        const agent = await (this.prisma as any).aIAgent.findUnique({
+        const agent = await this.prisma.aIAgent.findUnique({
             where: { embedId },
             select: {
                 id: true,
@@ -116,7 +116,7 @@ export class EmbedService implements OnModuleDestroy {
             throw new BadRequestException('SessionId é obrigatório.');
         }
 
-        const agent = await (this.prisma as any).aIAgent.findUnique({
+        const agent = await this.prisma.aIAgent.findUnique({
             where: { embedId },
             select: { id: true, companyId: true, embedEnabled: true, isActive: true, embedRateLimit: true, embedAllowedDomains: true }
         });
@@ -134,12 +134,12 @@ export class EmbedService implements OnModuleDestroy {
 
         try {
             // Fetch or Create Session
-            let session = await (this.prisma as any).embedChatSession.findUnique({
+            let session = await this.prisma.embedChatSession.findUnique({
                 where: { embedId_sessionId: { embedId, sessionId } }
             });
 
             if (!session) {
-                session = await (this.prisma as any).embedChatSession.create({
+                session = await this.prisma.embedChatSession.create({
                     data: { embedId, sessionId, messages: [] }
                 });
             }
@@ -159,7 +159,7 @@ export class EmbedService implements OnModuleDestroy {
             currentMessages.push({ role: 'assistant', content: response, ts: Date.now() });
 
             // Salvar sessão (fire-and-forget — não bloqueia a resposta se falhar)
-            (this.prisma as any).embedChatSession.update({
+            this.prisma.embedChatSession.update({
                 where: { id: session.id },
                 data: { messages: currentMessages }
             }).catch((e: Error) => this.logger.warn(`[Embed] Falha ao salvar sessão: ${e.message}`));
@@ -182,7 +182,7 @@ export class EmbedService implements OnModuleDestroy {
     async streamChat(embedId: string, sessionId: string, message: string, origin?: string): Promise<Observable<any>> {
         if (!sessionId) throw new BadRequestException('SessionId é obrigatório.');
 
-        const agent = await (this.prisma as any).aIAgent.findUnique({
+        const agent = await this.prisma.aIAgent.findUnique({
             where: { embedId },
             select: { id: true, companyId: true, embedEnabled: true, isActive: true, embedRateLimit: true, embedAllowedDomains: true }
         });
@@ -197,12 +197,12 @@ export class EmbedService implements OnModuleDestroy {
 
         this.checkRateLimit(sessionId, agent.embedRateLimit);
 
-        let session = await (this.prisma as any).embedChatSession.findUnique({
+        let session = await this.prisma.embedChatSession.findUnique({
             where: { embedId_sessionId: { embedId, sessionId } }
         });
 
         if (!session) {
-            session = await (this.prisma as any).embedChatSession.create({
+            session = await this.prisma.embedChatSession.create({
                 data: { embedId, sessionId, messages: [] }
             });
         }
@@ -226,7 +226,7 @@ export class EmbedService implements OnModuleDestroy {
                 error: (err: any) => observer.error(err),
                 complete: () => {
                     const msgs = [...currentMessages, { role: 'assistant', content: fullResponse, ts: Date.now() }];
-                    (prisma as any).embedChatSession.update({
+                    prisma.embedChatSession.update({
                         where: { id: sessionDbId },
                         data: { messages: msgs },
                     }).catch((e: any) => logger.error(`Erro ao salvar sessão embed stream: ${e.message}`));
@@ -237,7 +237,7 @@ export class EmbedService implements OnModuleDestroy {
     }
 
     async getHistory(embedId: string, sessionId: string, origin?: string) {
-        const agent = await (this.prisma as any).aIAgent.findUnique({
+        const agent = await this.prisma.aIAgent.findUnique({
             where: { embedId },
             select: { embedEnabled: true, embedAllowedDomains: true, isActive: true }
         });
@@ -250,7 +250,7 @@ export class EmbedService implements OnModuleDestroy {
             throw new HttpException('Domínio não autorizado.', HttpStatus.FORBIDDEN);
         }
 
-        const session = await (this.prisma as any).embedChatSession.findUnique({
+        const session = await this.prisma.embedChatSession.findUnique({
             where: { embedId_sessionId: { embedId, sessionId } },
             select: { messages: true }
         });
@@ -269,7 +269,7 @@ export class EmbedService implements OnModuleDestroy {
     ): Promise<{ response: string }> {
         if (!sessionId) throw new BadRequestException('SessionId é obrigatório.');
 
-        const agent = await (this.prisma as any).aIAgent.findUnique({
+        const agent = await this.prisma.aIAgent.findUnique({
             where: { embedId },
             select: { id: true, companyId: true, embedEnabled: true, isActive: true, embedRateLimit: true, embedAllowedDomains: true }
         });
@@ -285,11 +285,11 @@ export class EmbedService implements OnModuleDestroy {
         this.checkRateLimit(sessionId, agent.embedRateLimit);
 
         try {
-            let session = await (this.prisma as any).embedChatSession.findUnique({
+            let session = await this.prisma.embedChatSession.findUnique({
                 where: { embedId_sessionId: { embedId, sessionId } }
             });
             if (!session) {
-                session = await (this.prisma as any).embedChatSession.create({
+                session = await this.prisma.embedChatSession.create({
                     data: { embedId, sessionId, messages: [] }
                 });
             }
@@ -305,7 +305,7 @@ export class EmbedService implements OnModuleDestroy {
             currentMessages.push({ role: 'assistant', content: response, ts: Date.now() });
 
             // Fire-and-forget
-            (this.prisma as any).embedChatSession.update({
+            this.prisma.embedChatSession.update({
                 where: { id: session.id },
                 data: { messages: currentMessages },
             }).catch((e: Error) => this.logger.warn(`[Embed] Falha ao salvar sessão: ${e.message}`));

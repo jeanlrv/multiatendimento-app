@@ -2,7 +2,20 @@ import { Injectable, Logger } from '@nestjs/common';
 import { execFile } from 'child_process';
 import { join } from 'path';
 import { promises as fs } from 'fs';
+import { OpenAI } from 'openai';
+import axios from 'axios';
+import { PrismaClient } from '@prisma/client';
 import { EmbeddingProviderFactory } from './embedding-provider.factory';
+
+interface CachedChunk {
+    id: string;
+    content: string;
+    embedding: Float32Array;
+    metadata: any;
+    pageNumber: number | null;
+    section: string | null;
+    document?: { title: string };
+}
 
 /**
  * VectorStoreService
@@ -23,7 +36,7 @@ export class VectorStoreService {
     private readonly logger = new Logger(VectorStoreService.name);
 
     // Cache de chunks por KB (evita re-fetch de embeddings a cada query)
-    private ragCache = new Map<string, { chunks: any[]; timestamp: number }>();
+    private ragCache = new Map<string, { chunks: CachedChunk[]; timestamp: number }>();
     private readonly RAG_CHUNK_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutos
 
     constructor(private readonly embeddingFactory: EmbeddingProviderFactory) { }
@@ -42,7 +55,7 @@ export class VectorStoreService {
      * Implementa ranking híbrido: combina busca vetorial, full-text search e priorização por content quality.
      */
     async searchSimilarity(
-        prisma: any,
+        prisma: PrismaClient,
         companyId: string,
         query: string,
         knowledgeBaseId: string,
@@ -52,7 +65,7 @@ export class VectorStoreService {
         apiKey?: string,
         baseUrl?: string,
         language: string = 'portuguese',
-        minScore: number = 0.20
+        minScore: number = 0.28
     ): Promise<{ id: string; content: string; score: number; metadata?: any }[]> {
         const loggerPrefix = `[RAG:KB${knowledgeBaseId}]`;
         this.logger.log(`${loggerPrefix} Iniciando busca RAG para query: "${query.substring(0, 50)}..." (company=${companyId}, topK=${topK}, minScore=${minScore})`);
@@ -97,7 +110,11 @@ export class VectorStoreService {
 
                 let chunkQuery: any = {
                     where: { documentId: { in: validDocIds } },
-                    select: { id: true, content: true, embedding: true, metadata: true, pageNumber: true, section: true },
+                    select: {
+                        id: true, content: true, embedding: true, metadata: true,
+                        pageNumber: true, section: true,
+                        document: { select: { title: true } },
+                    },
                 };
 
                 // Se exceder o limite, carrega apenas os chunks mais recentes (docs recentes têm prioridade)
@@ -113,7 +130,11 @@ export class VectorStoreService {
                     chunkQuery.take = MAX_CHUNKS_IN_MEMORY;
                 }
 
-                chunks = await prisma.documentChunk.findMany(chunkQuery);
+                const rawChunks = await prisma.documentChunk.findMany(chunkQuery);
+                // Converter embeddings para Float32Array ao cachear (economiza memória e acelera cosineSimilarity)
+                chunks = rawChunks
+                    .filter((c: any) => Array.isArray(c.embedding) && c.embedding.length > 0)
+                    .map((c: any) => ({ ...c, embedding: new Float32Array(c.embedding) }));
                 this.ragCache.set(cacheKey, { chunks, timestamp: Date.now() });
                 this.logger.debug(`${loggerPrefix} Cache MISS — ${chunks.length} chunks carregados do banco e cacheados`);
             }
@@ -127,13 +148,19 @@ export class VectorStoreService {
 
             // 3. Calcular similaridade para todos os chunks
             const scored = chunks
-                .filter((chunk: any) => Array.isArray(chunk.embedding) && chunk.embedding.length > 0)
-                .map((chunk: any) => {
+                .filter((chunk) => chunk.embedding && chunk.embedding.length > 0)
+                .map((chunk) => {
                     const vectorScore = this.cosineSimilarity(queryEmbedding, chunk.embedding);
+                    // Mescla o título do documento (da relação) com o metadata armazenado
+                    const docTitle = chunk.document?.title || '';
+                    const mergedMeta = {
+                        ...(chunk.metadata || {}),
+                        documentName: docTitle || (chunk.metadata as any)?.documentName || '',
+                    };
                     return {
                         id: chunk.id,
                         content: chunk.content,
-                        metadata: chunk.metadata,
+                        metadata: mergedMeta,
                         pageNumber: chunk.pageNumber,
                         section: chunk.section,
                         vectorScore,
@@ -151,22 +178,27 @@ export class VectorStoreService {
 
             // 4. Calcular FTS score (BM25-like) para ranking híbrido
             const queryTerms = query.toLowerCase().split(/\s+/).filter(t => t.length > 2);
+            const numTerms = Math.max(1, queryTerms.length);
             for (const item of scored) {
                 const contentLower = item.content.toLowerCase();
-                let matchCount = 0;
+                let matchedTerms = 0;
                 let termScore = 0;
                 for (const term of queryTerms) {
                     if (contentLower.includes(term)) {
-                        matchCount++;
-                        termScore += 1.0 / (matchCount + 1);
+                        matchedTerms++;
+                        // Ocorrências múltiplas do mesmo termo têm retorno decrescente
+                        const occurrences = (contentLower.split(term).length - 1);
+                        termScore += Math.log1p(occurrences) / Math.log1p(10);
                     }
                 }
-                item.textScore = termScore;
+                // Normalizar por número total de termos para evitar inflação em queries longas
+                item.textScore = (termScore / numTerms) * (matchedTerms / numTerms);
             }
 
-            // 5. Calcular Hybrid Score = 0.7 * Vector + 0.3 * Text
+            // 5. Calcular Hybrid Score = 0.75 * Vector + 0.25 * Text
+            // Vector score é mais confiável para PT-BR com modelos multilíngues
             for (const item of scored) {
-                item.hybridScore = 0.7 * item.vectorScore + 0.3 * item.textScore;
+                item.hybridScore = 0.75 * item.vectorScore + 0.25 * item.textScore;
                 item.score = item.hybridScore;
             }
 
@@ -440,7 +472,6 @@ export class VectorStoreService {
         const key = apiKey || process.env.OPENAI_API_KEY;
         if (!key) throw new Error('OPENAI_API_KEY não configurada para embedding OpenAI');
 
-        const { OpenAI } = require('openai');
         const openai = new OpenAI({ apiKey: key });
 
         const response = await openai.embeddings.create({
@@ -456,7 +487,6 @@ export class VectorStoreService {
         const key = apiKey || process.env.OPENAI_API_KEY;
         if (!key) throw new Error('OPENAI_API_KEY não configurada para embedding OpenAI');
 
-        const { OpenAI } = require('openai');
         const openai = new OpenAI({ apiKey: key });
 
         const response = await openai.embeddings.create({
@@ -477,7 +507,6 @@ export class VectorStoreService {
     private async embedWithOllama(text: string, model: string, baseUrl?: string): Promise<number[]> {
         const host = baseUrl || process.env.OLLAMA_HOST || 'http://localhost:11434';
 
-        const axios = require('axios');
         const response = await axios.post(`${host}/api/embeddings`, {
             model,
             prompt: text,
@@ -562,7 +591,6 @@ export class VectorStoreService {
         const key = apiKey || process.env.QWEN_API_KEY;
         if (!key) throw new Error('QWEN_API_KEY não configurada para embedding Qwen');
 
-        const { OpenAI } = require('openai');
         const qwen = new OpenAI({ apiKey: key, baseURL: 'https://coding-intl.dashscope.aliyuncs.com/v1' });
 
         const response = await qwen.embeddings.create({
@@ -578,7 +606,6 @@ export class VectorStoreService {
         const key = apiKey || process.env.QWEN_API_KEY;
         if (!key) throw new Error('QWEN_API_KEY não configurada para embedding Qwen');
 
-        const { OpenAI } = require('openai');
         const qwen = new OpenAI({ apiKey: key, baseURL: 'https://coding-intl.dashscope.aliyuncs.com/v1' });
 
         const response = await qwen.embeddings.create({
@@ -599,7 +626,7 @@ export class VectorStoreService {
     /**
      * Calcula similaridade de cosseno entre dois vetores.
      */
-    cosineSimilarity(vecA: number[], vecB: number[]): number {
+    cosineSimilarity(vecA: number[] | Float32Array, vecB: number[] | Float32Array): number {
         let dotProduct = 0;
         let normA = 0;
         let normB = 0;

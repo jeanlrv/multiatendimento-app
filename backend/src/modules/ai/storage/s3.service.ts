@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
 import { randomUUID } from 'crypto';
+import * as fs from 'fs';
 
 @Injectable()
 export class S3Service {
@@ -64,7 +65,6 @@ export class S3Service {
         }
 
         try {
-            const fs = require('fs');
             const buffer = fs.readFileSync(filePath);
             return await this.uploadBuffer(buffer, filename, contentType);
         } catch (error) {

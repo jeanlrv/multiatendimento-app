@@ -25,7 +25,7 @@ export class KnowledgeProcessor extends WorkerHost {
 
         try {
             // 1. Busca o documento e a base de conhecimento
-            const document = await (this.prisma as any).document.findUnique({
+            const document = await this.prisma.document.findUnique({
                 where: { id: documentId },
                 include: { knowledgeBase: true },
             });
@@ -33,7 +33,7 @@ export class KnowledgeProcessor extends WorkerHost {
             if (!document) throw new Error('Documento não encontrado');
 
             // 2. Atualiza status para PROCESSING
-            await (this.prisma as any).document.update({
+            await this.prisma.document.update({
                 where: { id: documentId },
                 data: { status: 'PROCESSING' },
             });
@@ -107,9 +107,13 @@ export class KnowledgeProcessor extends WorkerHost {
                         }
                     }
 
-                    // Metadata do chunk: índice global e, se disponível, info de página
+                    // Metadata do chunk: índice global, nome do documento e, se disponível, info de página
                     const chunkIndex = i + j;
-                    const metadata: any = { chunkIndex };
+                    const metadata: any = {
+                        chunkIndex,
+                        documentName: document.title || '',
+                        documentId,
+                    };
                     if (pageCount && pageCount > 0) {
                         // Estima página baseada no índice relativo do chunk
                         const estimatedPage = Math.ceil(((chunkIndex + 1) / chunkCount) * pageCount);
@@ -127,7 +131,7 @@ export class KnowledgeProcessor extends WorkerHost {
 
                 // Insere lote atual no banco
                 if (chunkData.length > 0) {
-                    await (this.prisma as any).documentChunk.createMany({ data: chunkData });
+                    await this.prisma.documentChunk.createMany({ data: chunkData });
                     processedCount += chunkData.length;
                     this.logger.log(`Documento ${documentId} - lote inserido: ${processedCount}/${chunkCount} chunks.`);
                     await new Promise(resolve => setTimeout(resolve, 50));
@@ -135,7 +139,7 @@ export class KnowledgeProcessor extends WorkerHost {
             }
 
             // 6. Finaliza documento
-            await (this.prisma as any).document.update({
+            await this.prisma.document.update({
                 where: { id: documentId },
                 data: {
                     status: 'READY',
@@ -143,6 +147,9 @@ export class KnowledgeProcessor extends WorkerHost {
                     rawContent: text.substring(0, 100000),
                 },
             });
+
+            // 7. Invalida cache RAG da KB para forçar re-carregamento dos chunks na próxima query
+            this.vectorStore.invalidateRagCache(document.knowledgeBaseId, companyId);
 
             if (embeddingFailed) {
                 this.logger.warn(`Documento ${documentId} salvo como READY sem embeddings (apenas FTS). Razão: ${embeddingFailReason}`);
@@ -153,7 +160,7 @@ export class KnowledgeProcessor extends WorkerHost {
 
         } catch (error: any) {
             this.logger.error(`[Processador] Erro ao processar documento ${documentId}: ${error.message}`, error.stack);
-            await (this.prisma as any).document.update({
+            await this.prisma.document.update({
                 where: { id: documentId },
                 data: {
                     status: 'ERROR',

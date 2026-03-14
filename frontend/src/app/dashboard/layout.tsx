@@ -17,6 +17,7 @@ import { InternalChatWidget } from '@/components/chat/InternalChatWidget';
 import { PresenceSidebar } from '@/components/chat/PresenceSidebar';
 import { NotificationBell } from '@/components/NotificationBell';
 import { Users as UsersIcon } from 'lucide-react';
+import { subscribeToPush } from '@/lib/push-notifications';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const SidebarContent = React.memo(({
@@ -159,6 +160,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     useEffect(() => {
         localStorage.setItem('sidebarCollapsed', JSON.stringify(sidebarCollapsed));
     }, [sidebarCollapsed]);
+
+    // Registrar Web Push assim que o agente estiver autenticado
+    useEffect(() => {
+        if (!user) return;
+        const token = localStorage.getItem('token');
+        if (!token) return;
+        subscribeToPush(token).catch(() => null);
+    }, [user?.id]);
 
     useEffect(() => {
         if (company?.primaryColor) {

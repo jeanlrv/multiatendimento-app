@@ -81,7 +81,7 @@ export class EmbeddingCacheService implements OnModuleInit {
      */
     async isChunkProcessed(contentHash: string): Promise<boolean> {
         // Verificar no banco de dados
-        const existingChunk = await (this.prisma as any).documentChunk.findFirst({
+        const existingChunk = await this.prisma.documentChunk.findFirst({
             where: {
                 contentHash,
             },
@@ -95,7 +95,7 @@ export class EmbeddingCacheService implements OnModuleInit {
      * Obtém embeddings duplicados para evitar recálculo
      */
     async findDuplicateChunks(contentHash: string, knowledgeBaseId: string) {
-        const chunks = await (this.prisma as any).documentChunk.findMany({
+        const chunks = await this.prisma.documentChunk.findMany({
             where: {
                 contentHash,
                 knowledgeBaseId,

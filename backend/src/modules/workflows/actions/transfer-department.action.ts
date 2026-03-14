@@ -26,11 +26,11 @@ export class TransferDepartmentAction implements ActionExecutor {
             // Buscar departamento: ID tem prioridade; fallback por nome
             let dept: any;
             if (departmentId) {
-                dept = await (this.prisma as any).department.findUnique({ where: { id: departmentId } });
+                dept = await this.prisma.department.findUnique({ where: { id: departmentId } });
             } else {
                 // Busca pelo nome dentro da empresa do ticket
-                const ticket = await (this.prisma as any).ticket.findUnique({ where: { id: ticketId }, select: { companyId: true } });
-                dept = await (this.prisma as any).department.findFirst({
+                const ticket = await this.prisma.ticket.findUnique({ where: { id: ticketId }, select: { companyId: true } });
+                dept = await this.prisma.department.findFirst({
                     where: { companyId: ticket?.companyId, name: { equals: departmentName, mode: 'insensitive' } }
                 });
             }
@@ -42,7 +42,7 @@ export class TransferDepartmentAction implements ActionExecutor {
             const updateData: any = { departmentId: dept.id, updatedAt: new Date() };
             if (mode) updateData.mode = mode;
 
-            await (this.prisma as any).ticket.update({
+            await this.prisma.ticket.update({
                 where: { id: ticketId },
                 data: updateData
             });

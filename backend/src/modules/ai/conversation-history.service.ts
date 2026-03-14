@@ -20,7 +20,7 @@ export class ConversationHistoryService {
         agentId: string,
         title?: string
     ) {
-        const conversation = await (this.prisma as any).conversation.create({
+        const conversation = await this.prisma.conversation.create({
             data: {
                 companyId,
                 userId,
@@ -40,7 +40,7 @@ export class ConversationHistoryService {
      * Lista todas as conversas de um usuário
      */
     async getUserConversations(companyId: string, userId: string, limit: number = 20) {
-        const conversations = await (this.prisma as any).conversation.findMany({
+        const conversations = await this.prisma.conversation.findMany({
             where: {
                 companyId,
                 userId,
@@ -72,7 +72,7 @@ export class ConversationHistoryService {
         conversationId: string,
         limit: number = 50
     ) {
-        const conversation = await (this.prisma as any).conversation.findFirst({
+        const conversation = await this.prisma.conversation.findFirst({
             where: {
                 id: conversationId,
                 companyId,
@@ -105,7 +105,7 @@ export class ConversationHistoryService {
         content: string,
         metadata?: any
     ) {
-        const message = await (this.prisma as any).conversationMessage.create({
+        const message = await this.prisma.conversationMessage.create({
             data: {
                 conversationId,
                 role,
@@ -115,7 +115,7 @@ export class ConversationHistoryService {
         });
 
         // Atualiza título da conversa se for primeira mensagem do usuário
-        const firstUserMessage = await (this.prisma as any).conversationMessage.findFirst({
+        const firstUserMessage = await this.prisma.conversationMessage.findFirst({
             where: {
                 conversationId,
                 role: 'user',
@@ -124,7 +124,7 @@ export class ConversationHistoryService {
         });
 
         if (firstUserMessage?.id === message.id) {
-            await (this.prisma as any).conversation.update({
+            await this.prisma.conversation.update({
                 where: { id: conversationId },
                 data: {
                     title: content.substring(0, 50) + (content.length > 50 ? '...' : ''),
@@ -140,14 +140,14 @@ export class ConversationHistoryService {
      */
     async deleteConversation(companyId: string, userId: string, conversationId: string) {
         // Deleta mensagens primeiro
-        await (this.prisma as any).conversationMessage.deleteMany({
+        await this.prisma.conversationMessage.deleteMany({
             where: {
                 conversationId,
             },
         });
 
         // Deleta conversa
-        const result = await (this.prisma as any).conversation.deleteMany({
+        const result = await this.prisma.conversation.deleteMany({
             where: {
                 id: conversationId,
                 companyId,
@@ -163,7 +163,7 @@ export class ConversationHistoryService {
      * Deleta todas as mensagens de uma conversa
      */
     async clearConversationMessages(companyId: string, userId: string, conversationId: string) {
-        const result = await (this.prisma as any).conversationMessage.deleteMany({
+        const result = await this.prisma.conversationMessage.deleteMany({
             where: {
                 conversationId,
             },
@@ -177,17 +177,17 @@ export class ConversationHistoryService {
      * Obtém estatísticas de uso
      */
     async getUsageStats(companyId: string, userId: string) {
-        const totalConversations = await (this.prisma as any).conversation.count({
+        const totalConversations = await this.prisma.conversation.count({
             where: { companyId, userId },
         });
 
-        const totalMessages = await (this.prisma as any).conversationMessage.count({
+        const totalMessages = await this.prisma.conversationMessage.count({
             where: {
                 conversation: { companyId, userId },
             },
         });
 
-        const conversationsByAgent = await (this.prisma as any).conversation.groupBy({
+        const conversationsByAgent = await this.prisma.conversation.groupBy({
             by: ['agentId'],
             where: { companyId, userId },
             _count: true,
@@ -209,7 +209,7 @@ export class ConversationHistoryService {
         conversationId: string,
         title: string
     ) {
-        const conversation = await (this.prisma as any).conversation.findFirst({
+        const conversation = await this.prisma.conversation.findFirst({
             where: {
                 id: conversationId,
                 companyId,
@@ -221,7 +221,7 @@ export class ConversationHistoryService {
             throw new Error('Conversa não encontrada');
         }
 
-        return (this.prisma as any).conversation.update({
+        return this.prisma.conversation.update({
             where: { id: conversationId },
             data: { title },
         });
