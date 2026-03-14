@@ -1460,7 +1460,7 @@ Resposta:`;
             const results = await Promise.all(chunks.map(async (chunk) => {
                 const doc = await this.prisma.document.findUnique({
                     where: { id: chunk.metadata?.documentId || '' },
-                    select: { title: true, type: true, createdAt: true },
+                    select: { title: true, sourceType: true, createdAt: true },
                 }).catch(() => null);
 
                 return {
@@ -1468,7 +1468,7 @@ Resposta:`;
                     content: chunk.content,
                     score: chunk.score,
                     title: doc?.title || 'Documento',
-                    sourceType: doc?.type || 'TEXT',
+                    sourceType: doc?.sourceType || 'TEXT',
                     createdAt: doc?.createdAt,
                 };
             }));
