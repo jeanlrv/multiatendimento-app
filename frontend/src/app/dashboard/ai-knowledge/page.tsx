@@ -877,8 +877,9 @@ export default function AIKnowledgePage() {
                                                 const result = await AIKnowledgeService.reprocessBase(selectedBase.id);
                                                 toast.success(result.message);
                                                 setDocuments(prev => prev.map(d => ({ ...d, status: 'PENDING' as const })));
-                                            } catch {
-                                                toast.error('Erro ao reprocessar a base');
+                                            } catch (err: any) {
+                                                const msg = err?.response?.data?.message || err?.message || 'Erro ao reprocessar a base';
+                                                toast.error(msg);
                                             }
                                         }}
                                         className="px-4 py-3 bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 font-bold text-xs uppercase tracking-widest rounded-xl hover:bg-amber-500 hover:text-white transition-all border border-amber-200 dark:border-amber-500/30 flex items-center gap-2"
@@ -1005,9 +1006,9 @@ export default function AIKnowledgePage() {
                                                                             await AIKnowledgeService.reprocessDocument(doc.id);
                                                                             setDocuments(prev => prev.map(d => d.id === doc.id ? { ...d, status: 'PENDING' as const } : d));
                                                                             toast.success('Documento enviado para reprocessamento');
-                                                                        } catch (error) {
-                                                                            console.error('Erro ao reprocessar documento:', error);
-                                                                            toast.error('Erro ao reprocessar documento');
+                                                                        } catch (err: any) {
+                                                                            const msg = err?.response?.data?.message || err?.message || 'Erro ao reprocessar documento';
+                                                                            toast.error(msg);
                                                                         }
                                                                     }}
                                                                     className="p-2 hover:text-amber-500 transition-all text-slate-400"

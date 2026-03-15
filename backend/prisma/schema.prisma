@@ -648,8 +648,8 @@ model DocumentChunk {
   metadata   Json?   // Metadados adicionais como título do documento, etc.
   section    String? // Seção do documento (por exemplo, cabeçalho, corpo, rodapé)
 
-  // Embedding via Json (armazenamento vetorial)
-  embedding Unsupported("vector(1024)")?
+  // Embedding via pgvector nativo (qualquer dimensão — multi-provider)
+  embedding Unsupported("vector")?
 
   document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
 

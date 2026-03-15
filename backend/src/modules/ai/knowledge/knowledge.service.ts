@@ -513,7 +513,7 @@ export class KnowledgeService {
         });
 
         if (!doc) {
-            throw new Error('Documento não encontrado');
+            throw new NotFoundException('Documento não encontrado');
         }
 
         // Atualizar status para PENDING

@@ -159,12 +159,19 @@ export class KnowledgeProcessor extends WorkerHost {
                     // Passo 2: UPDATE por ID com cast ::vector para chunks com embedding
                     const withEmbedding = chunkData.filter(c => c.embedding && c.embedding.length > 0);
                     for (const c of withEmbedding) {
-                        const vecStr = `[${c.embedding!.join(',')}]`;
-                        await this.prisma.$executeRaw`
-                            UPDATE document_chunks
-                            SET embedding = ${vecStr}::vector
-                            WHERE id = ${c.id}
-                        `;
+                        try {
+                            const vecStr = `[${c.embedding!.join(',')}]`;
+                            await this.prisma.$executeRaw`
+                                UPDATE document_chunks
+                                SET embedding = ${vecStr}::vector
+                                WHERE id = ${c.id}
+                            `;
+                        } catch (vecErr: any) {
+                            this.logger.warn(
+                                `[Processador] Falha ao armazenar embedding para chunk ${c.id} ` +
+                                `(dim=${c.embedding!.length}): ${vecErr.message}. Chunk salvo sem embedding (FTS fallback).`
+                            );
+                        }
                     }
 
                     processedCount += chunkData.length;
