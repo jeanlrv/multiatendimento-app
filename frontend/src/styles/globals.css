@@ -118,6 +118,16 @@
     @apply bg-white/40 dark:bg-black/40 backdrop-blur-3xl border border-white/40 dark:border-white/10 shadow-[var(--card-shadow)] rounded-[var(--radius)];
   }
 
+  /* Card padrão do sistema */
+  .ks-card {
+    @apply bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/8 rounded-2xl shadow-sm;
+  }
+
+  /* Label de seção do sidebar */
+  .sidebar-section-label {
+    @apply text-[9px] font-black uppercase tracking-[0.15em] text-slate-400 dark:text-slate-600 px-2 py-1 select-none;
+  }
+
   .aurora {
     @apply relative overflow-hidden;
   }

@@ -6,7 +6,7 @@ import { TicketStatus, TicketPriority } from '@prisma/client';
 import { BulkTicketAction, BulkTicketActionDto } from './dto/bulk-ticket-action.dto';
 import { AIService } from '../ai/ai.service';
 import { AuditService } from '../audit/audit.service';
-import { EventEmitter2 } from '@nestjs/event-emitter';
+import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { EvaluationsService } from '../evaluations/evaluations.service';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
@@ -327,9 +327,15 @@ export class TicketsService {
                 ...(updateTicketDto.subject && { subject: updateTicketDto.subject }),
                 ...(updateTicketDto.mode && { mode: updateTicketDto.mode }),
                 // Se estiver reabrindo, limpa datas de fechamento
+                // Se reabrindo, limpa datas de fechamento
                 ...(updateTicketDto.status === TicketStatus.OPEN && {
                     closedAt: null,
-                    resolvedAt: null
+                    resolvedAt: null,
+                }),
+                // Se resolvendo manualmente, registra timestamps
+                ...(updateTicketDto.status === TicketStatus.RESOLVED && {
+                    resolvedAt: new Date(),
+                    closedAt: new Date(),
                 }),
                 // Sync de tags: substitui todas as tags existentes
                 ...(updateTicketDto.tagIds !== undefined && {
@@ -378,6 +384,17 @@ export class TicketsService {
                     ticketId: id,
                     companyId,
                     ticket: updatedTicket,
+                });
+            }
+
+            // Evento de resolução manual via update (aciona CSAT + workflows)
+            if (updatedTicket.status === TicketStatus.RESOLVED) {
+                this.eventEmitter.emit('ticket.resolved', {
+                    ticketId: id,
+                    companyId,
+                    ticket: updatedTicket,
+                    connectionId: (updatedTicket as any).whatsappInstance?.id || (updatedTicket as any).connectionId,
+                    contact: (updatedTicket as any).contact,
                 });
             }
         }
@@ -467,12 +484,40 @@ export class TicketsService {
             this.logger.error(`Falha ao gerar análise de sentimento para ticket ${id}: ${err.message}`);
         });
 
-        // Enviar CSAT survey se habilitado para a empresa
-        this.sendCsatIfEnabled(companyId, id, (ticket as any).contact, (ticket as any).connectionId).catch(err => {
-            this.logger.warn(`CSAT não enviado para ticket ${id}: ${err.message}`);
-        });
-
         return resolvedTicket;
+    }
+
+    /**
+     * Listener centralizado: dispara CSAT para TODOS os caminhos de resolução
+     * (resolução manual via API, resolução via update(), IA [FINALIZAR]).
+     */
+    @OnEvent('ticket.resolved')
+    async onTicketResolved(data: {
+        ticketId: string;
+        companyId: string;
+        contact?: any;
+        connectionId?: string | null;
+    }) {
+        try {
+            // Se o evento já trouxe contact e connectionId (caminhos da IA), usar direto
+            let contact = data.contact;
+            let connectionId = data.connectionId ?? null;
+
+            // Fallback: buscar do banco se não veio no evento (resolve() manual)
+            if (!contact || !connectionId) {
+                const ticket = await this.prisma.ticket.findUnique({
+                    where: { id: data.ticketId },
+                    include: { contact: true },
+                });
+                if (!ticket) return;
+                contact = ticket.contact;
+                connectionId = (ticket as any).connectionId;
+            }
+
+            await this.sendCsatIfEnabled(data.companyId, data.ticketId, contact, connectionId);
+        } catch (err) {
+            this.logger.warn(`[onTicketResolved] Falha ao processar CSAT para ticket ${data.ticketId}: ${err.message}`);
+        }
     }
 
     private async sendCsatIfEnabled(companyId: string, ticketId: string, contact: any, connectionId: string | null) {

@@ -4,7 +4,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter, usePathname } from 'next/navigation';
 import { ModeToggle } from '@/components/mode-toggle';
-import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Clock, Upload, Menu, X } from 'lucide-react';
+import {
+    ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Clock, Upload, Menu, X, LogOut,
+    LayoutDashboard, Headphones, Users, Smartphone, Building2, Tag, Bot,
+    BookOpen, SearchCode, BrainCircuit, Megaphone, Workflow, MessagesSquare,
+    CalendarDays, Award, UsersRound, ShieldCheck, TrendingUp, CircleUser, Settings2,
+} from 'lucide-react';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { useTicketBadge } from '@/hooks/useTicketBadge';
 import { KeyboardShortcutsPanel } from '@/components/keyboard-shortcuts-panel';
@@ -16,11 +21,30 @@ import { hexToHsl } from '@/lib/colors';
 import { InternalChatWidget } from '@/components/chat/InternalChatWidget';
 import { PresenceSidebar } from '@/components/chat/PresenceSidebar';
 import { NotificationBell } from '@/components/NotificationBell';
-import { Users as UsersIcon } from 'lucide-react';
 import { subscribeToPush } from '@/lib/push-notifications';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CommandPalette } from '@/components/CommandPalette';
 
+// ─── Agrupamento do menu ─────────────────────────────────────────────────────
+const GROUPS = ['ATENDIMENTO', 'OPERACOES', 'INTELIGENCIA', 'EQUIPE'] as const;
+type GroupKey = typeof GROUPS[number];
+
+const SECTION_LABELS: Record<GroupKey, string> = {
+    ATENDIMENTO: 'Atendimento',
+    OPERACOES: 'Operações',
+    INTELIGENCIA: 'Inteligência',
+    EQUIPE: 'Equipe',
+};
+
+type MenuItem = {
+    label: string;
+    path: string;
+    icon: React.ReactNode;
+    group: GroupKey;
+    liveCount?: number;
+};
+
+// ─── SidebarContent ──────────────────────────────────────────────────────────
 const SidebarContent = React.memo(({
     sidebarCollapsed,
     logoUrl,
@@ -36,80 +60,124 @@ const SidebarContent = React.memo(({
     companyName: string;
     companyInitials: string;
     pathname: string;
-    menuItems: any[];
+    menuItems: MenuItem[];
     logout: () => void;
     setMobileMenuOpen: (val: boolean) => void;
-}) => (
-    <>
-        {/* Logo */}
-        <div className={`${sidebarCollapsed ? 'p-4' : 'px-8 py-6'} flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-4'} transition-all duration-300`}>
-            <div className={`${sidebarCollapsed ? 'h-10 w-10 rounded-xl' : 'h-12 w-auto min-w-[140px] rounded-2xl'} bg-gradient-to-br from-primary to-primary-foreground flex items-center justify-center shadow-lg shadow-primary/20 overflow-hidden flex-shrink-0 transition-all duration-500`}>
-                {logoUrl ? (
-                    <img src={logoUrl} alt={companyName} className={`${sidebarCollapsed ? 'w-full h-full object-cover' : 'h-full w-full object-contain p-2 px-4'}`} />
-                ) : (
-                    <span className="text-white font-bold text-lg italic">{companyInitials}</span>
+}) => {
+    const grouped = GROUPS.map(key => ({
+        key,
+        label: SECTION_LABELS[key],
+        items: menuItems.filter(i => i.group === key),
+    }));
+
+    return (
+        <>
+            {/* Logo */}
+            <div className={`flex items-center gap-3 ${sidebarCollapsed ? 'justify-center px-3 py-4' : 'px-4 py-5'} transition-all duration-300`}>
+                <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-primary to-primary-foreground flex items-center justify-center shadow-md overflow-hidden flex-shrink-0 transition-all duration-300">
+                    {logoUrl ? (
+                        <img src={logoUrl} alt={companyName} className="w-full h-full object-cover" />
+                    ) : (
+                        <span className="text-white font-bold text-sm">{companyInitials}</span>
+                    )}
+                </div>
+                {!sidebarCollapsed && (
+                    <div className="min-w-0">
+                        <p className="font-bold text-slate-800 dark:text-white text-sm truncate leading-tight">{companyName}</p>
+                        <p className="text-[10px] text-slate-400 dark:text-slate-500 leading-tight mt-0.5">Painel de Controle</p>
+                    </div>
                 )}
             </div>
-        </div>
 
-        {/* Nav */}
-        <nav className={`flex-1 ${sidebarCollapsed ? 'px-2' : 'px-4'} space-y-1 overflow-y-auto custom-scrollbar transition-all duration-300`}>
-            {!sidebarCollapsed && (
-                <p className="px-4 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-4 mt-2 opacity-50">MENU PRINCIPAL</p>
-            )}
-            {menuItems.map((item) => {
-                const isActive = pathname === item.path;
-                const count = item.liveCount ?? 0;
-                return (
-                    <Link
-                        key={item.label}
-                        href={item.path}
-                        className={`group flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'} p-3 xl:p-3.5 rounded-2xl transition-all duration-300 relative ${isActive
-                            ? 'bg-primary text-white shadow-lg shadow-primary/30 font-bold scale-[1.02]'
-                            : 'text-gray-500 dark:text-gray-400 hover:bg-white/50 dark:hover:bg-white/5 hover:translate-x-1'
-                            }`}
-                        title={sidebarCollapsed ? item.label : ''}
-                        onClick={() => setMobileMenuOpen(false)}
-                    >
-                        <div className={`flex items-center ${sidebarCollapsed ? '' : 'gap-3'}`}>
-                            <span className={`text-xl transition-transform group-hover:scale-110 ${isActive ? 'filter-none' : 'grayscale group-hover:grayscale-0'}`}>
-                                {item.icon}
-                            </span>
-                            {!sidebarCollapsed && <span className="text-sm xl:text-[0.9rem]">{item.label}</span>}
+            {/* Nav */}
+            <nav className={`flex-1 ${sidebarCollapsed ? 'px-2' : 'px-3'} overflow-y-auto custom-scrollbar pb-4 transition-all duration-300`}>
+                {grouped.map((group, gIdx) => (
+                    <div key={group.key} className={gIdx > 0 ? 'mt-4' : 'mt-1'}>
+                        {/* Section label / divider */}
+                        {!sidebarCollapsed ? (
+                            <p className="px-2 mb-1 text-[9px] font-black uppercase tracking-[0.15em] text-slate-400 dark:text-slate-600 select-none">
+                                {group.label}
+                            </p>
+                        ) : (
+                            gIdx > 0 && <div className="h-px bg-slate-200 dark:bg-white/8 mx-1 mb-2" />
+                        )}
+
+                        <div className="space-y-0.5">
+                            {group.items.map((item) => {
+                                const isActive = pathname === item.path;
+                                const count = item.liveCount ?? 0;
+                                return (
+                                    <Link
+                                        key={item.label}
+                                        href={item.path}
+                                        className={`group relative flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'} p-3 xl:p-3.5 transition-all duration-150 ${
+                                            isActive
+                                                ? sidebarCollapsed
+                                                    ? 'bg-primary/10 text-primary rounded-xl font-semibold'
+                                                    : 'bg-primary/10 text-primary border-l-[3px] border-primary font-semibold rounded-r-xl pl-[calc(0.75rem-3px)] xl:pl-[calc(0.875rem-3px)]'
+                                                : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100/70 dark:hover:bg-white/5 hover:text-slate-700 dark:hover:text-slate-200 rounded-xl'
+                                        }`}
+                                        title={sidebarCollapsed ? item.label : ''}
+                                        onClick={() => setMobileMenuOpen(false)}
+                                    >
+                                        <div className={`flex items-center ${sidebarCollapsed ? '' : 'gap-3'} min-w-0`}>
+                                            <span className={`flex-shrink-0 transition-opacity ${isActive ? '' : 'opacity-60 group-hover:opacity-100'}`}>
+                                                {item.icon}
+                                            </span>
+                                            {!sidebarCollapsed && (
+                                                <span className="text-sm xl:text-[0.875rem] truncate">{item.label}</span>
+                                            )}
+                                        </div>
+
+                                        {/* Badge: expanded */}
+                                        {count > 0 && !sidebarCollapsed && (
+                                            <span className={`min-w-[20px] h-5 px-1.5 flex items-center justify-center rounded-full text-[10px] font-black tabular-nums flex-shrink-0 ${isActive ? 'bg-primary/20 text-primary' : 'bg-primary text-white'}`}>
+                                                {count > 99 ? '99+' : count}
+                                            </span>
+                                        )}
+
+                                        {/* Badge: collapsed dot */}
+                                        {count > 0 && sidebarCollapsed && (
+                                            <span className="absolute -top-1 -right-1 h-4 w-4 bg-primary text-white text-[8px] font-black rounded-full flex items-center justify-center border-2 border-white dark:border-slate-900">
+                                                {count > 9 ? '9+' : count}
+                                            </span>
+                                        )}
+                                    </Link>
+                                );
+                            })}
                         </div>
-                        {count > 0 && !sidebarCollapsed && (
-                            <span className={`min-w-[20px] h-5 px-1.5 flex items-center justify-center rounded-full text-[10px] font-black tabular-nums ${isActive ? 'bg-white/25 text-white' : 'bg-primary text-white'}`}>
-                                {count > 99 ? '99+' : count}
-                            </span>
-                        )}
-                        {count > 0 && sidebarCollapsed && (
-                            <span className="absolute -top-1 -right-1 h-4 w-4 bg-primary text-white text-[8px] font-black rounded-full flex items-center justify-center border-2 border-white dark:border-gray-900">
-                                {count > 9 ? '9+' : count}
-                            </span>
-                        )}
-                    </Link>
-                );
-            })}
-        </nav>
+                    </div>
+                ))}
+            </nav>
 
-        {/* Footer */}
-        {!sidebarCollapsed ? (
-            <div className="p-6 border-t border-gray-100/50 dark:border-white/5">
+            {/* Footer — logout */}
+            {!sidebarCollapsed ? (
+                <div className="p-3 border-t border-slate-200/70 dark:border-white/5">
+                    <button
+                        onClick={logout}
+                        className="flex items-center gap-3 w-full px-3 py-2.5 text-slate-500 dark:text-slate-400 hover:bg-red-50 dark:hover:bg-red-950/20 hover:text-red-500 dark:hover:text-red-400 rounded-xl transition-all text-sm font-medium"
+                    >
+                        <LogOut size={18} className="flex-shrink-0 opacity-70" />
+                        <span>Sair da Conta</span>
+                    </button>
+                </div>
+            ) : (
+                <div className="p-2 border-t border-slate-200/70 dark:border-white/5">
+                    <button
+                        onClick={logout}
+                        className="flex items-center justify-center w-full p-3 text-slate-400 hover:bg-red-50 dark:hover:bg-red-950/20 hover:text-red-500 dark:hover:text-red-400 rounded-xl transition-all"
+                        title="Sair da Conta"
+                    >
+                        <LogOut size={18} />
+                    </button>
+                </div>
+            )}
+        </>
+    );
+});
+SidebarContent.displayName = 'SidebarContent';
 
-                <button onClick={logout} className="flex items-center gap-3 w-full p-3 text-red-500 hover:bg-red-50/50 dark:hover:bg-red-950/20 rounded-xl transition-all font-bold text-sm">
-                    <span className="text-lg">🚪</span> Sair da Conta
-                </button>
-            </div>
-        ) : (
-            <div className="p-2 border-t border-gray-100/50 dark:border-white/5">
-                <button onClick={logout} className="flex items-center justify-center w-full p-3 text-red-500 hover:bg-red-50/50 dark:hover:bg-red-950/20 rounded-xl transition-all" title="Sair da Conta">
-                    <span className="text-lg">🚪</span>
-                </button>
-            </div>
-        )}
-    </>
-));
-
+// ─── DashboardLayout ─────────────────────────────────────────────────────────
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
     const { user, company, logout, loading, updateUser } = useAuth();
     const router = useRouter();
@@ -138,7 +206,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         if (savedZoom) {
             const z = parseInt(savedZoom);
             setZoom(z);
-            document.documentElement.style.fontSize = `${(z / 100) * 12.8}px`;
+            document.documentElement.style.fontSize = `${(z / 100) * 16}px`;
         }
     }, []);
 
@@ -147,7 +215,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             let next = prev;
             if (action === 'in' && prev < 130) next = prev + 10;
             if (action === 'out' && prev > 70) next = prev - 10;
-            document.documentElement.style.fontSize = `${(next / 100) * 12.8}px`;
+            document.documentElement.style.fontSize = `${(next / 100) * 16}px`;
             localStorage.setItem('kszap_zoom', next.toString());
             return next;
         });
@@ -214,43 +282,41 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
     if (!user) { router.push('/login'); return null; }
 
-    const menuItems = [
-        { label: 'Dashboard', path: '/dashboard', icon: '📊' },
-        { label: 'Chamados', path: '/dashboard/tickets', icon: '🎫', liveCount: ticketCount },
-        { label: 'Contatos', path: '/dashboard/contacts', icon: '👤' },
-        { label: 'Conexões', path: '/dashboard/connections', icon: '💬' },
-        { label: 'Departamentos', path: '/dashboard/departments', icon: '🏢' },
-        { label: 'Tags', path: '/dashboard/tags', icon: '🏷️' },
-        { label: 'IA & Agentes', path: '/dashboard/ai-agents', icon: '🤖' },
-        { label: 'Base de Conhecimento', path: '/dashboard/ai-knowledge', icon: '🧠' },
-        { label: 'Busca Inteligente', path: '/dashboard/ai-search', icon: '🔍' },
-        { label: 'Métricas de IA', path: '/dashboard/ai-metrics', icon: '📊' },
-        { label: 'Broadcast', path: '/dashboard/broadcast', icon: '📡' },
-        { label: 'Automações', path: '/dashboard/workflows', icon: '⚡' },
-        { label: 'Colaboração', path: '/dashboard/collab', icon: '💬' },
-        { label: 'Agenda', path: '/dashboard/scheduling', icon: '📅' },
-        { label: 'Qualidade', path: '/dashboard/evaluations', icon: '⭐' },
-        { label: 'Equipe', path: '/dashboard/users', icon: '👥' },
-        { label: 'Perfis de Acesso', path: '/dashboard/roles', icon: '🛡️' },
-        { label: 'Intelligence HUB', path: '/dashboard/reports', icon: '📈' },
-        { label: 'Meu Perfil', path: '/dashboard/profile', icon: '👤' },
-        { label: 'Configurações', path: '/dashboard/settings', icon: '⚙️' },
+    const menuItems: MenuItem[] = [
+        { label: 'Dashboard',           path: '/dashboard',             icon: <LayoutDashboard size={18} />, group: 'ATENDIMENTO' },
+        { label: 'Chamados',            path: '/dashboard/tickets',     icon: <Headphones size={18} />,      group: 'ATENDIMENTO', liveCount: ticketCount },
+        { label: 'Contatos',            path: '/dashboard/contacts',    icon: <Users size={18} />,           group: 'ATENDIMENTO' },
+        { label: 'Conexões',            path: '/dashboard/connections', icon: <Smartphone size={18} />,      group: 'ATENDIMENTO' },
+        { label: 'Departamentos',       path: '/dashboard/departments', icon: <Building2 size={18} />,       group: 'OPERACOES' },
+        { label: 'Tags',                path: '/dashboard/tags',        icon: <Tag size={18} />,             group: 'OPERACOES' },
+        { label: 'Broadcast',           path: '/dashboard/broadcast',   icon: <Megaphone size={18} />,       group: 'OPERACOES' },
+        { label: 'Agenda',              path: '/dashboard/scheduling',  icon: <CalendarDays size={18} />,    group: 'OPERACOES' },
+        { label: 'Qualidade',           path: '/dashboard/evaluations', icon: <Award size={18} />,           group: 'OPERACOES' },
+        { label: 'IA & Agentes',        path: '/dashboard/ai-agents',   icon: <Bot size={18} />,             group: 'INTELIGENCIA' },
+        { label: 'Base de Conhecimento',path: '/dashboard/ai-knowledge',icon: <BookOpen size={18} />,        group: 'INTELIGENCIA' },
+        { label: 'Busca Inteligente',   path: '/dashboard/ai-search',   icon: <SearchCode size={18} />,      group: 'INTELIGENCIA' },
+        { label: 'Métricas de IA',      path: '/dashboard/ai-metrics',  icon: <BrainCircuit size={18} />,    group: 'INTELIGENCIA' },
+        { label: 'Automações',          path: '/dashboard/workflows',   icon: <Workflow size={18} />,        group: 'INTELIGENCIA' },
+        { label: 'Colaboração',         path: '/dashboard/collab',      icon: <MessagesSquare size={18} />,  group: 'EQUIPE' },
+        { label: 'Equipe',              path: '/dashboard/users',       icon: <UsersRound size={18} />,      group: 'EQUIPE' },
+        { label: 'Perfis de Acesso',    path: '/dashboard/roles',       icon: <ShieldCheck size={18} />,     group: 'EQUIPE' },
+        { label: 'Intelligence HUB',    path: '/dashboard/reports',     icon: <TrendingUp size={18} />,      group: 'EQUIPE' },
+        { label: 'Meu Perfil',          path: '/dashboard/profile',     icon: <CircleUser size={18} />,      group: 'EQUIPE' },
+        { label: 'Configurações',       path: '/dashboard/settings',    icon: <Settings2 size={18} />,       group: 'EQUIPE' },
     ];
 
-    // Atalhos da bottom nav mobile (5 principais)
+    // Bottom nav mobile — 5 ícones principais
     const bottomNavItems = [
-        { label: 'Dashboard', path: '/dashboard', icon: '📊' },
-        { label: 'Chamados', path: '/dashboard/tickets', icon: '🎫', liveCount: ticketCount },
-        { label: 'Contatos', path: '/dashboard/contacts', icon: '👤' },
-        { label: 'Agenda', path: '/dashboard/scheduling', icon: '📅' },
-        { label: 'Menu', path: '#', icon: '☰', isMenu: true },
+        { label: 'Dashboard', path: '/dashboard',           icon: <LayoutDashboard size={20} /> },
+        { label: 'Chamados',  path: '/dashboard/tickets',   icon: <Headphones size={20} />,     liveCount: ticketCount },
+        { label: 'Contatos',  path: '/dashboard/contacts',  icon: <Users size={20} /> },
+        { label: 'Agenda',    path: '/dashboard/scheduling',icon: <CalendarDays size={20} /> },
+        { label: 'Menu',      path: '#',                    icon: <Menu size={20} />,            isMenu: true },
     ];
 
     const logoUrl = company?.logoUrl;
     const companyName = company?.name || 'KSZap';
     const companyInitials = companyName.substring(0, 2).toUpperCase();
-
-
 
     return (
         <SessionTimeoutGuard>
@@ -258,7 +324,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <Toaster position="top-right" richColors closeButton />
 
                 {/* ── SIDEBAR DESKTOP (md+) ────────────────────────────────── */}
-                <aside className={`${sidebarCollapsed ? 'w-20' : 'w-72 xl:w-80'} flex-shrink-0 hidden md:flex flex-col relative z-30 transition-all duration-300`}>
+                <aside className={`${sidebarCollapsed ? 'w-[68px]' : 'w-64 xl:w-72'} flex-shrink-0 hidden md:flex flex-col relative z-30 transition-all duration-300`}>
                     <div className="absolute inset-0 liquid-glass !rounded-none border-r border-slate-200 dark:border-white/5 shadow-2xl pointer-events-none" />
                     <div className="relative z-10 w-full h-full flex flex-col pointer-events-auto">
                         <SidebarContent
@@ -325,12 +391,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 </AnimatePresence>
 
                 {/* ── MAIN CONTENT ─────────────────────────────────────────── */}
-                {/* overflow-hidden e h-full removidos: causavam conteúdo invisível no iOS/mobile */}
                 <div className="flex-1 flex flex-col relative z-10 min-w-0 min-h-0">
 
                     {/* ── HEADER ───────────────────────────────────────────── */}
-                    <header className="h-14 md:h-20 xl:h-[72px] flex items-center justify-between px-3 md:px-8 xl:px-10 relative z-20 flex-shrink-0 border-b border-slate-200/60 dark:border-white/5 liquid-glass shadow-sm">
-                        <div className="flex items-center gap-2 md:gap-8">
+                    <header className="h-14 md:h-16 xl:h-[68px] flex items-center justify-between px-3 md:px-6 xl:px-8 relative z-20 flex-shrink-0 border-b border-slate-200/60 dark:border-white/5 liquid-glass shadow-sm">
+                        <div className="flex items-center gap-2 md:gap-6">
                             {/* Botão hamburger — só mobile */}
                             <button
                                 onClick={() => setMobileMenuOpen(true)}
@@ -341,16 +406,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                             </button>
 
                             {/* Logo */}
-                            <div className="h-9 md:h-12 w-auto min-w-[90px] md:min-w-[150px] bg-gradient-to-br from-primary to-primary-foreground rounded-xl flex items-center justify-center shadow-md overflow-hidden flex-shrink-0">
+                            <div className="h-9 w-auto min-w-[90px] md:min-w-[140px] bg-gradient-to-br from-primary to-primary-foreground rounded-xl flex items-center justify-center shadow-md overflow-hidden flex-shrink-0">
                                 {logoUrl
                                     ? <img src={logoUrl} alt={companyName} className="h-full w-full object-contain p-1 px-2 md:p-2 md:px-4" />
-                                    : <span className="text-white font-black text-sm md:text-lg italic px-2 md:px-6">{companyName}</span>}
+                                    : <span className="text-white font-black text-sm md:text-base italic px-3 md:px-5">{companyName}</span>}
                             </div>
 
                             {/* Quick nav — apenas lg+ */}
                             <nav className="ks-capsule hidden lg:flex">
                                 {menuItems.slice(0, 4).map((item) => (
-                                    <Link key={item.label} href={item.path} className={`text-sm font-bold tracking-tight px-5 py-2 rounded-full transition-all ${pathname === item.path ? 'bg-primary text-white shadow-xl' : 'text-slate-400 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white'}`}>
+                                    <Link key={item.label} href={item.path} className={`text-sm font-bold tracking-tight px-4 py-2 rounded-full transition-all flex items-center gap-1.5 ${pathname === item.path ? 'bg-primary text-white shadow-xl' : 'text-slate-400 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white'}`}>
                                         {item.label}
                                     </Link>
                                 ))}
@@ -358,30 +423,30 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                         </div>
 
                         {/* Direita do header */}
-                        <div className="flex items-center gap-1.5 md:gap-4">
+                        <div className="flex items-center gap-1.5 md:gap-3">
                             {/* Relógio — oculto em xs */}
-                            <div className="hidden sm:flex items-center gap-3 liquid-glass px-4 py-2.5 rounded-full border border-slate-200 dark:border-white/10 shadow-sm">
-                                <Clock size={14} className="text-primary" />
+                            <div className="hidden sm:flex items-center gap-2 liquid-glass px-3 py-2 rounded-full border border-slate-200 dark:border-white/10 shadow-sm">
+                                <Clock size={13} className="text-primary" />
                                 <span className="text-xs font-bold text-slate-600 dark:text-white capitalize">
                                     {time ? `${time.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).replace(/ de /g, ' ').replace('.', '')} ${time.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : '—'}
                                 </span>
                             </div>
 
                             {/* Zoom — apenas md+ */}
-                            <div className="hidden md:flex items-center gap-2 liquid-glass px-2 py-1.5 rounded-full border border-slate-200 dark:border-white/10 shadow-sm">
-                                <button onClick={() => handleZoom('out')} className="p-1.5 text-slate-400 hover:text-primary hover:bg-slate-100 dark:hover:bg-white/5 rounded-full transition-all" title="Diminuir Zoom"><ZoomOut size={16} /></button>
-                                <span className="text-[10px] font-black w-8 text-center text-slate-500 dark:text-slate-400">{zoom}%</span>
-                                <button onClick={() => handleZoom('in')} className="p-1.5 text-slate-400 hover:text-primary hover:bg-slate-100 dark:hover:bg-white/5 rounded-full transition-all" title="Aumentar Zoom"><ZoomIn size={16} /></button>
+                            <div className="hidden md:flex items-center gap-1.5 liquid-glass px-2 py-1.5 rounded-full border border-slate-200 dark:border-white/10 shadow-sm">
+                                <button onClick={() => handleZoom('out')} className="p-1.5 text-slate-400 hover:text-primary hover:bg-slate-100 dark:hover:bg-white/5 rounded-full transition-all" title="Diminuir Zoom"><ZoomOut size={15} /></button>
+                                <span className="text-[10px] font-black w-7 text-center text-slate-500 dark:text-slate-400">{zoom}%</span>
+                                <button onClick={() => handleZoom('in')} className="p-1.5 text-slate-400 hover:text-primary hover:bg-slate-100 dark:hover:bg-white/5 rounded-full transition-all" title="Aumentar Zoom"><ZoomIn size={15} /></button>
                             </div>
 
                             {/* Presença */}
                             <button onClick={() => setPresenceSidebarOpen(!presenceSidebarOpen)} className={`w-9 h-9 flex items-center justify-center rounded-full border transition-all active:scale-95 ${presenceSidebarOpen ? 'bg-primary text-white border-primary shadow-lg shadow-primary/20' : 'liquid-glass border-slate-200 dark:border-white/10 text-slate-400 hover:text-primary'}`} title="Hub de Colaboradores">
-                                <UsersIcon size={16} />
+                                <Users size={16} />
                             </button>
 
                             <NotificationBell />
 
-                            <div className="flex items-center gap-1.5 md:gap-3 border-l pl-2 md:pl-4 border-slate-200 dark:border-white/10">
+                            <div className="flex items-center gap-1.5 md:gap-2 border-l pl-2 md:pl-3 border-slate-200 dark:border-white/10">
                                 <ModeToggle />
                                 <div className="relative group">
                                     <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
@@ -400,8 +465,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     </header>
 
                     {/* ── CONTEÚDO DAS PÁGINAS ─────────────────────────────── */}
-                    {/* min-h-0: obrigatório em flex child para scroll funcionar no Safari/iOS */}
-                    <main className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 px-3 md:px-6 xl:px-8 2xl:px-10 pt-1 pb-[64px] md:pb-8 custom-scrollbar">
+                    <main className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 px-3 md:px-5 xl:px-7 2xl:px-10 pt-1 pb-[64px] md:pb-8 custom-scrollbar">
                         {children}
                     </main>
                 </div>
@@ -419,8 +483,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                                         onClick={() => setMobileMenuOpen(true)}
                                         className={`flex flex-col items-center justify-center gap-0.5 flex-1 py-2 px-1 rounded-xl transition-all active:scale-90 ${mobileMenuOpen ? 'text-primary' : 'text-slate-400'}`}
                                     >
-                                        <span className="text-xl leading-none">☰</span>
-                                        <span className="text-[9px] font-black uppercase tracking-wider">Menu</span>
+                                        {item.icon}
+                                        <span className="text-[9px] font-black uppercase tracking-wider">{item.label}</span>
                                     </button>
                                 ) : (
                                     <Link
@@ -431,7 +495,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                                         {isActive && (
                                             <motion.div layoutId="bottomNavIndicator" className="absolute inset-0 bg-primary/10 rounded-xl" />
                                         )}
-                                        <span className="text-xl leading-none relative z-10">{item.icon}</span>
+                                        <span className="relative z-10">{item.icon}</span>
                                         <span className="text-[9px] font-black uppercase tracking-wider relative z-10">{item.label}</span>
                                         {count > 0 && (
                                             <span className="absolute top-1 right-2 h-4 w-4 bg-primary text-white text-[8px] font-black rounded-full flex items-center justify-center border border-white dark:border-slate-900">

@@ -329,7 +329,11 @@ export class ChatService {
 
                     await this.prisma.ticket.update({
                         where: { id: ticketId },
-                        data: { departmentId: targetDept.id },
+                        data: {
+                            departmentId: targetDept.id,
+                            mode: 'AI' as any,        // Garante que o agente do novo departamento assume
+                            assignedUserId: null,     // Libera para auto-distribuição do novo departamento
+                        },
                     });
                     this.eventEmitter.emit('ticket.transferred', {
                         ticketId,
@@ -377,9 +381,14 @@ export class ChatService {
             if (finalizeMatch) {
                 await this.prisma.ticket.update({
                     where: { id: ticketId },
-                    data: { status: 'RESOLVED', resolvedAt: new Date() },
+                    data: { status: 'RESOLVED', resolvedAt: new Date(), closedAt: new Date() },
                 });
-                this.eventEmitter.emit('ticket.resolved', { ticketId, companyId: ticket.companyId });
+                this.eventEmitter.emit('ticket.resolved', {
+                    ticketId,
+                    companyId: ticket.companyId,
+                    connectionId: (ticket as any).connectionId,
+                    contact: ticket.contact,
+                });
                 this.logger.log(`IA finalizou ticket ${ticketId}`);
                 return; // Não enviar o texto do comando ao cliente
             }
@@ -476,9 +485,14 @@ export class ChatService {
             if (finalizeMatchPost) {
                 await this.prisma.ticket.update({
                     where: { id: ticketId },
-                    data: { status: 'RESOLVED', resolvedAt: new Date() },
+                    data: { status: 'RESOLVED', resolvedAt: new Date(), closedAt: new Date() },
                 });
-                this.eventEmitter.emit('ticket.resolved', { ticketId, companyId });
+                this.eventEmitter.emit('ticket.resolved', {
+                    ticketId,
+                    companyId,
+                    connectionId: (ticket as any).connectionId,
+                    contact: ticket.contact,
+                });
                 return;
             }
 
