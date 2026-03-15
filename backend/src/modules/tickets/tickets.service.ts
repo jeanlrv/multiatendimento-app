@@ -316,7 +316,7 @@ export class TicketsService {
         // Lean SELECT (only fields needed for diff logic) instead of full findOne with 5 relations
         const oldTicket = await this.prisma.ticket.findFirst({
             where: { id, companyId },
-            select: { id: true, status: true, departmentId: true },
+            select: { id: true, status: true, departmentId: true, assignedUserId: true },
         });
         if (!oldTicket) throw new NotFoundException(`Ticket com ID ${id} não encontrado nesta empresa`);
 

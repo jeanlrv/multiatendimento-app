@@ -99,7 +99,7 @@ export class CompaniesService {
             }),
             this.prisma.ticket.findMany({
                 where: { companyId },
-                select: { id: true, protocol: true, status: true, subject: true, createdAt: true, closedAt: true },
+                select: { id: true, status: true, subject: true, createdAt: true, closedAt: true },
             }),
             this.prisma.tag.findMany({ where: { companyId }, select: { id: true, name: true, color: true } }),
             this.prisma.department.findMany({ where: { companyId }, select: { id: true, name: true } }),

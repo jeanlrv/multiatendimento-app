@@ -91,7 +91,7 @@ export class VectorStoreService {
             } else {
                 // Buscar documentos filtrando por companyId E knowledgeBaseId (evita data leak entre tenants)
                 const validDocs = await prisma.document.findMany({
-                    where: { knowledgeBaseId, companyId, status: 'READY' },
+                    where: { knowledgeBaseId, knowledgeBase: { companyId }, status: 'READY' },
                     select: { id: true },
                 });
                 const validDocIds = validDocs.map((d: any) => d.id);
