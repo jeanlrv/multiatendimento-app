@@ -156,7 +156,7 @@ export default function AIAgentsPage() {
                 } else if (event.type === 'error') {
                     setChatHistory(prev => {
                         const updated = [...prev];
-                        updated[updated.length - 1] = { role: 'assistant', content: `⚠️ ${event.content}` };
+                        updated[updated.length - 1] = { role: 'assistant', content: `⚠️ ${event.message || event.content}` };
                         return updated;
                     });
                 }
