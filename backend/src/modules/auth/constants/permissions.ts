@@ -8,6 +8,12 @@ export enum Permission {
     TICKETS_ASSIGN = 'tickets:assign',
     TICKETS_RESOLVE = 'tickets:resolve',
 
+    // ─── Clientes (Customer / mini-CRM) ──────────────────────────────────────
+    CUSTOMERS_READ = 'customers:read',
+    CUSTOMERS_CREATE = 'customers:create',
+    CUSTOMERS_UPDATE = 'customers:update',
+    CUSTOMERS_DELETE = 'customers:delete',
+
     // ─── Contatos ─────────────────────────────────────────────────────────────
     CONTACTS_READ = 'contacts:read',
     CONTACTS_CREATE = 'contacts:create',
@@ -92,6 +98,8 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
         Permission.TICKETS_CREATE,
         Permission.TICKETS_UPDATE,
         Permission.TICKETS_RESOLVE,
+        Permission.CUSTOMERS_READ,
+        Permission.CUSTOMERS_UPDATE,
         Permission.CONTACTS_READ,
         Permission.CONTACTS_CREATE,
         Permission.CONTACTS_UPDATE,
@@ -106,6 +114,8 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
         Permission.TICKETS_CREATE,
         Permission.TICKETS_UPDATE,
         Permission.TICKETS_RESOLVE,
+        Permission.CUSTOMERS_READ,
+        Permission.CUSTOMERS_UPDATE,
         Permission.CONTACTS_READ,
         Permission.CONTACTS_CREATE,
         Permission.CONTACTS_UPDATE,
@@ -119,6 +129,10 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
         Permission.TICKETS_UPDATE,
         Permission.TICKETS_ASSIGN,
         Permission.TICKETS_RESOLVE,
+        Permission.CUSTOMERS_READ,
+        Permission.CUSTOMERS_CREATE,
+        Permission.CUSTOMERS_UPDATE,
+        Permission.CUSTOMERS_DELETE,
         Permission.CONTACTS_READ,
         Permission.CONTACTS_CREATE,
         Permission.CONTACTS_UPDATE,

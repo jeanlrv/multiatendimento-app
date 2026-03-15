@@ -43,6 +43,23 @@ export class WebhooksController {
     ) { }
 
     /**
+     * Encontra ou cria um Customer com base no telefone do contato.
+     * Usado durante a criação automática de contatos via webhook.
+     */
+    private async findOrCreateCustomer(companyId: string, phonePrimary: string, name?: string): Promise<string> {
+        const existing = await (this.prisma as any).customer.findFirst({
+            where: { phonePrimary, companyId },
+            select: { id: true },
+        });
+        if (existing) return existing.id;
+        const created = await (this.prisma as any).customer.create({
+            data: { name: name || phonePrimary, phonePrimary, companyId },
+            select: { id: true },
+        });
+        return created.id;
+    }
+
+    /**
      * Valida o clientToken do webhook Z-API.
      * A Z-API envia o token de segurança no campo `clientToken` do payload.
      * Se a instância tem token configurado e o token não bate, retorna false.
@@ -339,23 +356,40 @@ export class WebhooksController {
             where: { phoneNumber, companyId },
         });
 
+        const contactName = payload.senderName || payload.chatName || phoneNumber;
+
         if (!contact) {
+            // Auto-cria Customer para identificação do cliente
+            const customerId = await this.findOrCreateCustomer(companyId, phoneNumber, contactName);
             contact = await this.prisma.contact.create({
                 data: {
                     phoneNumber,
-                    name: payload.senderName || payload.chatName || phoneNumber,
+                    name: contactName,
                     profilePicture: payload.senderPhoto || null,
                     company: { connect: { id: companyId } },
+                    ...({ customerId } as any),
                 },
             });
-        } else if (payload.senderPhoto && contact.profilePicture !== payload.senderPhoto) {
-            contact = await this.prisma.contact.update({
-                where: { id: contact.id },
-                data: {
-                    profilePicture: payload.senderPhoto,
-                    name: payload.senderName || contact.name,
-                },
-            });
+        } else {
+            // Garante vínculo com Customer mesmo para contatos criados antes da migração
+            if (!(contact as any).customerId) {
+                const customerId = await this.findOrCreateCustomer(
+                    companyId, phoneNumber, contact.name || contactName,
+                );
+                await this.prisma.contact.update({
+                    where: { id: contact.id },
+                    data: { ...({ customerId } as any) },
+                });
+            }
+            if (payload.senderPhoto && contact.profilePicture !== payload.senderPhoto) {
+                contact = await this.prisma.contact.update({
+                    where: { id: contact.id },
+                    data: {
+                        profilePicture: payload.senderPhoto,
+                        name: payload.senderName || contact.name,
+                    },
+                });
+            }
         }
 
         // Interceptar resposta CSAT (1-5) se contato está aguardando avaliação

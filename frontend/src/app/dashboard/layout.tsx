@@ -9,6 +9,7 @@ import {
     LayoutDashboard, Headphones, Users, Smartphone, Building2, Tag, Bot,
     BookOpen, SearchCode, BrainCircuit, Megaphone, Workflow, MessagesSquare,
     CalendarDays, Award, UsersRound, ShieldCheck, TrendingUp, CircleUser, Settings2,
+    Contact2,
 } from 'lucide-react';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { useTicketBadge } from '@/hooks/useTicketBadge';
@@ -286,6 +287,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         { label: 'Dashboard',           path: '/dashboard',             icon: <LayoutDashboard size={18} />, group: 'ATENDIMENTO' },
         { label: 'Chamados',            path: '/dashboard/tickets',     icon: <Headphones size={18} />,      group: 'ATENDIMENTO', liveCount: ticketCount },
         { label: 'Contatos',            path: '/dashboard/contacts',    icon: <Users size={18} />,           group: 'ATENDIMENTO' },
+        { label: 'Clientes',            path: '/dashboard/customers',   icon: <Contact2 size={18} />,    group: 'ATENDIMENTO' },
         { label: 'Conexões',            path: '/dashboard/connections', icon: <Smartphone size={18} />,      group: 'ATENDIMENTO' },
         { label: 'Departamentos',       path: '/dashboard/departments', icon: <Building2 size={18} />,       group: 'OPERACOES' },
         { label: 'Tags',                path: '/dashboard/tags',        icon: <Tag size={18} />,             group: 'OPERACOES' },

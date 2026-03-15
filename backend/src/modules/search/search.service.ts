@@ -5,9 +5,9 @@ import { PrismaService } from '../../database/prisma.service';
 export class SearchService {
     constructor(private prisma: PrismaService) {}
 
-    async globalSearch(companyId: string, q: string, types: string[] = ['tickets', 'contacts']) {
+    async globalSearch(companyId: string, q: string, types: string[] = ['tickets', 'contacts', 'customers']) {
         const term = q.trim();
-        if (!term || term.length < 2) return { tickets: [], contacts: [] };
+        if (!term || term.length < 2) return { tickets: [], contacts: [], customers: [] };
 
         const results: any = {};
 
@@ -46,6 +46,32 @@ export class SearchService {
                 },
                 select: { id: true, name: true, phoneNumber: true, email: true },
                 orderBy: { createdAt: 'desc' },
+                take: 5,
+            });
+        }
+
+        if (types.includes('customers')) {
+            results.customers = await this.prisma.customer.findMany({
+                where: {
+                    companyId,
+                    OR: [
+                        { name: { contains: term, mode: 'insensitive' } },
+                        { phonePrimary: { contains: term } },
+                        { emailPrimary: { contains: term, mode: 'insensitive' } },
+                        { cpfCnpj: { contains: term } },
+                    ],
+                },
+                select: {
+                    id: true,
+                    name: true,
+                    type: true,
+                    status: true,
+                    phonePrimary: true,
+                    emailPrimary: true,
+                    cpfCnpj: true,
+                    _count: { select: { contacts: true } },
+                },
+                orderBy: { updatedAt: 'desc' },
                 take: 5,
             });
         }

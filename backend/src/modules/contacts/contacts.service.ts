@@ -2,11 +2,15 @@ import { Injectable, NotFoundException, ConflictException, BadRequestException }
 import { PrismaService } from '../../database/prisma.service';
 import { CreateContactDto } from './dto/create-contact.dto';
 import { UpdateContactDto } from './dto/update-contact.dto';
+import { CustomersService } from '../customers/customers.service';
 import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class ContactsService {
-    constructor(private prisma: PrismaService) { }
+    constructor(
+        private prisma: PrismaService,
+        private customersService: CustomersService,
+    ) {}
 
     async create(createContactDto: CreateContactDto, companyId: string) {
         const existing = await this.prisma.contact.findFirst({
@@ -15,8 +19,16 @@ export class ContactsService {
         if (existing) {
             throw new ConflictException('Já existe um contato com este número de telefone.');
         }
+
+        // Encontra ou cria um Customer para este contato
+        const customerId = await this.customersService.findOrCreateByPhone(
+            companyId,
+            createContactDto.phoneNumber,
+            createContactDto.name,
+        );
+
         return this.prisma.contact.create({
-            data: { ...createContactDto, companyId },
+            data: { ...createContactDto, companyId, customerId },
         });
     }
 
@@ -145,7 +157,11 @@ export class ContactsService {
                     await this.prisma.contact.update({ where: { id: existing.id }, data });
                     updated++;
                 } else {
-                    await this.prisma.contact.create({ data: { ...data, companyId } });
+                    // Auto-cria Customer para o novo contato importado
+                    const customerId = await this.customersService.findOrCreateByPhone(
+                        companyId, phone, (data as any).name,
+                    );
+                    await this.prisma.contact.create({ data: { ...data, companyId, customerId } });
                     created++;
                 }
             } catch {

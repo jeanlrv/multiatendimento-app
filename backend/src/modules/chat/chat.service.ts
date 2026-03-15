@@ -213,8 +213,24 @@ export class ChatService {
                 take: 11,
             });
 
+            // Prefixos de mensagens de sistema geradas pelo próprio sistema de transferência
+            const TRANSFER_MSG_PREFIXES = [
+                'Um momento, estou direcionando',
+                'Você foi encaminhado',
+                'Transferindo para',
+                '🔄',
+            ];
+            const isTransferSystemMsg = (text: string) =>
+                TRANSFER_MSG_PREFIXES.some(p => text.startsWith(p));
+
+            // Detecta se este ticket passou por uma transferência recente
+            const wasRecentlyTransferred = messages.some(m => isTransferSystemMsg(m.content));
+
             const history = messages
                 .filter(m => m.content !== content)
+                // Remove mensagens de sistema de transferência do histórico enviado à IA
+                // para evitar que a nova IA adote a identidade do agente anterior
+                .filter(m => !isTransferSystemMsg(m.content))
                 .reverse()
                 .map(m => ({
                     role: m.fromMe ? 'assistant' : 'user',
@@ -246,6 +262,7 @@ export class ChatService {
                 '',
                 '⚠️ NOTA: Atendimento fora do horário comercial — cliente já em sessão ativa via IA.',
                 'Continue atendendo normalmente. [TRANSFERIR:X] e [HUMANO] funcionam normalmente.',
+                'NUNCA diga ao cliente que não pode transferir ou atender por causa do horário.',
                 '',
             ] : [
                 '',
@@ -261,9 +278,24 @@ export class ChatService {
                 '     funcionam normalmente fora do horário. Departamentos com IA operam 24h.',
                 '  c) Se o cliente JÁ RECUSOU ou se despediu (disse não/depois/tchau/ok/etc.):',
                 '     responda com uma despedida cordial e use [FINALIZAR].',
-                '- IMPORTANTE: Nunca bloqueie transferências para departamentos com IA por causa do horário.',
+                '- CRÍTICO: NUNCA diga que não pode realizar transferências por causa do horário.',
+                '- CRÍTICO: Quando usar [TRANSFERIR:X], execute imediatamente sem justificar horário.',
                 '',
             ]).join('\n') : '';
+
+            // Bloco de identidade — injetado quando há histórico de outro agente no ticket
+            const identityOverrideBlock = wasRecentlyTransferred
+                ? [
+                    '',
+                    '🔁 ATENÇÃO — TICKET TRANSFERIDO:',
+                    `Este ticket foi recentemente transferido para o departamento "${currentDeptName}".`,
+                    'O histórico da conversa pode conter mensagens de outro assistente de IA anterior.',
+                    'VOCÊ É O ASSISTENTE DESTE DEPARTAMENTO. Ignore completamente qualquer identidade',
+                    'mencionada em mensagens anteriores (nome, apresentação, personalidade do agente anterior).',
+                    'Assuma sua própria identidade conforme seu prompt de sistema e atenda normalmente.',
+                    '',
+                ].join('\n')
+                : '';
 
             const routingInstructions = [
                 '========================================',
@@ -271,6 +303,7 @@ export class ChatService {
                 '========================================',
                 `Data e hora atual: ${dateStr}, ${timeStr} (${deptTimezone})`,
                 `Você está ATUALMENTE no departamento: ${currentDeptName}`,
+                identityOverrideBlock,
                 outOfHoursBlock,
                 'Você pode usar EXCLUSIVAMENTE um dos comandos abaixo quando necessário:',
                 '',
@@ -437,6 +470,20 @@ export class ChatService {
             });
             const deptNames = otherDepts.length > 0 ? otherDepts.map(d => d.name).join(', ') : '(nenhum outro disponível)';
 
+            // Verificar se estamos fora do horário comercial do NOVO departamento
+            const outOfHours = this.isOutsideBusinessHours(ticket.department);
+            const outOfHoursOverride = outOfHours
+                ? [
+                    '',
+                    '⚠️ ATENÇÃO — FORA DO HORÁRIO COMERCIAL:',
+                    'Este cliente está em uma sessão ativa transferida pela IA de recepção.',
+                    'Você DEVE atender o cliente AGORA, independente do horário.',
+                    'NÃO mencione limitações de horário. NÃO recuse atender. Continue normalmente.',
+                    '[TRANSFERIR:X] e [HUMANO] funcionam normalmente.',
+                    '',
+                ]
+                : [];
+
             const transferContext = [
                 '========================================',
                 '[INSTRUÇÕES DE ROTEAMENTO — NÃO EXIBA AO CLIENTE]',
@@ -447,6 +494,7 @@ export class ChatService {
                 'Uma breve mensagem de redirecionamento JÁ foi enviada pelo sistema.',
                 'Apresente-se como assistente deste setor e atenda a necessidade do cliente de forma direta e natural.',
                 'NÃO diga "recebi sua transferência" ou similar — apenas se apresente e resolva.',
+                ...outOfHoursOverride,
                 '',
                 `• [TRANSFERIR:NomeDoDepartamento] — transfere para outro departamento`,
                 `• [HUMANO] — transfere para um atendente humano`,

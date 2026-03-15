@@ -83,6 +83,10 @@ interface DashboardStats {
         priority: string;
         value: number;
     }[];
+    customers?: {
+        byStatus: { LEAD?: number; ACTIVE?: number; INACTIVE?: number };
+        newThisMonth: number;
+    };
 }
 
 const CHART_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
@@ -361,6 +365,31 @@ export default function DashboardPage() {
                     </motion.div>
                 ))}
             </div>
+
+            {/* Customer Metrics Row */}
+            {stats?.customers && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {[
+                        { label: 'Leads', value: stats.customers.byStatus.LEAD ?? 0, color: 'text-yellow-600', bg: 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800/30' },
+                        { label: 'Clientes Ativos', value: stats.customers.byStatus.ACTIVE ?? 0, color: 'text-green-600', bg: 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800/30' },
+                        { label: 'Inativos', value: stats.customers.byStatus.INACTIVE ?? 0, color: 'text-slate-500', bg: 'bg-slate-50 dark:bg-slate-800/40 border-slate-200 dark:border-white/10' },
+                    ].map((item, idx) => (
+                        <motion.div
+                            key={idx}
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.4 + idx * 0.08 }}
+                            className={`flex items-center justify-between px-5 py-4 rounded-2xl border ${item.bg}`}
+                        >
+                            <div>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-0.5">{item.label}</p>
+                                <p className={`text-3xl font-black ${item.color} tracking-tighter`}>{item.value}</p>
+                            </div>
+                            {idx === 0 && <span className="text-[10px] text-slate-400 text-right">+{stats.customers!.newThisMonth} este mês</span>}
+                        </motion.div>
+                    ))}
+                </div>
+            )}
 
             {/* Performance Chart */}
             <motion.div

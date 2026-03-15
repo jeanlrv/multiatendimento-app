@@ -24,6 +24,7 @@ import { MessageBubble } from '@/components/chat/MessageBubble';
 import { BulkActionBar } from '@/components/tickets/BulkActionBar';
 import { ticketsService } from '@/services/tickets';
 import { usersService } from '@/services/users';
+import CustomerProfilePanel from '@/components/customers/CustomerProfilePanel';
 
 interface Message {
     id: string;
@@ -96,6 +97,7 @@ export default function TicketsPage() {
     const [filter, setFilter] = useState('OPEN');
     const [showOnlyUnread, setShowOnlyUnread] = useState(false);
     const [showContactHistory, setShowContactHistory] = useState(false);
+    const [contactSidebarTab, setContactSidebarTab] = useState<'contact' | 'crm'>('crm');
     const [contactHistory, setContactHistory] = useState<any[]>([]);
     const [loadingHistory, setLoadingHistory] = useState(false);
 
@@ -2575,13 +2577,40 @@ export default function TicketsPage() {
                                     transition={{ type: 'spring', damping: 25, stiffness: 200 }}
                                     className="absolute inset-y-0 right-0 w-80 bg-white/80 dark:bg-slate-900/90 backdrop-blur-2xl border-l border-slate-200 dark:border-white/10 z-30 shadow-2xl flex flex-col"
                                 >
-                                    <div className="p-6 border-b border-slate-200 dark:border-white/10 flex items-center justify-between">
-                                        <h4 className="font-black text-xs uppercase tracking-[0.2em] text-slate-400">Contexto do Cliente</h4>
-                                        <button onClick={() => setShowContactHistory(false)} className="p-2 hover:bg-slate-100 dark:hover:bg-white/5 rounded-xl text-slate-400">
-                                            <X size={18} />
-                                        </button>
+                                    <div className="border-b border-slate-200 dark:border-white/10">
+                                        <div className="px-4 pt-3 pb-0 flex items-center justify-between">
+                                            <h4 className="font-black text-xs uppercase tracking-[0.2em] text-slate-400">Contexto do Cliente</h4>
+                                            <button onClick={() => setShowContactHistory(false)} className="p-1.5 hover:bg-slate-100 dark:hover:bg-white/5 rounded-xl text-slate-400">
+                                                <X size={16} />
+                                            </button>
+                                        </div>
+                                        <div className="flex px-4 gap-1 mt-2">
+                                            <button
+                                                onClick={() => setContactSidebarTab('crm')}
+                                                className={`px-3 py-1.5 text-xs font-semibold rounded-t-lg border-b-2 transition-colors ${contactSidebarTab === 'crm' ? 'border-primary text-primary' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                                            >
+                                                Perfil CRM
+                                            </button>
+                                            <button
+                                                onClick={() => setContactSidebarTab('contact')}
+                                                className={`px-3 py-1.5 text-xs font-semibold rounded-t-lg border-b-2 transition-colors ${contactSidebarTab === 'contact' ? 'border-primary text-primary' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                                            >
+                                                Contato
+                                            </button>
+                                        </div>
                                     </div>
 
+                                    {contactSidebarTab === 'crm' ? (
+                                        <div className="flex-1 overflow-y-auto custom-scrollbar">
+                                            <CustomerProfilePanel
+                                                contactId={selectedTicket.contactId || selectedTicket.contact?.id || ''}
+                                                onNavigateToTicket={(ticketId) => {
+                                                    const t = tickets.find((tk: any) => tk.id === ticketId);
+                                                    if (t) setSelectedTicket(t);
+                                                }}
+                                            />
+                                        </div>
+                                    ) : (
                                     <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
                                         {/* Perfil */}
                                         <div className="text-center">
@@ -2701,6 +2730,7 @@ export default function TicketsPage() {
                                             )}
                                         </div>
                                     </div>
+                                    )}
                                 </motion.div>
                             )}
                         </AnimatePresence>

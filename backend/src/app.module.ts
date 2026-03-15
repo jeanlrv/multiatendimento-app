@@ -38,6 +38,7 @@ import { PermissionsGuard } from './modules/auth/guards/permissions.guard';
 import { QuickRepliesModule } from './modules/quick-replies/quick-replies.module';
 import { SearchModule } from './modules/search/search.module';
 import { BroadcastModule } from './modules/broadcast/broadcast.module';
+import { CustomersModule } from './modules/customers/customers.module';
 
 @Module({
     imports: [
@@ -148,6 +149,7 @@ import { BroadcastModule } from './modules/broadcast/broadcast.module';
         QuickRepliesModule,
         SearchModule,
         BroadcastModule,
+        CustomersModule,
     ],
     controllers: [],
     providers: [

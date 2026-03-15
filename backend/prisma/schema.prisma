@@ -62,6 +62,7 @@ model User {
   conversations        Conversation[]
   pushSubscriptions    PushSubscription[]
   scheduledMessages    ScheduledMessage[]
+  customerNotes        CustomerNote[]
 
   @@index([email])
   @@map("users")
@@ -207,6 +208,86 @@ enum ConnectionStatus {
 }
 
 // ============================================
+// CLIENTES (MINI-CRM)
+// ============================================
+
+enum CustomerType {
+  PERSON
+  COMPANY
+}
+
+enum CustomerStatus {
+  LEAD
+  ACTIVE
+  INACTIVE
+}
+
+model Customer {
+  id           String         @id @default(uuid())
+  name         String
+  type         CustomerType   @default(PERSON)
+  cpfCnpj      String?
+  emailPrimary String?
+  phonePrimary String?
+  status       CustomerStatus @default(ACTIVE)
+  origin       String?
+  notes        String?        @db.Text
+  companyId    String
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  company       Company               @relation(fields: [companyId], references: [id])
+  contacts      Contact[]
+  tags          CustomerTag[]
+  customerNotes CustomerNote[]
+  customFields  CustomerCustomField[]
+
+  @@index([companyId])
+  @@index([companyId, status])
+  @@index([companyId, phonePrimary])
+  @@map("customers")
+}
+
+model CustomerTag {
+  customerId String
+  tagId      String
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  tag      Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([customerId, tagId])
+  @@map("customer_tags")
+}
+
+model CustomerNote {
+  id         String   @id @default(uuid())
+  customerId String
+  agentId    String
+  note       String   @db.Text
+  createdAt  DateTime @default(now())
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  agent    User     @relation(fields: [agentId], references: [id])
+
+  @@index([customerId])
+  @@map("customer_notes")
+}
+
+model CustomerCustomField {
+  id         String   @id @default(uuid())
+  customerId String
+  fieldName  String
+  fieldValue String?  @db.Text
+  fieldType  String   @default("text")
+  createdAt  DateTime @default(now())
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@unique([customerId, fieldName])
+  @@map("customer_custom_fields")
+}
+
+// ============================================
 // CONTATOS E CRM
 // ============================================
 
@@ -220,10 +301,12 @@ model Contact {
   information    String?  @db.Text
   riskScore      Float    @default(0.0)
   companyId      String
+  customerId     String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   company   Company    @relation(fields: [companyId], references: [id])
+  customer  Customer?  @relation(fields: [customerId], references: [id])
   tickets   Ticket[]
   schedules Schedule[]
   broadcastRecipients BroadcastRecipient[]
@@ -254,6 +337,7 @@ model Company {
   expiresAt      DateTime?
 
   contacts           Contact[]
+  customers          Customer[]
   users              User[]
   departments        Department[]
   whatsappInstances  WhatsAppInstance[]
@@ -449,8 +533,9 @@ model Tag {
   companyId String
   createdAt DateTime @default(now())
 
-  company Company     @relation(fields: [companyId], references: [id])
-  tickets TicketTag[]
+  company      Company       @relation(fields: [companyId], references: [id])
+  tickets      TicketTag[]
+  customerTags CustomerTag[]
 
   @@unique([companyId, name])
   @@index([companyId])

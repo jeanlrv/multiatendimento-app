@@ -103,6 +103,15 @@ export class DashboardService {
             historyDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
         }
 
+        // Customer metrics
+        const startOfMonth = new Date();
+        startOfMonth.setDate(1);
+        startOfMonth.setHours(0, 0, 0, 0);
+        const [customersByStatus, newCustomersThisMonth] = await Promise.all([
+            this.prisma.customer.groupBy({ by: ['status'], where: { companyId }, _count: true }),
+            this.prisma.customer.count({ where: { companyId, createdAt: { gte: startOfMonth } } }),
+        ]);
+
         return {
             tickets: {
                 active: activeTickets,
@@ -116,6 +125,10 @@ export class DashboardService {
             ticketsByDepartment: await this.getTicketsByDepartment(where),
             ticketsByStatus: await this.getTicketsByStatus(where),
             ticketsByPriority: await this.getTicketsByPriority(where),
+            customers: {
+                byStatus: customersByStatus.reduce((acc, s) => ({ ...acc, [s.status]: s._count }), {} as Record<string, number>),
+                newThisMonth: newCustomersThisMonth,
+            },
         };
     }
 
