@@ -27,6 +27,8 @@ import { subscribeToPush } from '@/lib/push-notifications';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CommandPalette } from '@/components/CommandPalette';
 import { OnboardingWizard, useOnboarding } from '@/components/OnboardingWizard';
+import { getSocket } from '@/lib/socket';
+import { useNotificationSound } from '@/hooks/useNotificationSound';
 
 // ─── Agrupamento do menu ─────────────────────────────────────────────────────
 const GROUPS = ['ATENDIMENTO', 'OPERACOES', 'INTELIGENCIA', 'EQUIPE'] as const;
@@ -195,6 +197,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
     const ticketCount = useTicketBadge(user?.id);
     const { showWizard, setShowWizard } = useOnboarding();
+    const { play: playSound } = useNotificationSound();
 
     // Fechar menu mobile ao navegar
     useEffect(() => { setMobileMenuOpen(false); }, [pathname]);
@@ -240,6 +243,42 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         const token = localStorage.getItem('token');
         if (!token) return;
         subscribeToPush(token).catch(() => null);
+    }, [user?.id]);
+
+    // Alertas globais de fila humana (IA → Humano) — visíveis em qualquer página
+    useEffect(() => {
+        if (!user) return;
+        const socket = getSocket(null);
+
+        const handleHumanQueue = (data: { ticketId: string; contactName: string; departmentId: string }) => {
+            // Só exibe se o ticket for de um departamento do usuário
+            const isMyDept = !user.departments?.length || user.departments.some(d => d.id === data.departmentId);
+            if (!isMyDept) return;
+
+            // Não duplicar: se já estiver na página de chamados, ela já mostra o toast
+            if (window.location.pathname === '/dashboard/tickets') return;
+
+            playSound('message');
+            toast('🧑 Novo atendimento na fila!', {
+                description: `${data.contactName || 'Cliente'} aguardando atendente`,
+                duration: 30000,
+                action: {
+                    label: 'Aceitar',
+                    onClick: async () => {
+                        try {
+                            await api.post(`/tickets/${data.ticketId}/accept`);
+                            toast.success('Atendimento atribuído a você!');
+                            router.push(`/dashboard/tickets?id=${data.ticketId}`);
+                        } catch {
+                            toast.error('Erro ao aceitar atendimento');
+                        }
+                    },
+                },
+            });
+        };
+
+        socket.on('ticketHumanQueue', handleHumanQueue);
+        return () => { socket.off('ticketHumanQueue', handleHumanQueue); };
     }, [user?.id]);
 
     useEffect(() => {

@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { CheckCheck, Paperclip, Video, Reply, X, Copy } from 'lucide-react';
+import { Check, CheckCheck, Paperclip, Video, Reply, X, Copy } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { CustomAudioPlayer } from './CustomAudioPlayer';
@@ -195,16 +195,14 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ msg, index, onRepl
                     <span suppressHydrationWarning className="uppercase tracking-tighter">
                         {new Date(msg.sentAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                     </span>
-                    {msg.fromMe && (
-                        <CheckCheck
-                            className={`h-3 w-3 ${msg.status === 'READ'
-                                ? 'text-blue-200'
-                                : msg.status === 'FAILED'
-                                    ? 'text-red-400'
-                                    : ''
-                                }`}
-                        />
-                    )}
+                    {msg.fromMe && (() => {
+                        if (msg.status === 'FAILED') return <Check className="h-3 w-3 text-red-400" />;
+                        if (msg.status === 'READ') return <CheckCheck className="h-3 w-3 text-blue-300" />;
+                        if (msg.status === 'DELIVERED') return <CheckCheck className="h-3 w-3 opacity-60" />;
+                        if (msg.status === 'SENT') return <Check className="h-3 w-3 opacity-60" />;
+                        // PENDING ou sem status: relógio sutil
+                        return <span className="text-[9px] opacity-40">🕐</span>;
+                    })()}
                 </div>
 
                 {/* Botão copiar texto (hover) */}

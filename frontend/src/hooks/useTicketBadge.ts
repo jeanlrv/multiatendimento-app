@@ -7,9 +7,9 @@ import { getSocket } from '@/lib/socket';
 const POLL_INTERVAL = 60_000; // 60s fallback (reduzido por ter WebSocket)
 
 /**
- * Retorna a contagem de tickets abertos/em andamento atribuídos ao usuário atual.
- * Atualiza em tempo real via WebSocket (ticketCreated, ticketUpdated, ticketTransferred)
- * com fallback de polling a cada 60s.
+ * Retorna a contagem de tickets abertos nos departamentos acessíveis ao usuário.
+ * Inclui tickets não atribuídos em modo HUMANO aguardando atendente.
+ * Atualiza em tempo real via WebSocket com fallback de polling a cada 60s.
  */
 export function useTicketBadge(userId?: string) {
     const [count, setCount] = useState(0);
@@ -18,8 +18,10 @@ export function useTicketBadge(userId?: string) {
     const fetchCount = async () => {
         if (!userId) return;
         try {
+            // Sem assignedUserId: backend escopar por departamentos do usuário (não-admins)
+            // ou retorna todos (admins). Assim tickets não atribuídos no depto também contam.
             const resp = await api.get('/tickets', {
-                params: { status: 'OPEN', assignedUserId: userId, page: 1, limit: 1 },
+                params: { status: 'OPEN', page: 1, limit: 1 },
             });
             const total: number =
                 resp.data?.meta?.total ??
@@ -42,16 +44,17 @@ export function useTicketBadge(userId?: string) {
         window.addEventListener('focus', onFocus);
 
         // WebSocket: escutar eventos de ticket em tempo real.
-        // O socket usa withCredentials: true, então autentica via httpOnly cookie.
-        // Não depende de localStorage.
         const handleTicketCreated = () => fetchCount();
         const handleTicketUpdated = () => fetchCount();
         const handleTicketTransferred = () => fetchCount();
+        // Quando IA transfere para humano, incrementa imediatamente sem aguardar poll
+        const handleTicketHumanQueue = () => fetchCount();
 
         const socket = getSocket(null);
         socket.on('ticketCreated', handleTicketCreated);
         socket.on('ticketUpdated', handleTicketUpdated);
         socket.on('ticketTransferred', handleTicketTransferred);
+        socket.on('ticketHumanQueue', handleTicketHumanQueue);
 
         return () => {
             if (intervalRef.current) clearInterval(intervalRef.current);
@@ -59,6 +62,7 @@ export function useTicketBadge(userId?: string) {
             socket.off('ticketCreated', handleTicketCreated);
             socket.off('ticketUpdated', handleTicketUpdated);
             socket.off('ticketTransferred', handleTicketTransferred);
+            socket.off('ticketHumanQueue', handleTicketHumanQueue);
         };
     }, [userId]);
 

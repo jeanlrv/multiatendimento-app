@@ -226,7 +226,17 @@ export class ChatService {
             // Detecta se este ticket passou por uma transferência recente
             const wasRecentlyTransferred = messages.some(m => isTransferSystemMsg(m.content));
 
-            const history = messages
+            // Isolamento de agentes após transferência:
+            // messages está em ordem DESC (mais recente primeiro).
+            // Encontramos a posição da última mensagem de transferência e usamos apenas
+            // as mensagens MAIS RECENTES que ela (índices menores). Isso impede que o
+            // novo agente veja as respostas do agente anterior como "suas" (role: assistant).
+            const lastTransferIdx = messages.findIndex(m => isTransferSystemMsg(m.content));
+            const relevantMessages = lastTransferIdx >= 0
+                ? messages.slice(0, lastTransferIdx) // só mensagens após a transferência
+                : messages;
+
+            const history = relevantMessages
                 .filter(m => m.content !== content)
                 // Remove mensagens de sistema de transferência do histórico enviado à IA
                 // para evitar que a nova IA adote a identidade do agente anterior

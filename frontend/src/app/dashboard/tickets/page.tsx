@@ -34,6 +34,8 @@ interface Message {
     sentAt: string;
     messageType: 'TEXT' | 'IMAGE' | 'AUDIO' | 'VIDEO' | 'DOCUMENT' | 'STICKER' | 'INTERNAL';
     mediaUrl?: string;
+    status?: string;
+    origin?: 'AGENT' | 'CLIENT' | 'AI';
     transcription?: string;
     quotedMessageId?: string;
     quotedMessage?: {
@@ -279,7 +281,22 @@ export default function TicketsPage() {
         ]);
 
         if (tagsResult.status === 'fulfilled') setAvailableTags(tagsResult.value.data);
-        if (deptsResult.status === 'fulfilled') setDepartments(deptsResult.value.data);
+        if (deptsResult.status === 'fulfilled') {
+            const loadedDepts: { id: string; name: string }[] = deptsResult.value.data;
+            setDepartments(loadedDepts);
+            // Pré-selecionar departamentos do usuário (não-admins), se ainda não houver filtro manual
+            const hasReadAll = user?.permissions?.includes('TICKETS_READ_ALL');
+            if (!hasReadAll && user?.departments?.length) {
+                const myDeptIds = user.departments.map((d: { id: string }) => d.id);
+                setAdvancedFilters(prev => {
+                    // Só inicializa se ainda não foi alterado manualmente
+                    if (prev.departments.length === 0) {
+                        return { ...prev, departments: myDeptIds };
+                    }
+                    return prev;
+                });
+            }
+        }
         if (connResult.status === 'fulfilled') setConnections(connResult.value.data);
         if (macrosResult.status === 'fulfilled') setMacros(macrosResult.value.data);
 
