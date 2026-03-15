@@ -5,7 +5,7 @@ import { AppModule } from './app.module';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
 import helmet from 'helmet';
-import cookieParser from 'cookie-parser';
+import * as cookieParser from 'cookie-parser';
 import * as Sentry from '@sentry/node';
 import { WinstonLogger } from './common/logger/winston.logger';
 
