@@ -75,8 +75,8 @@ export const AIAgentsService = {
         return response.data;
     },
 
-    /** AsyncGenerator que emite eventos SSE token a token: { type: 'chunk'|'end'|'error', content: string } */
-    streamChat: async function* (agentId: string, message: string, history: { role: string; content: string }[] = []) {
+    /** AsyncGenerator que emite eventos SSE token a token: { type: 'chunk'|'end'|'error', content?: string, message?: string } */
+    streamChat: async function* (agentId: string, message: string, history: { role: string; content: string }[] = []): AsyncGenerator<{ type: string; content?: string; message?: string }> {
         const res = await fetch(`/api/ai/agents/${agentId}/chat-stream`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -98,7 +98,7 @@ export const AIAgentsService = {
             buffer = lines.pop()!;
             for (const line of lines) {
                 if (!line.startsWith('data: ')) continue;
-                try { yield JSON.parse(line.slice(6)) as { type: string; content: string }; }
+                try { yield JSON.parse(line.slice(6)) as { type: string; content?: string; message?: string }; }
                 catch { /* linha malformada */ }
             }
         }
