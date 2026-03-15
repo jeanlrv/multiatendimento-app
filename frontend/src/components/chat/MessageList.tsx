@@ -105,7 +105,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                     const showSeparator = !prevDate || !isSameDay(currentDate, prevDate);
 
                     return (
-                        <React.Fragment key={msg.id || index}>
+                        <React.Fragment key={msg.id ?? `msg-${index}`}>
                             {showSeparator && renderDateSeparator(currentDate)}
                             <MessageBubble msg={msg as any} index={index} onReply={onReply} />
                         </React.Fragment>

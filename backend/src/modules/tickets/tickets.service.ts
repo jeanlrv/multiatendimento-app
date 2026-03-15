@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateTicketDto } from './dto/create-ticket.dto';
 import { UpdateTicketDto } from './dto/update-ticket.dto';
@@ -16,6 +16,8 @@ export class TicketsService {
     private readonly logger = new Logger(TicketsService.name);
     // In-memory cache for CSAT settings (5 min TTL) — avoids 2 DB queries per ticket resolve
     private readonly csatCache = new Map<string, { enabled: boolean; message: string | null; expiresAt: number }>();
+    // In-memory cache for delete permission settings (5 min TTL)
+    private readonly deleteSettingsCache = new Map<string, { canDelete: boolean; expiresAt: number }>();
 
     constructor(
         private prisma: PrismaService,
@@ -48,8 +50,15 @@ export class TicketsService {
             }
         };
 
-        // Automatic Assignment Logic
-        if (createTicketDto.departmentId) {
+        // Automatic Assignment Logic — gate: verificar setting autoDistribution (default true)
+        const autoDistSetting = await this.prisma.setting.findFirst({
+            where: { companyId, key: 'autoDistribution' }, select: { value: true },
+        });
+        const autoDistEnabled = !autoDistSetting
+            || autoDistSetting.value === 'true'
+            || autoDistSetting.value === '"true"';
+
+        if (autoDistEnabled && createTicketDto.departmentId) {
             const departmentWithUsers = await this.prisma.department.findUnique({
                 where: { id: createTicketDto.departmentId },
                 include: { users: { include: { user: true } } }
@@ -469,11 +478,14 @@ export class TicketsService {
         });
 
         // Emitir evento dedicado ticket.resolved (para workflows e listeners)
+        // Passa contact e connectionId diretamente (evita query redundante no onTicketResolved)
         this.eventEmitter.emit('ticket.resolved', {
             ticketId: id,
             companyId,
             ticket: resolvedTicket,
             summary: aiSummary,
+            contact: ticket.contact,
+            connectionId: ticket.connectionId ?? null,
         });
 
         // Audit Log
@@ -527,6 +539,17 @@ export class TicketsService {
         }
     }
 
+    private async checkCanDeleteTickets(companyId: string): Promise<boolean> {
+        const cached = this.deleteSettingsCache.get(companyId);
+        if (cached && Date.now() < cached.expiresAt) return cached.canDelete;
+        const s = await this.prisma.setting.findFirst({
+            where: { companyId, key: 'canDeleteTickets' }, select: { value: true },
+        });
+        const canDelete = s?.value === 'true' || s?.value === '"true"';
+        this.deleteSettingsCache.set(companyId, { canDelete, expiresAt: Date.now() + 5 * 60_000 });
+        return canDelete;
+    }
+
     private async sendCsatIfEnabled(companyId: string, ticketId: string, contact: any, connectionId: string | null) {
         if (!contact?.phoneNumber || !connectionId) return;
 
@@ -540,9 +563,15 @@ export class TicketsService {
             });
             const byKey = Object.fromEntries(settings.map(s => [s.key, s.value ?? '']));
             const rawMsg = byKey['csat_message'];
+            // JSON.parse restaura a string original com newlines reais (JSON.stringify escapa \n)
+            let parsedMsg: string | null = null;
+            if (rawMsg) {
+                const rawStr = String(rawMsg);
+                try { parsedMsg = JSON.parse(rawStr); } catch { parsedMsg = rawStr.replace(/^"|"$/g, ''); }
+            }
             csatConf = {
                 enabled: byKey['csat_enabled'] === 'true' || byKey['csat_enabled'] === '"true"',
-                message: rawMsg ? String(rawMsg).replace(/^"|"$/g, '') : null,
+                message: parsedMsg || null,
                 expiresAt: now + 5 * 60 * 1000,
             };
             this.csatCache.set(companyId, csatConf);
@@ -559,7 +588,7 @@ export class TicketsService {
         // Marcar contato como aguardando resposta CSAT
         await this.prisma.contact.update({
             where: { id: contact.id },
-            data: { csatPending: true, csatTicketId: ticketId } as any,
+            data: { csatPending: true, csatTicketId: ticketId },
         });
 
         // Emitir evento para WhatsApp service enviar a mensagem
@@ -579,10 +608,10 @@ export class TicketsService {
     }
 
     async remove(companyId: string, id: string) {
+        if (!await this.checkCanDeleteTickets(companyId))
+            throw new ForbiddenException('A exclusão de tickets está desativada nas configurações da empresa');
         await this.findOne(companyId, id);
-        return this.prisma.ticket.delete({
-            where: { id }
-        });
+        return this.prisma.ticket.delete({ where: { id } });
     }
 
     async bulkAction(companyId: string, bulkDto: BulkTicketActionDto) {
@@ -597,6 +626,9 @@ export class TicketsService {
         if (count !== ids.length) {
             throw new NotFoundException('Um ou mais tickets não pertencem a esta empresa ou não foram encontrados');
         }
+
+        if (action === BulkTicketAction.DELETE && !await this.checkCanDeleteTickets(companyId))
+            throw new ForbiddenException('A exclusão de tickets está desativada nas configurações da empresa');
 
         const result = await this.prisma.$transaction(async (tx) => {
             switch (action) {

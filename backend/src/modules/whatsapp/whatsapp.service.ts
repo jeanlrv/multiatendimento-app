@@ -405,4 +405,83 @@ export class WhatsAppService {
             this.logger.error(`Falha ao enviar CSAT para ticket ${payload.ticketId}: ${error.message}`);
         }
     }
+
+    @OnEvent('ticket.expired')
+    async handleTicketExpired(payload: { ticketId: string; companyId: string; connectionId: string; phoneNumber: string; message: string }) {
+        try {
+            await this.sendMessage(payload.connectionId, payload.phoneNumber, payload.message, payload.companyId);
+            this.logger.log(`[TicketExpired] Mensagem enviada para ${payload.phoneNumber} (ticket ${payload.ticketId})`);
+        } catch (error) {
+            this.logger.error(`[TicketExpired] Falha ao enviar mensagem: ${error.message}`);
+        }
+    }
+
+    // ─── Read Receipts & Presence ──────────────────────────────────────────────
+
+    /**
+     * Envia confirmação de leitura para o WhatsApp via Z-API.
+     * Endpoint: POST /instances/{id}/token/{tok}/read-message
+     */
+    async sendReadReceipt(connectionId: string, phoneNumber: string, messageId: string, companyId: string) {
+        const connection = await this.getInternal(connectionId, companyId);
+        const { instanceId, token, clientToken } = await this.resolveCredentials(connection, companyId);
+
+        const url = `${this.zapiBaseUrl}/instances/${instanceId}/token/${token}/read-message`;
+
+        try {
+            await axios.post(
+                url,
+                { phone: phoneNumber, messageId },
+                { headers: this.buildHeaders(clientToken) },
+            );
+            this.logger.debug(`Read receipt enviado para ${phoneNumber} (msg: ${messageId})`);
+        } catch (error) {
+            this.logger.debug(`Falha ao enviar read receipt: ${error.message}`);
+        }
+    }
+
+    /**
+     * Envia presença (digitando/parado) para o WhatsApp via Z-API.
+     * Endpoint: POST /instances/{id}/token/{tok}/send-presence
+     */
+    async sendPresence(connectionId: string, phoneNumber: string, composing: boolean, companyId: string) {
+        const connection = await this.getInternal(connectionId, companyId);
+        const { instanceId, token, clientToken } = await this.resolveCredentials(connection, companyId);
+
+        const url = `${this.zapiBaseUrl}/instances/${instanceId}/token/${token}/send-presence`;
+
+        try {
+            await axios.post(
+                url,
+                { phone: phoneNumber, presence: composing ? 'composing' : 'paused' },
+                { headers: this.buildHeaders(clientToken) },
+            );
+        } catch (error) {
+            this.logger.debug(`Falha ao enviar presença: ${error.message}`);
+        }
+    }
+
+    /**
+     * Listener: quando agente digita no chat, envia presença ao WhatsApp.
+     * Rate-limited pelo gateway (2s entre eventos).
+     */
+    @OnEvent('whatsapp.presence')
+    async handleWhatsAppPresence(payload: { ticketId: string; composing: boolean }) {
+        try {
+            const ticket = await this.prisma.ticket.findUnique({
+                where: { id: payload.ticketId },
+                include: { contact: true },
+            });
+            if (!ticket?.connectionId || !ticket?.contact?.phoneNumber) return;
+
+            await this.sendPresence(
+                ticket.connectionId,
+                ticket.contact.phoneNumber,
+                payload.composing,
+                ticket.companyId,
+            );
+        } catch (error) {
+            this.logger.debug(`[Presence] Erro ao processar presença: ${error.message}`);
+        }
+    }
 }

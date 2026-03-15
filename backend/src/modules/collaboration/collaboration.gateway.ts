@@ -12,9 +12,13 @@ import { Logger, UseGuards } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { CollaborationService } from './collaboration.service';
 
+const COLLAB_WS_ORIGINS: string[] = process.env.CORS_ORIGIN
+    ? process.env.CORS_ORIGIN.split(',').map(s => s.trim())
+    : ['http://localhost:3000', 'http://localhost:3001'];
+
 @WebSocketGateway({
     cors: {
-        origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : '*',
+        origin: COLLAB_WS_ORIGINS,
         credentials: true,
     },
     namespace: 'collab',

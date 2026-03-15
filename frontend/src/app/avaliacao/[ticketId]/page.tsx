@@ -36,6 +36,7 @@ export default function AvaliacaoPage() {
     const [ticketInfo, setTicketInfo] = useState<TicketInfo | null>(null);
     const [loading, setLoading] = useState(true);
     const [notFound, setNotFound] = useState(false);
+    const [submitError, setSubmitError] = useState(false);
 
     // Step: 1 = estrelas, 2 = comentário + NPS, 3 = confirmação
     const [step, setStep] = useState(1);
@@ -85,7 +86,7 @@ export default function AvaliacaoPage() {
             });
             setStep(3);
         } catch {
-            alert('Erro ao enviar avaliação. Tente novamente.');
+            setSubmitError(true);
         } finally {
             setSubmitting(false);
         }
@@ -125,7 +126,12 @@ export default function AvaliacaoPage() {
                 {/* Header */}
                 <div className="text-center space-y-3">
                     {ticketInfo?.company.logoUrl ? (
-                        <img src={ticketInfo.company.logoUrl} alt={ticketInfo.company.name} className="h-12 mx-auto object-contain" />
+                        <img
+                            src={ticketInfo.company.logoUrl}
+                            alt={ticketInfo.company.name}
+                            className="h-12 mx-auto object-contain"
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                        />
                     ) : (
                         <div className="w-14 h-14 bg-blue-500/20 rounded-2xl flex items-center justify-center mx-auto border border-white/10">
                             <Building2 className="text-blue-300 w-7 h-7" />
@@ -308,12 +314,17 @@ export default function AvaliacaoPage() {
                                     <ArrowLeft size={16} />
                                 </button>
                                 <button
-                                    onClick={handleSubmit}
+                                    onClick={() => { setSubmitError(false); handleSubmit(); }}
                                     disabled={submitting}
                                     className="flex-1 py-4 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-2xl font-black text-sm uppercase tracking-widest transition-all hover:scale-105 active:scale-95 shadow-xl shadow-blue-600/30"
                                 >
                                     {submitting ? 'Enviando...' : 'Enviar Avaliação'}
                                 </button>
+                                {submitError && (
+                                    <p className="w-full text-center text-xs text-red-400 mt-1">
+                                        Erro ao enviar. Tente novamente.
+                                    </p>
+                                )}
                             </div>
                         </motion.div>
                     )}

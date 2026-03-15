@@ -757,12 +757,78 @@ export default function TicketsPage() {
             });
         };
 
+        // ─── Real-Time Ticket Events ────────────────────────────────────────
+        const handleTicketCreated = (ticket: any) => {
+            // Adiciona o novo ticket no topo da lista se não existir
+            setTickets(prev => {
+                if (prev.find(t => t.id === ticket.id)) return prev;
+                return [ticket, ...prev];
+            });
+            playSound('message');
+            toast('📋 Novo atendimento!', {
+                description: `${ticket.contact?.name || 'Contato'} — ${ticket.department?.name || 'Sem setor'}`,
+                action: {
+                    label: 'Ver',
+                    onClick: () => router.push(`/dashboard/tickets?id=${ticket.id}`),
+                },
+            });
+        };
+
+        const handleTicketUpdated = (data: any) => {
+            // Atualiza o ticket na lista (status, modo, atribuição)
+            setTickets(prev => prev.map(t =>
+                t.id === (data.ticketId || data.ticket?.id)
+                    ? { ...t, ...(data.ticket || {}), status: data.newStatus || t.status }
+                    : t
+            ));
+        };
+
+        const handleTicketTransferred = () => {
+            // Re-busca a lista completa para refletir a transferência
+            fetchTickets();
+        };
+
+        const handleTicketHumanQueue = (data: { ticketId: string; contactName: string; departmentId: string }) => {
+            playSound('message');
+            toast('🧑 Novo atendimento na fila!', {
+                description: `${data.contactName} aguardando atendente`,
+                duration: 30000,
+                action: {
+                    label: 'Aceitar',
+                    onClick: async () => {
+                        try {
+                            await api.post(`/tickets/${data.ticketId}/accept`);
+                            toast.success('Atendimento atribuído a você!');
+                            fetchTickets();
+                            router.push(`/dashboard/tickets?id=${data.ticketId}`);
+                        } catch {
+                            toast.error('Erro ao aceitar atendimento');
+                        }
+                    },
+                },
+            });
+            if (Notification.permission === 'granted') {
+                new Notification('🧑 Atendimento aguardando!', {
+                    body: `${data.contactName} precisa de um atendente`,
+                    icon: '/logo.png',
+                });
+            }
+        };
+
         socket.on('globalMessage', handleGlobalMessage);
         socket.on('mention', handleMention);
+        socket.on('ticketCreated', handleTicketCreated);
+        socket.on('ticketUpdated', handleTicketUpdated);
+        socket.on('ticketTransferred', handleTicketTransferred);
+        socket.on('ticketHumanQueue', handleTicketHumanQueue);
 
         return () => {
             socket.off('globalMessage', handleGlobalMessage);
             socket.off('mention', handleMention);
+            socket.off('ticketCreated', handleTicketCreated);
+            socket.off('ticketUpdated', handleTicketUpdated);
+            socket.off('ticketTransferred', handleTicketTransferred);
+            socket.off('ticketHumanQueue', handleTicketHumanQueue);
         };
     }, [socket]);
 

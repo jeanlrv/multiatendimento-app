@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, UseGuards, Query } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Body, Param, UseGuards, Query } from '@nestjs/common';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { ChatService } from './chat.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -78,5 +78,14 @@ export class ChatController {
         @Company() companyId: string,
     ) {
         return this.chatService.transcribe(messageId, companyId);
+    }
+
+    @Delete('messages/:messageId')
+    @ApiOperation({ summary: 'Excluir uma mensagem' })
+    deleteMessage(
+        @Param('messageId') messageId: string,
+        @Company() companyId: string,
+    ) {
+        return this.chatService.deleteMessage(companyId, messageId);
     }
 }

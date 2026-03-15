@@ -64,16 +64,11 @@ export function SessionTimeoutGuard({ children }: { children: React.ReactNode })
 
     const handleContinue = async () => {
         try {
-            const refreshToken = localStorage.getItem('refresh_token');
-            if (refreshToken) {
-                const resp = await api.post('/auth/refresh', { refresh_token: refreshToken });
-                const { access_token, refresh_token: newRT } = resp.data;
-                localStorage.setItem('token', access_token);
-                if (newRT) localStorage.setItem('refresh_token', newRT);
-                document.cookie = `token=${access_token}; path=/; max-age=900; SameSite=Lax`;
-            }
+            // O refresh_token é httpOnly cookie — não está no localStorage.
+            // O axios (api) envia cookies automaticamente via withCredentials.
+            await api.post('/auth/refresh');
         } catch {
-            // se falhar, faz logout mesmo assim
+            // Se o refresh falhar (token expirado), faz logout
             logout();
             return;
         }

@@ -26,6 +26,7 @@ import { NotificationBell } from '@/components/NotificationBell';
 import { subscribeToPush } from '@/lib/push-notifications';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CommandPalette } from '@/components/CommandPalette';
+import { OnboardingWizard, useOnboarding } from '@/components/OnboardingWizard';
 
 // ─── Agrupamento do menu ─────────────────────────────────────────────────────
 const GROUPS = ['ATENDIMENTO', 'OPERACOES', 'INTELIGENCIA', 'EQUIPE'] as const;
@@ -193,6 +194,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const avatarInputRef = useRef<HTMLInputElement>(null);
 
     const ticketCount = useTicketBadge(user?.id);
+    const { showWizard, setShowWizard } = useOnboarding();
 
     // Fechar menu mobile ao navegar
     useEffect(() => { setMobileMenuOpen(false); }, [pathname]);
@@ -325,6 +327,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <SessionTimeoutGuard>
             <div className="h-[100dvh] sober-gradient flex overflow-hidden transition-colors duration-300 text-slate-900 dark:text-white">
                 <Toaster position="top-right" richColors closeButton />
+
+                {/* Onboarding Wizard — aparece na primeira visita */}
+                <AnimatePresence>
+                    {showWizard && (
+                        <OnboardingWizard onClose={() => setShowWizard(false)} />
+                    )}
+                </AnimatePresence>
 
                 {/* ── SIDEBAR DESKTOP (md+) ────────────────────────────────── */}
                 <aside className={`${sidebarCollapsed ? 'w-[68px]' : 'w-64 xl:w-72'} flex-shrink-0 hidden md:flex flex-col relative z-30 transition-all duration-300`}>

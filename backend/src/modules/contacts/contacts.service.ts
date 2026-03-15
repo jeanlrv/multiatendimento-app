@@ -12,13 +12,19 @@ export class ContactsService {
         private customersService: CustomersService,
     ) {}
 
+    private normalizePhone(phone: string): string {
+        return phone.replace(/[\s\-\+\(\)]/g, '');
+    }
+
     async create(createContactDto: CreateContactDto, companyId: string) {
+        const normalizedPhone = this.normalizePhone(createContactDto.phoneNumber);
         const existing = await this.prisma.contact.findFirst({
-            where: { companyId, phoneNumber: createContactDto.phoneNumber },
+            where: { companyId, phoneNumber: normalizedPhone },
         });
         if (existing) {
             throw new ConflictException('Já existe um contato com este número de telefone.');
         }
+        createContactDto.phoneNumber = normalizedPhone;
 
         // Encontra ou cria um Customer para este contato
         const customerId = await this.customersService.findOrCreateByPhone(
@@ -71,7 +77,7 @@ export class ContactsService {
     }
 
     async checkDuplicate(companyId: string, phone: string, excludeId?: string) {
-        const normalized = phone.replace(/[\s\-\+\(\)]/g, '');
+        const normalized = this.normalizePhone(phone);
         const contacts = await this.prisma.contact.findMany({
             where: {
                 companyId,

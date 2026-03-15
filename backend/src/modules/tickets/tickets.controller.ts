@@ -191,6 +191,18 @@ export class TicketsController {
         return this.ticketsService.bulkAction(req.user.companyId, bulkDto);
     }
 
+    @Post(':id/accept')
+    @RequirePermission(Permission.TICKETS_UPDATE)
+    @ApiOperation({ summary: 'Aceitar ticket da fila humana (atribuir a si mesmo)' })
+    async accept(@Req() req: any, @Param('id') id: string) {
+        return this.ticketsService.update(
+            req.user.companyId,
+            id,
+            { assignedUserId: req.user.id || req.user.sub, mode: 'HUMANO' as any },
+            req.user.id || req.user.sub,
+        );
+    }
+
     @Post(':id/schedule-message')
     @RequirePermission(Permission.TICKETS_UPDATE)
     @ApiOperation({ summary: 'Agendar mensagem para envio futuro' })

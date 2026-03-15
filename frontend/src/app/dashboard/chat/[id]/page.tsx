@@ -100,7 +100,7 @@ export default function ChatPage() {
         fetchChatData();
         socket.emit('joinTicket', ticketId);
 
-        socket.on('newMessage', (message: Message) => {
+        const handleNewMessage = (message: Message) => {
             if (!message.id) return;
             setMessages(prev => {
                 if (prev.find(m => m.id === message.id)) return prev;
@@ -109,27 +109,30 @@ export default function ChatPage() {
                 }
                 return [...prev, message];
             });
-        });
+        };
 
         // Listener de atualização de status de entrega (✓ enviado, ✓✓ entregue, azul lido)
-        socket.on('messageStatusUpdate', (data: { messageId: string; status: string }) => {
+        const handleMessageStatusUpdate = (data: { messageId: string; status: string }) => {
             setMessages(prev => prev.map(m =>
                 m.id === data.messageId ? { ...m, status: data.status as Message['status'] } : m
             ));
-        });
+        };
 
-
-        socket.on('typing', (data: { userId: string; userName: string; isTyping: boolean }) => {
+        const handleTyping = (data: { userId: string; userName: string; isTyping: boolean }) => {
             if (data.userId !== user?.id) {
                 setIsTyping(data.isTyping ? { userId: data.userId, userName: data.userName } : null);
             }
-        });
+        };
+
+        socket.on('newMessage', handleNewMessage);
+        socket.on('messageStatusUpdate', handleMessageStatusUpdate);
+        socket.on('typing', handleTyping);
 
         return () => {
             socket.emit('leaveTicket', ticketId);
-            socket.off('newMessage');
-            socket.off('typing');
-            socket.off('messageStatusUpdate');
+            socket.off('newMessage', handleNewMessage);
+            socket.off('typing', handleTyping);
+            socket.off('messageStatusUpdate', handleMessageStatusUpdate);
         };
     }, [ticketId]);
 

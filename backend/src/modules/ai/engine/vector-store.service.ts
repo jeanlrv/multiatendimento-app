@@ -7,15 +7,6 @@ import axios from 'axios';
 import { PrismaClient } from '@prisma/client';
 import { EmbeddingProviderFactory } from './embedding-provider.factory';
 
-interface CachedChunk {
-    id: string;
-    content: string;
-    embedding: Float32Array;
-    metadata: any;
-    pageNumber: number | null;
-    section: string | null;
-    document?: { title: string };
-}
 
 /**
  * VectorStoreService
@@ -35,19 +26,14 @@ interface CachedChunk {
 export class VectorStoreService {
     private readonly logger = new Logger(VectorStoreService.name);
 
-    // Cache de chunks por KB (evita re-fetch de embeddings a cada query)
-    private ragCache = new Map<string, { chunks: CachedChunk[]; timestamp: number }>();
-    private readonly RAG_CHUNK_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutos
-
     constructor(private readonly embeddingFactory: EmbeddingProviderFactory) { }
 
     /**
-     * Invalida o cache RAG para uma base de conhecimento específica.
+     * No-op: embeddings são buscados diretamente do banco via pgvector ($queryRaw).
+     * Mantido para compatibilidade com knowledge.processor.ts que o invoca após ingestão.
      */
-    invalidateRagCache(knowledgeBaseId: string, companyId: string): void {
-        const cacheKey = `${companyId}:${knowledgeBaseId}`;
-        this.ragCache.delete(cacheKey);
-        this.logger.log(`[RAG Cache] Cache invalidado para KB ${knowledgeBaseId}`);
+    invalidateRagCache(_knowledgeBaseId: string, _companyId: string): void {
+        // no-op
     }
 
     /**
@@ -64,7 +50,7 @@ export class VectorStoreService {
         embeddingModel?: string,
         apiKey?: string,
         baseUrl?: string,
-        language: string = 'portuguese',
+        _language: string = 'portuguese',
         minScore: number = 0.28
     ): Promise<{ id: string; content: string; score: number; metadata?: any }[]> {
         const loggerPrefix = `[RAG:KB${knowledgeBaseId}]`;
@@ -80,100 +66,65 @@ export class VectorStoreService {
                 baseUrl
             );
 
-            // 2. Buscar chunks no banco com metadados (com cache em memória para evitar re-fetch)
-            const cacheKey = `${companyId}:${knowledgeBaseId}`;
-            const cached = this.ragCache.get(cacheKey);
-            let chunks: any[];
+            // 2. Buscar chunks similares via pgvector diretamente no banco
+            // Elimina carregamento de embeddings em RAM: sem OOM risk, sem limite de 2000 chunks.
+            // Cast runtime: embedding::text::vector funciona com qualquer dimensão (384, 1024, 1536, etc.)
+            // pois filtramos por json_array_length para garantir que a dimensão bata com a query.
+            const embeddingStr = `[${queryEmbedding.join(',')}]`;
+            const dim = queryEmbedding.length;
 
-            if (cached && (Date.now() - cached.timestamp) < this.RAG_CHUNK_CACHE_TTL_MS) {
-                this.logger.debug(`${loggerPrefix} Cache HIT — ${cached.chunks.length} chunks em memória`);
-                chunks = cached.chunks;
-            } else {
-                // Buscar documentos filtrando por companyId E knowledgeBaseId (evita data leak entre tenants)
-                const validDocs = await prisma.document.findMany({
-                    where: { knowledgeBaseId, knowledgeBase: { companyId }, status: 'READY' },
-                    select: { id: true },
-                });
-                const validDocIds = validDocs.map((d: any) => d.id);
+            const pgvectorRows = await prisma.$queryRaw`
+                SELECT
+                    dc.id,
+                    dc.content,
+                    dc.metadata,
+                    dc."pageNumber",
+                    dc.section,
+                    d.title as "documentTitle",
+                    (1.0 - (dc.embedding::text::vector <=> ${embeddingStr}::vector))::float8 as "vectorScore"
+                FROM document_chunks dc
+                JOIN documents d ON dc."documentId" = d.id
+                WHERE d."knowledgeBaseId" = ${knowledgeBaseId}
+                  AND d."companyId" = ${companyId}
+                  AND d.status = 'READY'
+                  AND dc.embedding IS NOT NULL
+                  AND json_array_length(dc.embedding) = ${dim}
+                ORDER BY dc.embedding::text::vector <=> ${embeddingStr}::vector
+                LIMIT ${topK * 3}
+            ` as any[];
 
-                if (validDocIds.length === 0) {
-                    this.logger.warn(`${loggerPrefix} Nenhum documento READY na KB`);
-                    return [];
-                }
+            this.logger.debug(`${loggerPrefix} pgvector: ${pgvectorRows.length} candidatos encontrados`);
 
-                // Limite de segurança: KBs com muitos docs podem ter milhares de chunks.
-                // Carregar todos em RAM (embedding JSON = ~8-40KB/chunk) causa OOM em bases grandes.
-                const MAX_CHUNKS_IN_MEMORY = 2000;
-                const totalChunks = await prisma.documentChunk.count({
-                    where: { documentId: { in: validDocIds } },
-                });
-
-                let chunkQuery: any = {
-                    where: { documentId: { in: validDocIds } },
-                    select: {
-                        id: true, content: true, embedding: true, metadata: true,
-                        pageNumber: true, section: true,
-                        document: { select: { title: true } },
-                    },
-                };
-
-                // Se exceder o limite, carrega apenas os chunks mais recentes (docs recentes têm prioridade)
-                if (totalChunks > MAX_CHUNKS_IN_MEMORY) {
-                    this.logger.warn(`${loggerPrefix} KB grande: ${totalChunks} chunks (limite ${MAX_CHUNKS_IN_MEMORY}). Carregando amostra por documento mais recente.`);
-                    const recentDocs = await prisma.document.findMany({
-                        where: { id: { in: validDocIds } },
-                        orderBy: { createdAt: 'desc' },
-                        select: { id: true },
-                        take: Math.ceil(MAX_CHUNKS_IN_MEMORY / 10),
-                    });
-                    chunkQuery.where = { documentId: { in: recentDocs.map((d: any) => d.id) } };
-                    chunkQuery.take = MAX_CHUNKS_IN_MEMORY;
-                }
-
-                const rawChunks = await prisma.documentChunk.findMany(chunkQuery);
-                // Converter embeddings para Float32Array ao cachear (economiza memória e acelera cosineSimilarity)
-                chunks = rawChunks
-                    .filter((c: any) => Array.isArray(c.embedding) && c.embedding.length > 0)
-                    .map((c: any) => ({ ...c, embedding: new Float32Array(c.embedding) }));
-                this.ragCache.set(cacheKey, { chunks, timestamp: Date.now() });
-                this.logger.debug(`${loggerPrefix} Cache MISS — ${chunks.length} chunks carregados do banco e cacheados`);
+            if (!pgvectorRows || pgvectorRows.length === 0) {
+                this.logger.warn(`${loggerPrefix} Nenhum chunk encontrado na KB com dimensão ${dim}`);
+                // Segue para FTS fallback abaixo
             }
 
-            if (!chunks || chunks.length === 0) {
-                this.logger.warn(`${loggerPrefix} Nenhum chunk encontrado na KB`);
-                return [];
-            }
-
-            this.logger.debug(`${loggerPrefix} Buscando ${chunks.length} chunks na memória...`);
-
-            // 3. Calcular similaridade para todos os chunks
-            const scored = chunks
-                .filter((chunk) => chunk.embedding && chunk.embedding.length > 0)
-                .map((chunk) => {
-                    const vectorScore = this.cosineSimilarity(queryEmbedding, chunk.embedding);
-                    // Mescla o título do documento (da relação) com o metadata armazenado
-                    const docTitle = chunk.document?.title || '';
+            // 3. Mapear resultados para formato interno de scored items
+            const scored = pgvectorRows
+                .filter(r => r.content && r.content.trim().length >= 50)
+                .map(r => {
+                    const docTitle = r.documentTitle || '';
                     const mergedMeta = {
-                        ...(chunk.metadata || {}),
-                        documentName: docTitle || (chunk.metadata as any)?.documentName || '',
+                        ...(r.metadata || {}),
+                        documentName: docTitle || (r.metadata as any)?.documentName || '',
                     };
                     return {
-                        id: chunk.id,
-                        content: chunk.content,
+                        id: r.id,
+                        content: r.content,
                         metadata: mergedMeta,
-                        pageNumber: chunk.pageNumber,
-                        section: chunk.section,
-                        vectorScore,
+                        pageNumber: r.pageNumber,
+                        section: r.section,
+                        vectorScore: parseFloat(r.vectorScore) || 0,
                         textScore: 0,
                         hybridScore: 0,
                         score: 0,
                     };
-                })
-                .filter(item => item.content && item.content.trim().length >= 50);
+                });
 
             if (scored.length === 0) {
-                this.logger.warn(`${loggerPrefix} Nenhum chunk passou no filtro de comprimento`);
-                return [];
+                this.logger.warn(`${loggerPrefix} Nenhum chunk vetorial encontrado — usando FTS fallback`);
+                // Não retorna: deixa o FTS fallback (passo 9) tratar o caso
             }
 
             // 4. Calcular FTS score (BM25-like) para ranking híbrido

@@ -35,6 +35,7 @@ import { CryptoModule } from './common/crypto.module';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
 import { TenantGuard } from './modules/auth/guards/tenant.guard';
 import { PermissionsGuard } from './modules/auth/guards/permissions.guard';
+import { MaintenanceGuard } from './modules/auth/guards/maintenance.guard';
 import { QuickRepliesModule } from './modules/quick-replies/quick-replies.module';
 import { SearchModule } from './modules/search/search.module';
 import { BroadcastModule } from './modules/broadcast/broadcast.module';
@@ -173,6 +174,10 @@ import { CustomersModule } from './modules/customers/customers.module';
         {
             provide: APP_GUARD,
             useClass: TenantGuard,
+        },
+        {
+            provide: APP_GUARD,
+            useClass: MaintenanceGuard,
         },
         {
             provide: APP_GUARD,

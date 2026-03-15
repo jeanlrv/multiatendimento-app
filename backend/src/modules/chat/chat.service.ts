@@ -1,4 +1,4 @@
-import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { ChatGateway } from './chat.gateway';
 import { WhatsAppService } from '../whatsapp/whatsapp.service';
@@ -408,6 +408,12 @@ export class ChatService {
                     data: { mode: 'HUMANO' },
                 });
                 this.eventEmitter.emit('ticket.status_changed', { ticketId, companyId: ticket.companyId });
+                this.eventEmitter.emit('ticket.human_queue', {
+                    ticketId,
+                    companyId: ticket.companyId,
+                    departmentId: ticket.departmentId,
+                    contactName: ticket.contact?.name,
+                });
                 await this.sendMessage(
                     ticketId,
                     'Vou transferir você para um de nossos atendentes. Aguarde um momento! 👤',
@@ -538,6 +544,12 @@ export class ChatService {
                     data: { mode: 'HUMANO' },
                 });
                 this.eventEmitter.emit('ticket.status_changed', { ticketId, companyId });
+                this.eventEmitter.emit('ticket.human_queue', {
+                    ticketId,
+                    companyId,
+                    departmentId: ticket.departmentId,
+                    contactName: ticket.contact?.name,
+                });
                 await this.sendMessage(ticketId, 'Vou transferir você para um de nossos atendentes. Aguarde um momento! 👤', true, MessageType.TEXT, undefined, companyId, 'AI');
                 return;
             }
@@ -659,15 +671,43 @@ export class ChatService {
     }
 
     async markAsRead(ticketId: string, companyId: string) {
-        // Merge ownership check + ticket update (updateMany with companyId serves as validation)
+        // Buscar ticket com contato para enviar read receipt ao WhatsApp
+        const ticket = await this.prisma.ticket.findFirst({
+            where: { id: ticketId, companyId },
+            include: { contact: true },
+        });
+
+        // Buscar mensagens não lidas do cliente com externalId para read receipt
+        const unreadMsgs = await this.prisma.message.findMany({
+            where: { ticketId, fromMe: false, readAt: null },
+            select: { externalId: true },
+        });
+
+        // Merge ownership check + ticket update (updateMany com companyId serve como validação)
         await this.prisma.ticket.updateMany({
             where: { id: ticketId, companyId },
             data: { unreadMessages: 0 },
         });
-        return this.prisma.message.updateMany({
+        const result = await this.prisma.message.updateMany({
             where: { ticketId, fromMe: false, readAt: null },
             data: { readAt: new Date() },
         });
+
+        // Enviar read receipt ao WhatsApp para cada mensagem não lida (fire-and-forget)
+        if (ticket?.connectionId && ticket?.contact?.phoneNumber) {
+            for (const msg of unreadMsgs) {
+                if (msg.externalId) {
+                    this.whatsappService.sendReadReceipt(
+                        ticket.connectionId,
+                        ticket.contact.phoneNumber,
+                        msg.externalId,
+                        companyId,
+                    ).catch(() => {});
+                }
+            }
+        }
+
+        return result;
     }
 
     async transcribe(messageId: string, companyId: string) {
@@ -700,6 +740,22 @@ export class ChatService {
         });
 
         return { transcription: updatedMessage.transcription };
+    }
+
+    async deleteMessage(companyId: string, messageId: string): Promise<{ ok: boolean }> {
+        const s = await this.prisma.setting.findFirst({
+            where: { companyId, key: 'canDeleteMessages' }, select: { value: true },
+        });
+        if (s?.value !== 'true' && s?.value !== '"true"')
+            throw new ForbiddenException('A exclusão de mensagens está desativada nas configurações da empresa');
+
+        const msg = await this.prisma.message.findFirst({
+            where: { id: messageId, ticket: { companyId } }, select: { id: true },
+        });
+        if (!msg) throw new NotFoundException('Mensagem não encontrada');
+
+        await this.prisma.message.delete({ where: { id: messageId } });
+        return { ok: true };
     }
 
     @OnEvent('scheduled_message.fire')

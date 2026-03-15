@@ -14,12 +14,15 @@ import { createAdapter } from '@socket.io/redis-adapter';
 import { Redis } from 'ioredis';
 import { PrismaService } from '../../database/prisma.service';
 import { OnEvent } from '@nestjs/event-emitter';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+
+const WS_ALLOWED_ORIGINS: string[] = process.env.CORS_ORIGIN
+    ? process.env.CORS_ORIGIN.split(',').map(s => s.trim())
+    : ['http://localhost:3000', 'http://localhost:3001'];
 
 @WebSocketGateway({
     cors: {
-        origin: process.env.CORS_ORIGIN
-            ? process.env.CORS_ORIGIN.split(',').map(s => s.trim())
-            : (process.env.NODE_ENV === 'development' ? true : false),
+        origin: WS_ALLOWED_ORIGINS,
         credentials: true,
     },
     namespace: 'chat',
@@ -37,6 +40,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect, On
     constructor(
         private readonly jwtService: JwtService,
         private readonly prisma: PrismaService,
+        private readonly eventEmitter: EventEmitter2,
     ) { }
 
     async onModuleInit() {
@@ -218,6 +222,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect, On
             userName: client.data.user.name,
             isTyping: true
         });
+        // Enviar presença 'composing' ao WhatsApp via evento
+        this.eventEmitter.emit('whatsapp.presence', { ticketId, composing: true });
     }
 
     @SubscribeMessage('stopTyping')
@@ -229,6 +235,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect, On
             userId: client.data.user.sub,
             isTyping: false
         });
+        // Enviar presença 'paused' ao WhatsApp via evento
+        this.eventEmitter.emit('whatsapp.presence', { ticketId, composing: false });
     }
 
     // Método para emitir presença do contato via Webhook
@@ -262,4 +270,54 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect, On
     handleBroadcastProgress(data: { companyId: string; broadcastId: string; sentCount: number; failedCount: number; totalContacts: number; status: string }) {
         this.server.to(`company:${data.companyId}`).emit('broadcast_progress', data);
     }
+
+    // ─── Real-Time Ticket Events ────────────────────────────────────────────
+
+    /** Emitir novo ticket criado para toda a empresa */
+    emitTicketCreated(companyId: string, ticket: any) {
+        this.server.to(`company:${companyId}`).emit('ticketCreated', ticket);
+    }
+
+    /** Emitir ticket atualizado (status, modo, atribuição) */
+    emitTicketUpdated(companyId: string, ticket: any) {
+        this.server.to(`company:${companyId}`).emit('ticketUpdated', ticket);
+    }
+
+    /** Emitir ticket transferido para nova empresa/departamento */
+    emitTicketTransferred(companyId: string, data: any) {
+        this.server.to(`company:${companyId}`).emit('ticketTransferred', data);
+    }
+
+    /** Emitir alerta de ticket aguardando humano (fila) */
+    emitTicketHumanQueue(companyId: string, data: any) {
+        this.server.to(`company:${companyId}`).emit('ticketHumanQueue', data);
+    }
+
+    // ─── Ticket Lifecycle Event Listeners ─────────────────────────────────
+
+    @OnEvent('ticket.created')
+    handleTicketCreated(ticket: any) {
+        if (ticket?.companyId) {
+            this.emitTicketCreated(ticket.companyId, ticket);
+        }
+    }
+
+    @OnEvent('ticket.status_changed')
+    handleTicketStatusChanged(data: { ticketId: string; companyId: string; ticket?: any; newStatus?: string }) {
+        if (data?.companyId) {
+            this.emitTicketUpdated(data.companyId, {
+                ticketId: data.ticketId,
+                newStatus: data.newStatus,
+                ticket: data.ticket,
+            });
+        }
+    }
+
+    @OnEvent('ticket.transferred')
+    handleTicketTransferred(data: { ticketId: string; companyId: string; fromDepartmentId?: string; toDepartmentId?: string; ticket?: any }) {
+        if (data?.companyId) {
+            this.emitTicketTransferred(data.companyId, data);
+        }
+    }
+
 }

@@ -38,7 +38,8 @@ export class DashboardService implements OnModuleInit, OnModuleDestroy {
         try {
             const val = await this.redis.get(key);
             return val ? (JSON.parse(val) as T) : null;
-        } catch {
+        } catch (e) {
+            this.logger.warn(`Cache GET falhou para key=${key}: ${(e as Error).message}`);
             return null;
         }
     }
@@ -46,7 +47,9 @@ export class DashboardService implements OnModuleInit, OnModuleDestroy {
     private async setCached(key: string, value: unknown, ttlSeconds: number): Promise<void> {
         try {
             await this.redis.set(key, JSON.stringify(value), 'EX', ttlSeconds);
-        } catch { /* silencioso */ }
+        } catch (e) {
+            this.logger.warn(`Cache SET falhou para key=${key}: ${(e as Error).message}`);
+        }
     }
 
     async getStats(companyId: string, filters: { startDate?: string, endDate?: string, departmentId?: string, assignedUserId?: string }) {
@@ -213,29 +216,29 @@ export class DashboardService implements OnModuleInit, OnModuleDestroy {
         }
         startDate.setHours(0, 0, 0, 0);
 
-        // Optional filters as Prisma SQL fragments
+        // Optional filters as Prisma SQL fragments (columns are camelCase — no @map on fields)
         const deptFilter = departmentId && departmentId !== 'ALL'
-            ? Prisma.sql`AND department_id = ${departmentId}`
+            ? Prisma.sql`AND "departmentId" = ${departmentId}`
             : Prisma.empty;
         const userFilter = assignedUserId && assignedUserId !== 'ALL'
-            ? Prisma.sql`AND assigned_user_id = ${assignedUserId}`
+            ? Prisma.sql`AND "assignedUserId" = ${assignedUserId}`
             : Prisma.empty;
         const ticketDeptFilter = departmentId && departmentId !== 'ALL'
-            ? Prisma.sql`AND t.department_id = ${departmentId}`
+            ? Prisma.sql`AND t."departmentId" = ${departmentId}`
             : Prisma.empty;
         const ticketUserFilter = assignedUserId && assignedUserId !== 'ALL'
-            ? Prisma.sql`AND t.assigned_user_id = ${assignedUserId}`
+            ? Prisma.sql`AND t."assignedUserId" = ${assignedUserId}`
             : Prisma.empty;
 
         const [ticketRows, evalRows] = await Promise.all([
             this.prisma.$queryRaw<Array<{ date: string; opened: bigint; resolved: bigint }>>`
                 SELECT
-                    DATE_TRUNC('day', created_at)::date::text AS date,
+                    DATE_TRUNC('day', "createdAt")::date::text AS date,
                     COUNT(*)::bigint                           AS opened,
                     COUNT(*) FILTER (WHERE status = 'RESOLVED')::bigint AS resolved
                 FROM tickets
-                WHERE company_id = ${companyId}
-                    AND created_at >= ${startDate}
+                WHERE "companyId" = ${companyId}
+                    AND "createdAt" >= ${startDate}
                     ${deptFilter}
                     ${userFilter}
                 GROUP BY 1
@@ -243,12 +246,12 @@ export class DashboardService implements OnModuleInit, OnModuleDestroy {
             `,
             this.prisma.$queryRaw<Array<{ date: string; sentiment: number | null }>>`
                 SELECT
-                    DATE_TRUNC('day', e.created_at)::date::text AS date,
-                    AVG(e.ai_sentiment_score)::float             AS sentiment
+                    DATE_TRUNC('day', e."createdAt")::date::text AS date,
+                    AVG(e."aiSentimentScore")::float              AS sentiment
                 FROM evaluations e
-                JOIN tickets t ON t.id = e.ticket_id
-                WHERE t.company_id = ${companyId}
-                    AND e.created_at >= ${startDate}
+                JOIN tickets t ON t.id = e."ticketId"
+                WHERE t."companyId" = ${companyId}
+                    AND e."createdAt" >= ${startDate}
                     ${ticketDeptFilter}
                     ${ticketUserFilter}
                 GROUP BY 1
@@ -358,17 +361,17 @@ export class DashboardService implements OnModuleInit, OnModuleDestroy {
         startDate.setHours(0, 0, 0, 0);
 
         const deptFilter = filters.departmentId && filters.departmentId !== 'ALL'
-            ? Prisma.sql`AND department_id = ${filters.departmentId}`
+            ? Prisma.sql`AND "departmentId" = ${filters.departmentId}`
             : Prisma.empty;
 
         const rows = await this.prisma.$queryRaw<Array<{ day: number; hour: number; count: bigint }>>`
             SELECT
-                EXTRACT(DOW  FROM created_at)::int  AS day,
-                EXTRACT(HOUR FROM created_at)::int  AS hour,
-                COUNT(*)::bigint                    AS count
+                EXTRACT(DOW  FROM "createdAt")::int  AS day,
+                EXTRACT(HOUR FROM "createdAt")::int  AS hour,
+                COUNT(*)::bigint                     AS count
             FROM tickets
-            WHERE company_id = ${companyId}
-                AND created_at >= ${startDate}
+            WHERE "companyId" = ${companyId}
+                AND "createdAt" >= ${startDate}
                 ${deptFilter}
             GROUP BY 1, 2
             ORDER BY 1, 2

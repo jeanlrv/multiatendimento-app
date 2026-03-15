@@ -83,21 +83,28 @@ export class NotificationsService {
         if (!process.env.VAPID_PUBLIC_KEY) return;
 
         const subs = await this.prisma.pushSubscription.findMany({ where: { userId } });
-        await Promise.all(subs.map(async (sub) => {
-            try {
-                await webpush.sendNotification(
-                    { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-                    JSON.stringify({ title, body, url: url ?? '/dashboard/tickets' }),
-                );
-            } catch (err: any) {
-                // 410 Gone = subscription inválida (browser desinstalado)
-                if (err.statusCode === 410) {
-                    await this.prisma.pushSubscription.deleteMany({ where: { endpoint: sub.endpoint } }).catch(() => null);
-                } else {
-                    this.logger.warn(`Falha ao enviar Web Push para ${sub.userId}: ${err.message}`);
+        if (!subs.length) return;
+
+        // Limitar concorrência a 10 envios simultâneos (evita abrir centenas de conexões)
+        const CONCURRENCY = 10;
+        for (let i = 0; i < subs.length; i += CONCURRENCY) {
+            const batch = subs.slice(i, i + CONCURRENCY);
+            await Promise.allSettled(batch.map(async (sub) => {
+                try {
+                    await webpush.sendNotification(
+                        { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+                        JSON.stringify({ title, body, url: url ?? '/dashboard/tickets' }),
+                    );
+                } catch (err: any) {
+                    // 410 Gone = subscription inválida (browser desinstalado/removido)
+                    if (err.statusCode === 410) {
+                        await this.prisma.pushSubscription.deleteMany({ where: { endpoint: sub.endpoint } }).catch(() => null);
+                    } else {
+                        this.logger.warn(`Falha ao enviar Web Push para ${sub.userId}: ${err.message}`);
+                    }
                 }
-            }
-        }));
+            }));
+        }
     }
 
     // ─── Event Listeners ──────────────────────────────────────────────────────
@@ -197,5 +204,59 @@ export class NotificationsService {
                 await this.sendWebPush(manager.id, notification.title, notification.body ?? '');
             }
         }));
+    }
+
+    @OnEvent('ticket.human_queue')
+    async onTicketHumanQueue(payload: { ticketId: string; companyId: string; departmentId: string; contactName?: string }) {
+        if (!payload?.departmentId || !payload?.companyId) return;
+
+        // Buscar todos os agentes que pertencem ao departamento
+        const agents = await this.prisma.user.findMany({
+            where: {
+                companyId: payload.companyId,
+                departments: { some: { id: payload.departmentId } },
+                isActive: true,
+            },
+            select: { id: true, name: true },
+        });
+
+        if (agents.length === 0) {
+            this.logger.warn(`[HumanQueue] Nenhum agente encontrado no departamento ${payload.departmentId}`);
+            return;
+        }
+
+        const contactLabel = payload.contactName || 'Cliente';
+        const ticketShort = payload.ticketId.slice(-4).toUpperCase();
+
+        // Emitir evento de fila humana via WebSocket para toda a empresa
+        this.chatGateway.emitTicketHumanQueue(payload.companyId, {
+            ticketId: payload.ticketId,
+            departmentId: payload.departmentId,
+            contactName: contactLabel,
+        });
+
+        // Criar notificação persistente + Web Push para cada agente
+        await Promise.all(agents.map(async (agent) => {
+            const notification = await this.create({
+                userId: agent.id,
+                companyId: payload.companyId,
+                type: 'ticket.human_queue',
+                title: '🧑 Novo atendimento na fila!',
+                body: `${contactLabel} aguardando atendente (Ticket #${ticketShort})`,
+                entityType: 'ticket',
+                entityId: payload.ticketId,
+            }).catch(err => { this.logger.error(`Erro ao notificar agente ${agent.id}:`, err.message); return null; });
+
+            if (notification) {
+                await this.sendWebPush(
+                    agent.id,
+                    notification.title,
+                    notification.body ?? '',
+                    `/dashboard/tickets?id=${payload.ticketId}`,
+                );
+            }
+        }));
+
+        this.logger.log(`[HumanQueue] ${agents.length} agentes notificados para ticket ${payload.ticketId}`);
     }
 }

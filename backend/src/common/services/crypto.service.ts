@@ -53,7 +53,10 @@ export class CryptoService {
 
         try {
             const parts = text.split(':');
-            if (parts.length !== 4) return text;
+            if (parts.length !== 4) {
+                this.logger.warn('decrypt: formato inválido (esperado enc:iv:tag:dados)');
+                throw new Error('Formato de dado criptografado inválido');
+            }
 
             const [, ivHex, tagHex, encHex] = parts;
             const iv = Buffer.from(ivHex, 'hex');
@@ -65,8 +68,8 @@ export class CryptoService {
 
             return decipher.update(encryptedData).toString('utf8') + decipher.final('utf8');
         } catch (e) {
-            this.logger.error('Falha ao descriptografar valor — retornando como plaintext');
-            return text;
+            this.logger.error('Falha ao descriptografar valor — verifique se ENCRYPTION_KEY está correta e o dado não está corrompido');
+            throw new Error('Falha ao descriptografar: chave incorreta ou dado corrompido');
         }
     }
 
@@ -76,7 +79,12 @@ export class CryptoService {
      */
     mask(value: string): string {
         if (!value) return '';
-        const plain = this.decrypt(value);
+        let plain: string;
+        try {
+            plain = this.decrypt(value);
+        } catch {
+            return '****';
+        }
         if (!plain) return '';
         const visible = plain.substring(0, 4);
         const masked = '*'.repeat(Math.max(8, plain.length - 4));

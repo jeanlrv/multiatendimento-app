@@ -463,8 +463,7 @@ function mkXHR() {
 }
 
 function jp(s) {
-    if (window.JSON && window.JSON.parse) return window.JSON.parse(s);
-    return eval('(' + s + ')');
+    try { return JSON.parse(s); } catch(e) { return null; }
 }
 
 function uid() {

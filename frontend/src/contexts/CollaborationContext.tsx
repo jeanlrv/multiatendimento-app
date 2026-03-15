@@ -59,18 +59,16 @@ export const CollaborationProvider: React.FC<{ children: React.ReactNode }> = ({
         const socket = getSocket(token, 'collab');
         socketRef.current = socket;
 
-        socket.on('presenceUpdate', (data: PresenceInfo) => {
+        const handlePresenceUpdate = (data: PresenceInfo) => {
             setPresence(prev => ({ ...prev, [data.userId]: data.status }));
-        });
-
-        socket.on('newInternalMessage', (message: InternalMessage) => {
+        };
+        const handleNewInternalMessage = (message: InternalMessage) => {
             setAllMessages(prev => ({
                 ...prev,
                 [message.chatId]: [...(prev[message.chatId] || []), message]
             }));
-        });
-
-        socket.on('internalTyping', (data: { chatId: string, userId: string, userName: string, isTyping: boolean }) => {
+        };
+        const handleInternalTyping = (data: { chatId: string, userId: string, userName: string, isTyping: boolean }) => {
             setAllTypingUsers(prev => {
                 const current = prev[data.chatId] || [];
                 if (data.isTyping && !current.includes(data.userName)) {
@@ -80,37 +78,47 @@ export const CollaborationProvider: React.FC<{ children: React.ReactNode }> = ({
                 }
                 return prev;
             });
-        });
+        };
+
+        socket.on('presenceUpdate', handlePresenceUpdate);
+        socket.on('newInternalMessage', handleNewInternalMessage);
+        socket.on('internalTyping', handleInternalTyping);
 
         return () => {
-            socket.off('presenceUpdate');
-            socket.off('newInternalMessage');
-            socket.off('internalTyping');
+            socket.off('presenceUpdate', handlePresenceUpdate);
+            socket.off('newInternalMessage', handleNewInternalMessage);
+            socket.off('internalTyping', handleInternalTyping);
         };
     }, [token]);
 
     const joinChat = useCallback(async (chatId: string) => {
-        if (socketRef.current) {
-            socketRef.current.emit('joinChat', chatId);
-            setActiveChatId(chatId);
+        if (!socketRef.current) return;
 
-            // Carrega histórico de mensagens se ainda não carregado
+        setActiveChatId(chatId);
+
+        // Carregar histórico ANTES de emitir joinChat para evitar race condition:
+        // se emitirmos primeiro, mensagens novas chegam via socket e depois
+        // o setAllMessages do fetch as sobrescreveria.
+        try {
+            const res = await api.get(`/collaboration/chats/${chatId}/messages?limit=50`);
+            const history: InternalMessage[] = res.data ?? [];
+
             setAllMessages(prev => {
-                if (prev[chatId]) return prev; // já tem histórico, não recarrega
-                return prev;
+                // Mescla: preserva mensagens que chegaram via socket durante o fetch
+                const existing = prev[chatId] ?? [];
+                const existingIds = new Set(existing.map(m => m.id));
+                const merged = [
+                    ...history.filter(m => !existingIds.has(m.id)),
+                    ...existing,
+                ];
+                return { ...prev, [chatId]: merged };
             });
-
-            try {
-                const res = await api.get(`/collaboration/chats/${chatId}/messages?limit=50`);
-                const history: InternalMessage[] = res.data;
-                setAllMessages(prev => ({
-                    ...prev,
-                    [chatId]: history,
-                }));
-            } catch (err) {
-                console.error('Erro ao carregar histórico do chat:', err);
-            }
+        } catch (err) {
+            console.error('Erro ao carregar histórico do chat:', err);
         }
+
+        // Somente após histórico carregado, entrar na sala para receber novas mensagens
+        socketRef.current.emit('joinChat', chatId);
     }, []);
 
     const leaveChat = useCallback((chatId: string) => {
