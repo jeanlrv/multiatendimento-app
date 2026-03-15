@@ -96,6 +96,13 @@ export class KnowledgeProcessor extends WorkerHost {
             const chunkCount = chunks.length;
             let embeddingFailed = false;
             let embeddingFailReason = '';
+            // Rastreia se ativamos o fallback para native fastembed
+            let usingNativeFallback = embeddingProvider === 'native';
+            // Provider/modelo ativos (muda para 'native' se fallback for ativado)
+            let activeProvider = embeddingProvider;
+            let activeModel = embeddingModel;
+            let activeApiKey = embeddingApiKey;
+            let activeBaseUrl = embeddingBaseUrl;
 
             for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
                 const batchChunks = chunks.slice(i, i + BATCH_SIZE);
@@ -108,16 +115,39 @@ export class KnowledgeProcessor extends WorkerHost {
                     if (!embeddingFailed) {
                         try {
                             embedding = await this.vectorStore.generateEmbedding(
-                                content, embeddingProvider, embeddingModel, embeddingApiKey, embeddingBaseUrl
+                                content, activeProvider, activeModel, activeApiKey, activeBaseUrl
                             );
                         } catch (embErr: any) {
-                            // Tolerância a falha: salva chunk sem embedding
-                            embeddingFailed = true;
-                            embeddingFailReason = embErr.message;
-                            this.logger.warn(
-                                `[Processador] Falha ao gerar embedding com provider '${embeddingProvider}'. ` +
-                                `Documento será salvo SEM vetorização (apenas FTS). Erro: ${embErr.message}`
-                            );
+                            // Se o provider configurado falhou e ainda não ativamos o fallback nativo, tenta fastembed
+                            if (!usingNativeFallback) {
+                                this.logger.warn(
+                                    `[Processador] Provider '${embeddingProvider}' falhou: ${embErr.message}. ` +
+                                    `Tentando native fastembed como fallback de emergência...`
+                                );
+                                try {
+                                    embedding = await this.vectorStore.generateEmbedding(content, 'native', 'all-MiniLM-L6-v2');
+                                    usingNativeFallback = true;
+                                    activeProvider = 'native';
+                                    activeModel = 'all-MiniLM-L6-v2';
+                                    activeApiKey = undefined;
+                                    activeBaseUrl = undefined;
+                                    this.logger.log(`[Processador] Native fastembed ativado como fallback. Todos os chunks restantes serão indexados com native/all-MiniLM-L6-v2 (384 dims).`);
+                                } catch (natErr: any) {
+                                    embeddingFailed = true;
+                                    embeddingFailReason = `${embErr.message} | fallback nativo também falhou: ${natErr.message}`;
+                                    this.logger.warn(
+                                        `[Processador] Native fallback também falhou: ${natErr.message}. ` +
+                                        `Documento será salvo SEM vetorização (apenas FTS).`
+                                    );
+                                }
+                            } else {
+                                embeddingFailed = true;
+                                embeddingFailReason = embErr.message;
+                                this.logger.warn(
+                                    `[Processador] Falha ao gerar embedding com provider '${activeProvider}'. ` +
+                                    `Documento será salvo SEM vetorização (apenas FTS). Erro: ${embErr.message}`
+                                );
+                            }
                         }
                     }
 
@@ -190,13 +220,33 @@ export class KnowledgeProcessor extends WorkerHost {
                 },
             });
 
-            // 7. Invalida cache RAG da KB para forçar re-carregamento dos chunks na próxima query
+            // 7. Se o fallback nativo foi ativado, atualiza a KB para usar 'native'
+            //    garantindo que a busca use o mesmo provider/dimensão dos chunks indexados
+            if (usingNativeFallback && embeddingProvider !== 'native') {
+                try {
+                    await this.prisma.knowledgeBase.update({
+                        where: { id: document.knowledgeBaseId },
+                        data: { embeddingProvider: 'native', embeddingModel: 'all-MiniLM-L6-v2' },
+                    });
+                    this.logger.warn(
+                        `[Processador] KB ${document.knowledgeBaseId} atualizada para embeddingProvider='native' ` +
+                        `(fallback ativado — provider original '${embeddingProvider}' não estava disponível). ` +
+                        `Configure a chave de API do provider desejado em Configurações > IA & Modelos e reprocesse os documentos para voltar ao provider original.`
+                    );
+                } catch (kbErr: any) {
+                    this.logger.error(`[Processador] Falha ao atualizar embeddingProvider da KB: ${kbErr.message}`);
+                }
+            }
+
+            // 8. Invalida cache RAG da KB para forçar re-carregamento dos chunks na próxima query
             this.vectorStore.invalidateRagCache(document.knowledgeBaseId, companyId);
 
             if (embeddingFailed) {
                 this.logger.warn(`Documento ${documentId} salvo como READY sem embeddings (apenas FTS). Razão: ${embeddingFailReason}`);
+            } else if (usingNativeFallback && embeddingProvider !== 'native') {
+                this.logger.warn(`Documento ${documentId} processado com ${chunkCount} chunks usando native fastembed (fallback). Provider original '${embeddingProvider}' indisponível.`);
             } else {
-                this.logger.log(`Documento ${documentId} processado com sucesso: ${chunkCount} chunks (provider: ${embeddingProvider}).`);
+                this.logger.log(`Documento ${documentId} processado com sucesso: ${chunkCount} chunks (provider: ${activeProvider}).`);
             }
             return { success: true, chunkCount, embeddingFailed };
 

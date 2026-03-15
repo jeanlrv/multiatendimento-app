@@ -73,7 +73,7 @@ export class VectorStoreService {
             const embeddingStr = `[${queryEmbedding.join(',')}]`;
             const dim = queryEmbedding.length;
 
-            const pgvectorRows = await prisma.$queryRaw`
+            let pgvectorRows = await prisma.$queryRaw`
                 SELECT
                     dc.id,
                     dc.content,
@@ -95,9 +95,56 @@ export class VectorStoreService {
 
             this.logger.debug(`${loggerPrefix} pgvector: ${pgvectorRows.length} candidatos encontrados`);
 
+            // Se a busca principal não retornou nada, verifica se há chunks com dimensão diferente
+            // (ocorre quando fallback nativo foi ativado durante indexação mas a KB ainda registra outro provider)
             if (!pgvectorRows || pgvectorRows.length === 0) {
-                this.logger.warn(`${loggerPrefix} Nenhum chunk encontrado na KB com dimensão ${dim}`);
-                // Segue para FTS fallback abaixo
+                this.logger.warn(`${loggerPrefix} Nenhum chunk encontrado com dimensão ${dim} (provider: ${embeddingProvider}). Verificando dimensões alternativas...`);
+                try {
+                    const altDimRows = await prisma.$queryRaw`
+                        SELECT DISTINCT vector_dims(dc.embedding)::int as dim
+                        FROM document_chunks dc
+                        JOIN documents d ON dc."documentId" = d.id
+                        WHERE d."knowledgeBaseId" = ${knowledgeBaseId}
+                          AND d."companyId" = ${companyId}
+                          AND d.status = 'READY'
+                          AND dc.embedding IS NOT NULL
+                        LIMIT 3
+                    ` as { dim: number }[];
+
+                    const altDim = altDimRows[0]?.dim ? Number(altDimRows[0].dim) : null;
+                    if (altDim && altDim !== dim) {
+                        this.logger.warn(`${loggerPrefix} Chunks encontrados com dimensão alternativa ${altDim} — tentando busca nativa (fastembed)...`);
+                        // Gera embedding com native para casar com os chunks armazenados via fallback
+                        const nativeEmbedding = await this.generateEmbedding(query, 'native', 'all-MiniLM-L6-v2');
+                        const nativeDim = nativeEmbedding.length;
+                        const nativeEmbStr = `[${nativeEmbedding.join(',')}]`;
+                        pgvectorRows = await prisma.$queryRaw`
+                            SELECT
+                                dc.id,
+                                dc.content,
+                                dc.metadata,
+                                dc."pageNumber",
+                                dc.section,
+                                d.title as "documentTitle",
+                                (1.0 - (dc.embedding <=> ${nativeEmbStr}::vector))::float8 as "vectorScore"
+                            FROM document_chunks dc
+                            JOIN documents d ON dc."documentId" = d.id
+                            WHERE d."knowledgeBaseId" = ${knowledgeBaseId}
+                              AND d."companyId" = ${companyId}
+                              AND d.status = 'READY'
+                              AND dc.embedding IS NOT NULL
+                              AND vector_dims(dc.embedding) = ${nativeDim}
+                            ORDER BY dc.embedding <=> ${nativeEmbStr}::vector
+                            LIMIT ${topK * 3}
+                        ` as any[];
+                        this.logger.log(`${loggerPrefix} Busca nativa retornou ${pgvectorRows.length} candidatos (dim=${nativeDim}).`);
+                    }
+                } catch (altErr: any) {
+                    this.logger.warn(`${loggerPrefix} Verificação de dimensão alternativa falhou: ${altErr.message}`);
+                }
+                if (!pgvectorRows || pgvectorRows.length === 0) {
+                    // Segue para FTS fallback abaixo
+                }
             }
 
             // 3. Mapear resultados para formato interno de scored items
