@@ -22,6 +22,8 @@ const ALL_PERMISSIONS = [
     // Tickets
     'tickets:read', 'tickets:read_all', 'tickets:create', 'tickets:update',
     'tickets:delete', 'tickets:assign', 'tickets:resolve',
+    // Clientes (mini-CRM)
+    'customers:read', 'customers:create', 'customers:update', 'customers:delete',
     // Contatos
     'contacts:read', 'contacts:create', 'contacts:update', 'contacts:delete',
     // Departamentos
@@ -55,6 +57,7 @@ const ALL_PERMISSIONS = [
 const SUPERVISOR_PERMISSIONS = [
     'tickets:read', 'tickets:read_all', 'tickets:create', 'tickets:update',
     'tickets:assign', 'tickets:resolve',
+    'customers:read', 'customers:create', 'customers:update', 'customers:delete',
     'contacts:read', 'contacts:create', 'contacts:update', 'contacts:delete',
     'departments:read',
     'users:read',
@@ -71,6 +74,7 @@ const SUPERVISOR_PERMISSIONS = [
 
 const ATENDENTE_PERMISSIONS = [
     'tickets:read', 'tickets:create', 'tickets:update', 'tickets:resolve',
+    'customers:read', 'customers:update',
     'contacts:read', 'contacts:create', 'contacts:update',
     'scheduling:read', 'scheduling:create', 'scheduling:update',
     'ai:chat',

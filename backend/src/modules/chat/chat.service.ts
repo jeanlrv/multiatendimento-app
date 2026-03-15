@@ -323,7 +323,13 @@ export class ChatService {
             ].join('\n');
 
             // AIService.chat() já verifica limites de tokens e registra uso
-            const aiResponse = await this.aiService.chat(ticket.companyId, ticket.department.aiAgentId, content, history, undefined, routingInstructions);
+            let aiResponse: string | null = null;
+            try {
+                aiResponse = await this.aiService.chat(ticket.companyId, ticket.department.aiAgentId, content, history, undefined, routingInstructions);
+            } catch (chatError) {
+                this.logger.error(`[ChatAI] Falha para agente "${ticket.department.aiAgentId}" no depto "${ticket.department?.name}" (ticket: ${ticketId}): ${chatError.message}`);
+                return;
+            }
 
             if (!aiResponse) return;
 
@@ -504,10 +510,16 @@ export class ChatService {
                 '========================================',
             ].join('\n');
 
-            const aiResponse = await this.aiService.chat(companyId, ticket.department.aiAgentId, lastClientMessage, history, undefined, transferContext);
+            // Fallback garantido: cliente nunca fica sem resposta após transferência,
+            // mesmo que o agente esteja inativo, o provider não configurado, ou haja erro de API.
+            let aiResponse: string | null = null;
+            try {
+                aiResponse = await this.aiService.chat(companyId, ticket.department.aiAgentId, lastClientMessage, history, undefined, transferContext);
+            } catch (chatError) {
+                this.logger.error(`[PostTransfer] IA falhou para agente "${ticket.department.aiAgentId}" no depto "${ticket.department.name}": ${chatError.message}`);
+            }
             if (!aiResponse) {
-                // Fallback garantido: cliente nunca fica sem resposta após transferência
-                this.logger.warn(`IA pós-transferência retornou vazio para ticket ${ticketId} — usando fallback`);
+                this.logger.warn(`IA pós-transferência sem resposta para ticket ${ticketId} (agente: ${ticket.department.aiAgentId}) — usando fallback`);
                 const fallback = `Olá! Sou o assistente do setor *${ticket.department.name}*. Como posso ajudá-lo?`;
                 await this.sendMessage(ticketId, fallback, true, MessageType.TEXT, undefined, companyId, 'AI');
                 return;

@@ -36,6 +36,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         ],
     },
     {
+        group: 'Clientes',
+        icon: '🤝',
+        items: [
+            { key: 'customers:read',   label: 'Visualizar', desc: 'Ver lista de clientes e detalhes do mini-CRM' },
+            { key: 'customers:create', label: 'Criar',      desc: 'Cadastrar novos clientes' },
+            { key: 'customers:update', label: 'Editar',     desc: 'Editar dados, notas, tags e campos customizados de clientes' },
+            { key: 'customers:delete', label: 'Excluir',    desc: 'Remover clientes do sistema e mesclar duplicatas' },
+        ],
+    },
+    {
         group: 'Departamentos',
         icon: '🏢',
         items: [
