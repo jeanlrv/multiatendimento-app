@@ -1,6 +1,7 @@
 import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
+import { randomUUID } from 'crypto';
 import { PrismaService } from '../../../../database/prisma.service';
 import { VectorStoreService } from '../../engine/vector-store.service';
 import { ProviderConfigService } from '../../../settings/provider-config.service';
@@ -98,7 +99,7 @@ export class KnowledgeProcessor extends WorkerHost {
 
             for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
                 const batchChunks = chunks.slice(i, i + BATCH_SIZE);
-                const chunkData: { documentId: string; content: string; embedding?: any; metadata?: any }[] = [];
+                const chunkData: { id: string; documentId: string; content: string; embedding?: number[]; metadata?: any }[] = [];
 
                 for (let j = 0; j < batchChunks.length; j++) {
                     const content = batchChunks[j];
@@ -135,18 +136,39 @@ export class KnowledgeProcessor extends WorkerHost {
                     }
 
                     chunkData.push({
+                        id: randomUUID(),
                         documentId,
                         content,
-                        embedding: embedding && embedding.length > 0 ? (embedding as any) : undefined,
+                        embedding: embedding && embedding.length > 0 ? embedding : undefined,
                         metadata,
                     });
                 }
 
                 // Insere lote atual no banco
                 if (chunkData.length > 0) {
-                    await this.prisma.documentChunk.createMany({ data: chunkData });
+                    // Passo 1: createMany sem embedding (coluna vector não aceita via ORM)
+                    await this.prisma.documentChunk.createMany({
+                        data: chunkData.map(c => ({
+                            id: c.id,
+                            documentId: c.documentId,
+                            content: c.content,
+                            metadata: c.metadata ?? undefined,
+                        })),
+                    });
+
+                    // Passo 2: UPDATE por ID com cast ::vector para chunks com embedding
+                    const withEmbedding = chunkData.filter(c => c.embedding && c.embedding.length > 0);
+                    for (const c of withEmbedding) {
+                        const vecStr = `[${c.embedding!.join(',')}]`;
+                        await this.prisma.$executeRaw`
+                            UPDATE document_chunks
+                            SET embedding = ${vecStr}::vector
+                            WHERE id = ${c.id}
+                        `;
+                    }
+
                     processedCount += chunkData.length;
-                    this.logger.log(`Documento ${documentId} - lote inserido: ${processedCount}/${chunkCount} chunks.`);
+                    this.logger.log(`Documento ${documentId} - lote inserido: ${processedCount}/${chunkCount} chunks (${withEmbedding.length} com embedding).`);
                     await new Promise(resolve => setTimeout(resolve, 50));
                 }
             }

@@ -66,10 +66,10 @@ export class VectorStoreService {
                 baseUrl
             );
 
-            // 2. Buscar chunks similares via pgvector diretamente no banco
-            // Elimina carregamento de embeddings em RAM: sem OOM risk, sem limite de 2000 chunks.
-            // Cast runtime: embedding::text::vector funciona com qualquer dimensão (384, 1024, 1536, etc.)
-            // pois filtramos por json_array_length para garantir que a dimensão bata com a query.
+            // 2. Buscar chunks similares via pgvector diretamente no banco.
+            // A coluna embedding é do tipo nativo vector (pgvector), sem cast por linha.
+            // O índice HNSW (document_chunks_embedding_hnsw_idx) é usado automaticamente
+            // para busca ANN (Approximate Nearest Neighbor) com latência de 1-3ms.
             const embeddingStr = `[${queryEmbedding.join(',')}]`;
             const dim = queryEmbedding.length;
 
@@ -81,15 +81,15 @@ export class VectorStoreService {
                     dc."pageNumber",
                     dc.section,
                     d.title as "documentTitle",
-                    (1.0 - (dc.embedding::text::vector <=> ${embeddingStr}::vector))::float8 as "vectorScore"
+                    (1.0 - (dc.embedding <=> ${embeddingStr}::vector))::float8 as "vectorScore"
                 FROM document_chunks dc
                 JOIN documents d ON dc."documentId" = d.id
                 WHERE d."knowledgeBaseId" = ${knowledgeBaseId}
                   AND d."companyId" = ${companyId}
                   AND d.status = 'READY'
                   AND dc.embedding IS NOT NULL
-                  AND json_array_length(dc.embedding) = ${dim}
-                ORDER BY dc.embedding::text::vector <=> ${embeddingStr}::vector
+                  AND vector_dims(dc.embedding) = ${dim}
+                ORDER BY dc.embedding <=> ${embeddingStr}::vector
                 LIMIT ${topK * 3}
             ` as any[];
 

@@ -649,7 +649,7 @@ model DocumentChunk {
   section    String? // Seção do documento (por exemplo, cabeçalho, corpo, rodapé)
 
   // Embedding via Json (armazenamento vetorial)
-  embedding Json?
+  embedding Unsupported("vector(1024)")?
 
   document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
 
