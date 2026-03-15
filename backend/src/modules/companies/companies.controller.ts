@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, BadRequestException } from '@nestjs/common';
 import { CompaniesService } from './companies.service';
 import { JwtAuthGuard } from '../../modules/auth/guards/jwt-auth.guard';
 import { Company as CompanyDecorator } from '../../common/decorators/company.decorator';
@@ -45,6 +45,30 @@ export class CompaniesController {
     create(@Body() data: CreateCompanyDto) {
         return this.companiesService.create(data);
     }
+
+    // ── LGPD endpoints — rotas estáticas ANTES das parameterizadas (:id) ────
+
+    @Get('my-data/export')
+    @RequirePermission(Permission.SETTINGS_READ)
+    @ApiOperation({ summary: 'LGPD: exportar todos os dados da empresa (portabilidade)' })
+    exportMyData(@CompanyDecorator() companyId: string) {
+        return this.companiesService.exportData(companyId);
+    }
+
+    @Delete('my-data')
+    @RequirePermission(Permission.SETTINGS_UPDATE)
+    @ApiOperation({ summary: 'LGPD: excluir todos os dados da empresa (direito ao esquecimento)' })
+    deleteMyData(
+        @CompanyDecorator() companyId: string,
+        @Body('confirmedName') confirmedName: string,
+    ) {
+        if (!confirmedName) {
+            throw new BadRequestException('Informe "confirmedName" com o nome exato da empresa para confirmar a exclusão.');
+        }
+        return this.companiesService.deleteAllData(companyId, confirmedName);
+    }
+
+    // ── CRUD admin — rotas parameterizadas (:id) por último ─────────────────
 
     @Patch(':id')
     @RequirePermission(Permission.SETTINGS_UPDATE)

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { useDebounce } from '@/hooks/useDebounce';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { getSocket } from '@/lib/socket';
@@ -194,6 +195,7 @@ export default function TicketsPage() {
     const [showScrollBottom, setShowScrollBottom] = useState(false);
     const messagesContainerRef = useRef<HTMLDivElement>(null);
     const [searchTerm, setSearchTerm] = useState('');
+    const debouncedSearch = useDebounce(searchTerm, 400);
     const [advancedFilters, setAdvancedFilters] = useState({
         priority: '',
         connectionId: '',
@@ -249,7 +251,7 @@ export default function TicketsPage() {
             setLoading(true);
             const response = await ticketsService.findAll({
                 status: filter,
-                search: searchTerm,
+                search: debouncedSearch,
                 priority: advancedFilters.priority,
                 connectionId: advancedFilters.connectionId,
                 tags: advancedFilters.tags,
@@ -647,12 +649,8 @@ export default function TicketsPage() {
     }, [showOptionsMenu]);
 
     useEffect(() => {
-        const delayDebounceFn = setTimeout(() => {
-            fetchTickets();
-        }, 500);
-
-        return () => clearTimeout(delayDebounceFn);
-    }, [filter, searchTerm, advancedFilters]);
+        fetchTickets();
+    }, [filter, debouncedSearch, advancedFilters]);
 
     useEffect(() => {
         fetchMetadata();

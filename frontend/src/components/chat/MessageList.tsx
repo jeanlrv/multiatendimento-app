@@ -1,7 +1,10 @@
-import React from 'react';
+'use client';
+
+import React, { useEffect, useRef, useCallback } from 'react';
 import { MessageBubble } from './MessageBubble';
 import { isSameDay, format, isYesterday } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { Loader2 } from 'lucide-react';
 
 interface Message {
     id: string;
@@ -18,9 +21,52 @@ interface MessageListProps {
     messages: Message[];
     messagesEndRef: React.RefObject<HTMLDivElement>;
     onReply?: (msg: any) => void;
+    onLoadMore?: () => void;
+    hasMore?: boolean;
+    loadingMore?: boolean;
 }
 
-export const MessageList: React.FC<MessageListProps> = ({ messages, messagesEndRef, onReply }) => {
+export const MessageList: React.FC<MessageListProps> = ({
+    messages,
+    messagesEndRef,
+    onReply,
+    onLoadMore,
+    hasMore = false,
+    loadingMore = false,
+}) => {
+    const sentinelRef = useRef<HTMLDivElement>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
+    const prevScrollHeightRef = useRef<number>(0);
+
+    // Preserve scroll position when prepending older messages
+    useEffect(() => {
+        const container = containerRef.current;
+        if (!container) return;
+        const heightDiff = container.scrollHeight - prevScrollHeightRef.current;
+        if (heightDiff > 0 && prevScrollHeightRef.current > 0) {
+            container.scrollTop += heightDiff;
+        }
+        prevScrollHeightRef.current = container.scrollHeight;
+    }, [messages.length]);
+
+    // IntersectionObserver — triggers onLoadMore when sentinel enters viewport
+    const handleIntersect = useCallback(
+        (entries: IntersectionObserverEntry[]) => {
+            if (entries[0].isIntersecting && hasMore && !loadingMore && onLoadMore) {
+                prevScrollHeightRef.current = containerRef.current?.scrollHeight ?? 0;
+                onLoadMore();
+            }
+        },
+        [hasMore, loadingMore, onLoadMore],
+    );
+
+    useEffect(() => {
+        const sentinel = sentinelRef.current;
+        if (!sentinel) return;
+        const observer = new IntersectionObserver(handleIntersect, { threshold: 0.1 });
+        observer.observe(sentinel);
+        return () => observer.disconnect();
+    }, [handleIntersect]);
 
     const renderDateSeparator = (date: Date) => {
         let label = format(date, "d 'de' MMMM", { locale: ptBR });
@@ -38,7 +84,20 @@ export const MessageList: React.FC<MessageListProps> = ({ messages, messagesEndR
     };
 
     return (
-        <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 custom-scrollbar scroll-smooth">
+        <div
+            ref={containerRef}
+            className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 custom-scrollbar scroll-smooth"
+            style={{ contain: 'strict' }}
+        >
+            {/* Sentinel para carregar mensagens mais antigas */}
+            <div ref={sentinelRef} className="h-1" />
+
+            {loadingMore && (
+                <div className="flex justify-center py-2">
+                    <Loader2 className="h-4 w-4 animate-spin text-slate-400" />
+                </div>
+            )}
+
             <div className="flex flex-col space-y-6">
                 {messages.map((msg, index) => {
                     const currentDate = new Date(msg.sentAt);

@@ -130,43 +130,124 @@ export class ContactsService {
             return { created: 0, updated: 0, failed: 0, errors: ['Coluna de telefone não encontrada. Use: telefone, phone, celular, whatsapp'] };
         }
 
-        let created = 0, updated = 0, failed = 0;
+        // ── Passo 1: parse e validação em memória (sem queries) ──────────────
+        type ParsedRow = { phone: string; name?: string; email?: string; notes?: string };
+        const validRows: ParsedRow[] = [];
+        let failed = 0;
         const errors: string[] = [];
 
         for (let i = 1; i < lines.length; i++) {
             const row = lines[i].split(sep).map(v => v.trim().replace(/^"|"$/g, ''));
-            const phoneRaw = row[idx.phone] ?? '';
-            const phone = phoneRaw.replace(/\D/g, '');
-
+            const phone = (row[idx.phone] ?? '').replace(/\D/g, '');
             if (!phone) {
                 failed++;
-                errors.push(`Linha ${i + 1}: telefone inválido (${phoneRaw})`);
+                errors.push(`Linha ${i + 1}: telefone inválido (${row[idx.phone] ?? ''})`);
                 continue;
             }
+            validRows.push({
+                phone,
+                ...(idx.name !== -1 && row[idx.name] ? { name: row[idx.name] } : {}),
+                ...(idx.email !== -1 && row[idx.email] ? { email: row[idx.email] } : {}),
+                ...(idx.notes !== -1 && row[idx.notes] ? { notes: row[idx.notes] } : {}),
+            });
+        }
 
+        if (validRows.length === 0) return { created: 0, updated: 0, failed, errors: errors.slice(0, 20) };
+
+        const phones = [...new Set(validRows.map(r => r.phone))];
+
+        // ── Passo 2: 2 queries para buscar existentes (antes eram N queries) ─
+        const [existingContacts, existingCustomers] = await Promise.all([
+            this.prisma.contact.findMany({
+                where: { companyId, phoneNumber: { in: phones } },
+                select: { id: true, phoneNumber: true },
+            }),
+            this.prisma.customer.findMany({
+                where: { companyId, phonePrimary: { in: phones } },
+                select: { id: true, phonePrimary: true },
+            }),
+        ]);
+
+        const contactById = new Map(existingContacts.map(c => [c.phoneNumber, c.id]));
+        const customerById = new Map(existingCustomers.map(c => [c.phonePrimary, c.id]));
+
+        const toUpdate = validRows.filter(r => contactById.has(r.phone));
+        const toCreate = validRows.filter(r => !contactById.has(r.phone));
+
+        // ── Passo 3: updates em lotes paralelos de 50 ────────────────────────
+        const CHUNK = 50;
+        let updated = 0;
+        for (let i = 0; i < toUpdate.length; i += CHUNK) {
+            const chunk = toUpdate.slice(i, i + CHUNK);
+            const results = await Promise.allSettled(
+                chunk.map(row => this.prisma.contact.update({
+                    where: { id: contactById.get(row.phone)! },
+                    data: { phoneNumber: row.phone, name: row.name, email: row.email, notes: row.notes },
+                })),
+            );
+            results.forEach((r, j) => {
+                if (r.status === 'fulfilled') updated++;
+                else { failed++; errors.push(`Telefone ${chunk[j].phone}: erro ao atualizar`); }
+            });
+        }
+
+        // ── Passo 4: criar customers faltando em lote ─────────────────────────
+        const newPhones = [...new Set(toCreate.map(r => r.phone).filter(p => !customerById.has(p)))];
+        for (let i = 0; i < newPhones.length; i += CHUNK) {
+            const chunk = newPhones.slice(i, i + CHUNK);
+            const results = await Promise.allSettled(
+                chunk.map(phone => this.prisma.customer.create({
+                    data: {
+                        name: toCreate.find(r => r.phone === phone)?.name || phone,
+                        phonePrimary: phone,
+                        companyId,
+                    },
+                    select: { id: true, phonePrimary: true },
+                })),
+            );
+            results.forEach(r => {
+                if (r.status === 'fulfilled') customerById.set(r.value.phonePrimary, r.value.id);
+            });
+        }
+
+        // ── Passo 5: criar contatos em lote (createMany) ──────────────────────
+        let created = 0;
+        for (let i = 0; i < toCreate.length; i += CHUNK) {
+            const chunk = toCreate.slice(i, i + CHUNK).filter(r => customerById.has(r.phone));
+            if (chunk.length === 0) continue;
             try {
-                const data = {
-                    phoneNumber: phone,
-                    ...(idx.name !== -1 && row[idx.name] && { name: row[idx.name] }),
-                    ...(idx.email !== -1 && row[idx.email] && { email: row[idx.email] }),
-                    ...(idx.notes !== -1 && row[idx.notes] && { notes: row[idx.notes] }),
-                };
-
-                const existing = await this.prisma.contact.findFirst({ where: { companyId, phoneNumber: phone } });
-                if (existing) {
-                    await this.prisma.contact.update({ where: { id: existing.id }, data });
-                    updated++;
-                } else {
-                    // Auto-cria Customer para o novo contato importado
-                    const customerId = await this.customersService.findOrCreateByPhone(
-                        companyId, phone, (data as any).name,
-                    );
-                    await this.prisma.contact.create({ data: { ...data, companyId, customerId } });
-                    created++;
-                }
+                await this.prisma.contact.createMany({
+                    data: chunk.map(row => ({
+                        phoneNumber: row.phone,
+                        name: row.name || row.phone,
+                        email: row.email,
+                        notes: row.notes,
+                        companyId,
+                        customerId: customerById.get(row.phone)!,
+                    })),
+                    skipDuplicates: true,
+                });
+                created += chunk.length;
             } catch {
-                failed++;
-                errors.push(`Linha ${i + 1}: erro ao processar telefone ${phone}`);
+                // fallback individual para contabilizar erros precisos
+                for (const row of chunk) {
+                    try {
+                        await this.prisma.contact.create({
+                            data: {
+                                phoneNumber: row.phone,
+                                name: row.name || row.phone,
+                                email: row.email,
+                                notes: row.notes,
+                                companyId,
+                                customerId: customerById.get(row.phone)!,
+                            },
+                        });
+                        created++;
+                    } catch {
+                        failed++;
+                        errors.push(`Telefone ${row.phone}: erro ao criar contato`);
+                    }
+                }
             }
         }
 

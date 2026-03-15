@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useDebounce } from '@/hooks/useDebounce';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Contact2, Plus, Search, X, ChevronDown, Users, Building2, Loader2,
@@ -47,8 +48,8 @@ export default function CustomersPage() {
     const [total, setTotal] = useState(0);
     const [page, setPage] = useState(1);
     const [lastPage, setLastPage] = useState(1);
-    const [search, setSearch] = useState('');
     const [searchInput, setSearchInput] = useState('');
+    const search = useDebounce(searchInput, 400);
     const [statusFilter, setStatusFilter] = useState('');
     const [loading, setLoading] = useState(true);
 
@@ -70,8 +71,6 @@ export default function CustomersPage() {
     const [mergeTarget, setMergeTarget] = useState<Customer | null>(null);
     const [merging, setMerging] = useState(false);
 
-    const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
     const load = useCallback(async () => {
         setLoading(true);
         try {
@@ -88,14 +87,11 @@ export default function CustomersPage() {
 
     useEffect(() => { load(); }, [load]);
 
-    // Debounce da busca
+    // Reseta página quando busca muda
+    useEffect(() => { setPage(1); }, [search]);
+
     const handleSearchChange = (v: string) => {
         setSearchInput(v);
-        if (searchTimer.current) clearTimeout(searchTimer.current);
-        searchTimer.current = setTimeout(() => {
-            setSearch(v);
-            setPage(1);
-        }, 400);
     };
 
     const openCreate = () => {

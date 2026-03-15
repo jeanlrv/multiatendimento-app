@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useDebounce } from "@/hooks/useDebounce";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
@@ -31,7 +32,7 @@ import { api } from "@/services/api";
 export default function ContactsPage() {
     const [contacts, setContacts] = useState<Contact[]>([]);
     const [searchInput, setSearchInput] = useState("");
-    const [search, setSearch] = useState("");
+    const search = useDebounce(searchInput, 400);
     const [page, setPage] = useState(1);
     const [total, setTotal] = useState(0);
     const [lastPage, setLastPage] = useState(1);
@@ -47,14 +48,10 @@ export default function ContactsPage() {
     const [mergeResults, setMergeResults] = useState<Contact[]>([]);
     const [isMerging, setIsMerging] = useState(false);
 
-    // Debounce: só busca 400ms após parar de digitar, reseta página para 1
+    // Reseta página quando busca muda
     useEffect(() => {
-        const t = setTimeout(() => {
-            setSearch(searchInput);
-            setPage(1);
-        }, 400);
-        return () => clearTimeout(t);
-    }, [searchInput]);
+        setPage(1);
+    }, [search]);
 
     const fetchContacts = async () => {
         try {

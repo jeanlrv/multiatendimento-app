@@ -28,6 +28,7 @@ import { AuthProvider } from '@/contexts/AuthContext'
 import { CollaborationProvider } from '@/contexts/CollaborationContext'
 import { ThemeProvider } from '@/components/theme-provider'
 import QueryProvider from '@/providers/QueryProvider'
+import { CookieConsent } from '@/components/CookieConsent'
 
 export default function RootLayout({
     children,
@@ -47,6 +48,7 @@ export default function RootLayout({
                         <AuthProvider>
                             <CollaborationProvider>
                                 {children}
+                                <CookieConsent />
                             </CollaborationProvider>
                         </AuthProvider>
                     </QueryProvider>

@@ -14,6 +14,8 @@ import { Queue } from 'bullmq';
 @Injectable()
 export class TicketsService {
     private readonly logger = new Logger(TicketsService.name);
+    // In-memory cache for CSAT settings (5 min TTL) — avoids 2 DB queries per ticket resolve
+    private readonly csatCache = new Map<string, { enabled: boolean; message: string | null; expiresAt: number }>();
 
     constructor(
         private prisma: PrismaService,
@@ -311,7 +313,12 @@ export class TicketsService {
     }
 
     async update(companyId: string, id: string, updateTicketDto: UpdateTicketDto, actorUserId?: string) {
-        const oldTicket = await this.findOne(companyId, id);
+        // Lean SELECT (only fields needed for diff logic) instead of full findOne with 5 relations
+        const oldTicket = await this.prisma.ticket.findFirst({
+            where: { id, companyId },
+            select: { id: true, status: true, departmentId: true },
+        });
+        if (!oldTicket) throw new NotFoundException(`Ticket com ID ${id} não encontrado nesta empresa`);
 
         const updatedTicket = await this.prisma.ticket.update({
             where: { id },
@@ -523,19 +530,26 @@ export class TicketsService {
     private async sendCsatIfEnabled(companyId: string, ticketId: string, contact: any, connectionId: string | null) {
         if (!contact?.phoneNumber || !connectionId) return;
 
-        // Ler configuração CSAT do key-value settings store
-        const csatEnabledSetting = await this.prisma.setting.findUnique({
-            where: { companyId_key: { companyId, key: 'csat_enabled' } },
-        });
-        const csatMessageSetting = await this.prisma.setting.findUnique({
-            where: { companyId_key: { companyId, key: 'csat_message' } },
-        });
+        // Ler configuração CSAT — cache em memória 5 min (2 queries → 1, quase-zero após 1ª chamada)
+        const now = Date.now();
+        let csatConf = this.csatCache.get(companyId);
+        if (!csatConf || csatConf.expiresAt < now) {
+            const settings = await this.prisma.setting.findMany({
+                where: { companyId, key: { in: ['csat_enabled', 'csat_message'] } },
+                select: { key: true, value: true },
+            });
+            const byKey = Object.fromEntries(settings.map(s => [s.key, s.value ?? '']));
+            const rawMsg = byKey['csat_message'];
+            csatConf = {
+                enabled: byKey['csat_enabled'] === 'true' || byKey['csat_enabled'] === '"true"',
+                message: rawMsg ? String(rawMsg).replace(/^"|"$/g, '') : null,
+                expiresAt: now + 5 * 60 * 1000,
+            };
+            this.csatCache.set(companyId, csatConf);
+        }
 
-        const csatEnabled = csatEnabledSetting?.value === 'true' || csatEnabledSetting?.value === '"true"';
-        const rawCsatMessage = csatMessageSetting?.value;
-        const csatMessage = rawCsatMessage
-            ? String(rawCsatMessage).replace(/^"|"$/g, '') // remover aspas do JSON.stringify
-            : null;
+        const csatEnabled = csatConf.enabled;
+        const csatMessage = csatConf.message;
 
         if (!csatEnabled || !csatMessage) {
             this.logger.debug(`CSAT desabilitado ou sem mensagem configurada para empresa ${companyId}`);

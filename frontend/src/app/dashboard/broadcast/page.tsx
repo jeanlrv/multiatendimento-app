@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Radio, Send, Users, Plus, X, Play, Pause, Trash2, CheckCircle2, XCircle, Clock, ChevronRight, MessageSquare, Loader2 } from 'lucide-react';
+import { EmptyState } from '@/components/EmptyState';
 import { api } from '@/services/api';
 import { toast } from 'sonner';
 import { getSocket } from '@/lib/socket';
@@ -182,10 +183,12 @@ export default function BroadcastPage() {
                     {loading ? (
                         <div className="flex items-center justify-center py-16"><Loader2 size={24} className="animate-spin text-primary" /></div>
                     ) : broadcasts.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-16 text-slate-400 gap-2">
-                            <Radio size={32} className="opacity-30" />
-                            <p className="text-sm font-medium">Nenhuma campanha ainda</p>
-                        </div>
+                        <EmptyState
+                            icon={Radio}
+                            title="Nenhuma campanha ainda"
+                            description="Crie sua primeira campanha de disparo em massa para alcançar seus contatos."
+                            action={{ label: 'Criar campanha', onClick: () => { resetWizard(); setShowWizard(true); } }}
+                        />
                     ) : broadcasts.map(b => {
                         const p = progress(b);
                         return (

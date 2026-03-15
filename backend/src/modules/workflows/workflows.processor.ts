@@ -1,4 +1,4 @@
-import { Processor, WorkerHost, InjectQueue } from '@nestjs/bullmq';
+import { Processor, WorkerHost, InjectQueue, OnWorkerEvent } from '@nestjs/bullmq';
 import { Job, Queue } from 'bullmq';
 import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
@@ -22,6 +22,19 @@ export class WorkflowsProcessor extends WorkerHost {
         @InjectQueue('workflows') private readonly workflowsQueue: Queue,
     ) {
         super();
+    }
+
+    @OnWorkerEvent('failed')
+    onFailed(job: Job, err: Error) {
+        this.logger.error({
+            event: 'job_failed',
+            queue: 'workflows',
+            jobId: job.id,
+            jobName: job.name,
+            error: err.message,
+            attempts: job.attemptsMade,
+            data: { workflowId: job.data?.workflowId, companyId: job.data?.companyId, event: job.data?.event },
+        });
     }
 
     async process(job: Job<any>): Promise<any> {

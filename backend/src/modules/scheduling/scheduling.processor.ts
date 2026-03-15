@@ -1,4 +1,4 @@
-import { Processor, WorkerHost } from '@nestjs/bullmq';
+import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { PrismaService } from '../../database/prisma.service';
@@ -27,6 +27,19 @@ export class SchedulingProcessor extends WorkerHost {
             return this.handleSendScheduledMessage(job.data);
         }
         this.logger.warn(`Job desconhecido na fila scheduling: ${job.name}`);
+    }
+
+    @OnWorkerEvent('failed')
+    onFailed(job: Job, err: Error) {
+        this.logger.error({
+            event: 'job_failed',
+            queue: 'scheduling',
+            jobId: job.id,
+            jobName: job.name,
+            error: err.message,
+            attempts: job.attemptsMade,
+            data: { scheduleId: job.data?.scheduleId ?? job.data?.scheduledMessageId },
+        });
     }
 
     private async handleSendReminder(data: { scheduleId: string }) {

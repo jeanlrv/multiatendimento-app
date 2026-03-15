@@ -613,29 +613,31 @@ export class ChatService {
     }
 
     async getTicketMessages(ticketId: string, companyId: string, limit: number = 50) {
-        await this.validateTicketOwnership(ticketId, companyId);
-        const takeValue = Number(limit) || 50;
-        return this.prisma.message.findMany({
-            where: { ticketId },
-            orderBy: { sentAt: 'asc' },
-            take: takeValue,
-            include: {
-                quotedMessage: true
-            }
+        // Ownership check merged into main query (1 query instead of 2)
+        const ticket = await this.prisma.ticket.findFirst({
+            where: { id: ticketId, companyId },
+            select: {
+                id: true,
+                messages: {
+                    take: Number(limit) || 50,
+                    orderBy: { sentAt: 'asc' },
+                    include: { quotedMessage: true },
+                },
+            },
         });
+        if (!ticket) throw new Error('Ticket não encontrado ou acesso negado para esta empresa');
+        return ticket.messages;
     }
 
     async getMessagesCursor(ticketId: string, companyId: string, cursor?: string, limit: number = 50) {
-        await this.validateTicketOwnership(ticketId, companyId);
+        // Ownership validated via nested ticket filter (1 query instead of 2)
         return this.prisma.message.findMany({
-            where: { ticketId },
+            where: { ticketId, ticket: { companyId } },
             take: Number(limit),
             skip: cursor ? 1 : 0,
             cursor: cursor ? { id: cursor } : undefined,
             orderBy: { sentAt: 'desc' },
-            include: {
-                quotedMessage: true
-            }
+            include: { quotedMessage: true },
         });
     }
 
@@ -657,20 +659,14 @@ export class ChatService {
     }
 
     async markAsRead(ticketId: string, companyId: string) {
-        await this.validateTicketOwnership(ticketId, companyId);
-        await this.prisma.ticket.update({
-            where: { id: ticketId },
-            data: { unreadMessages: 0 }
+        // Merge ownership check + ticket update (updateMany with companyId serves as validation)
+        await this.prisma.ticket.updateMany({
+            where: { id: ticketId, companyId },
+            data: { unreadMessages: 0 },
         });
         return this.prisma.message.updateMany({
-            where: {
-                ticketId,
-                fromMe: false,
-                readAt: null,
-            },
-            data: {
-                readAt: new Date(),
-            },
+            where: { ticketId, fromMe: false, readAt: null },
+            data: { readAt: new Date() },
         });
     }
 

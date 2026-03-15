@@ -1,17 +1,59 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
-import { TicketStatus, Sentiment } from '@prisma/client';
+import { TicketStatus, Sentiment, Prisma } from '@prisma/client';
+import Redis from 'ioredis';
 
 @Injectable()
-export class DashboardService {
+export class DashboardService implements OnModuleInit, OnModuleDestroy {
     private readonly logger = new Logger(DashboardService.name);
+    private redis: Redis;
 
-    constructor(private prisma: PrismaService) { }
+    constructor(private prisma: PrismaService) {
+        const retryStrategy = (times: number) =>
+            times >= 10 ? 30000 : Math.min(500 * Math.pow(2, times - 1), 10000);
+        const baseOpts = { lazyConnect: true, connectTimeout: 35000, maxRetriesPerRequest: null, retryStrategy };
+        const redisUrl = process.env.REDIS_URL;
+        this.redis = redisUrl
+            ? new Redis(redisUrl, baseOpts as any)
+            : new Redis({
+                ...baseOpts,
+                host: process.env.REDIS_HOST || 'localhost',
+                port: Number(process.env.REDIS_PORT) || 6379,
+                password: process.env.REDIS_PASSWORD || undefined,
+            });
+        this.redis.on('error', (err) => this.logger.warn(`Redis Dashboard: ${err.message}`));
+    }
+
+    async onModuleInit() {
+        this.redis.connect().catch((err) =>
+            this.logger.warn(`Redis Dashboard não conectou no boot: ${err.message}. Reconectará automaticamente.`),
+        );
+    }
+
+    async onModuleDestroy() {
+        try { await this.redis.quit(); } catch { /* silencioso */ }
+    }
+
+    private async getCached<T>(key: string): Promise<T | null> {
+        try {
+            const val = await this.redis.get(key);
+            return val ? (JSON.parse(val) as T) : null;
+        } catch {
+            return null;
+        }
+    }
+
+    private async setCached(key: string, value: unknown, ttlSeconds: number): Promise<void> {
+        try {
+            await this.redis.set(key, JSON.stringify(value), 'EX', ttlSeconds);
+        } catch { /* silencioso */ }
+    }
 
     async getStats(companyId: string, filters: { startDate?: string, endDate?: string, departmentId?: string, assignedUserId?: string }) {
-        this.logger.log(`Calculando estatísticas do dashboard para empresa ${companyId} com filtros: ${JSON.stringify(filters)}`);
+        const cacheKey = `dash:stats:${companyId}:${JSON.stringify(filters)}`;
+        const cached = await this.getCached<object>(cacheKey);
+        if (cached) return cached;
 
-        // companyId é OBRIGATÓRIO — multi-tenancy
         const where: any = { companyId };
         const evalWhere: any = { ticket: { companyId } };
 
@@ -44,66 +86,49 @@ export class DashboardService {
             }
         }
 
-        // Contagem de tickets por status
         const [
             activeTickets,
             resolvedTickets,
             totalMessages,
-            sentimentStats
+            sentimentStats,
         ] = await Promise.all([
             this.prisma.ticket.count({
-                where: {
-                    ...where,
-                    status: { in: [TicketStatus.OPEN, TicketStatus.IN_PROGRESS, TicketStatus.WAITING] }
-                }
+                where: { ...where, status: { in: [TicketStatus.OPEN, TicketStatus.IN_PROGRESS, TicketStatus.WAITING] } },
             }),
-            this.prisma.ticket.count({
-                where: {
-                    ...where,
-                    status: TicketStatus.RESOLVED
-                }
-            }),
-            this.prisma.message.count({
-                where: { ticket: where }
-            }),
+            this.prisma.ticket.count({ where: { ...where, status: TicketStatus.RESOLVED } }),
+            this.prisma.message.count({ where: { ticket: where } }),
             this.prisma.evaluation.groupBy({
                 by: ['aiSentiment'],
                 where: evalWhere,
-                _count: { aiSentiment: true }
-            })
+                _count: { aiSentiment: true },
+            }),
         ]);
 
-        // Mapear sentimentos para um formato amigável
         const sentimentMap = {
             [Sentiment.POSITIVE]: 0,
             [Sentiment.NEUTRAL]: 0,
-            [Sentiment.NEGATIVE]: 0
+            [Sentiment.NEGATIVE]: 0,
         };
-
         sentimentStats.forEach(stat => {
             if (stat.aiSentiment) sentimentMap[stat.aiSentiment] = stat._count.aiSentiment;
         });
 
-        // Calcular "Satisfação"
         const totalEvaluations = Object.values(sentimentMap).reduce((a, b) => a + b, 0);
         const positiveCount = sentimentMap[Sentiment.POSITIVE] + sentimentMap[Sentiment.NEUTRAL];
         const satisfactionRating = totalEvaluations > 0
             ? Math.round((positiveCount / totalEvaluations) * 100)
             : 100;
 
-        // Calcular dias para o histórico
         let historyDays = 30;
         if (filters.startDate && !filters.endDate) {
             const start = new Date(filters.startDate);
-            const now = new Date();
-            historyDays = Math.ceil((now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+            historyDays = Math.ceil((Date.now() - start.getTime()) / (1000 * 60 * 60 * 24));
         } else if (filters.startDate && filters.endDate) {
             const start = new Date(filters.startDate);
             const end = new Date(filters.endDate);
             historyDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
         }
 
-        // Customer metrics
         const startOfMonth = new Date();
         startOfMonth.setDate(1);
         startOfMonth.setHours(0, 0, 0, 0);
@@ -112,11 +137,8 @@ export class DashboardService {
             this.prisma.customer.count({ where: { companyId, createdAt: { gte: startOfMonth } } }),
         ]);
 
-        return {
-            tickets: {
-                active: activeTickets,
-                resolved: resolvedTickets
-            },
+        const result = {
+            tickets: { active: activeTickets, resolved: resolvedTickets },
             messages: totalMessages,
             satisfaction: `${satisfactionRating}%`,
             sentimentDistribution: sentimentMap,
@@ -130,6 +152,9 @@ export class DashboardService {
                 newThisMonth: newCustomersThisMonth,
             },
         };
+
+        await this.setCached(cacheKey, result, 300);
+        return result;
     }
 
     private async getTicketsByDepartment(where: any) {
@@ -141,12 +166,12 @@ export class DashboardService {
 
         const departments = await this.prisma.department.findMany({
             where: { id: { in: stats.map(s => s.departmentId) } },
-            select: { id: true, name: true }
+            select: { id: true, name: true },
         });
 
         return stats.map(s => ({
             name: departments.find(d => d.id === s.departmentId)?.name || 'Sem Depto',
-            value: s._count.id
+            value: s._count.id,
         }));
     }
 
@@ -156,11 +181,7 @@ export class DashboardService {
             where,
             _count: { id: true },
         });
-
-        return stats.map(s => ({
-            status: s.status,
-            value: s._count.id
-        }));
+        return stats.map(s => ({ status: s.status, value: s._count.id }));
     }
 
     private async getTicketsByPriority(where: any) {
@@ -169,15 +190,19 @@ export class DashboardService {
             where,
             _count: { id: true },
         });
-
-        return stats.map(s => ({
-            priority: s.priority,
-            value: s._count.id
-        }));
+        return stats.map(s => ({ priority: s.priority, value: s._count.id }));
     }
 
-    async getHistory(companyId: string, days: number, filterStartDate?: string, departmentId?: string, assignedUserId?: string) {
-        this.logger.log(`Buscando histórico de ${days} dias para empresa ${companyId} (Depto: ${departmentId}, Atendente: ${assignedUserId})`);
+    async getHistory(
+        companyId: string,
+        days: number,
+        filterStartDate?: string,
+        departmentId?: string,
+        assignedUserId?: string,
+    ) {
+        const cacheKey = `dash:history:${companyId}:${days}:${filterStartDate ?? ''}:${departmentId ?? ''}:${assignedUserId ?? ''}`;
+        const cached = await this.getCached<object[]>(cacheKey);
+        if (cached) return cached;
 
         let startDate: Date;
         if (filterStartDate) {
@@ -188,80 +213,77 @@ export class DashboardService {
         }
         startDate.setHours(0, 0, 0, 0);
 
-        // companyId OBRIGATÓRIO em ambas as queries
-        const where: any = { companyId, createdAt: { gte: startDate } };
-        const evalWhere: any = { ticket: { companyId }, createdAt: { gte: startDate } };
+        // Optional filters as Prisma SQL fragments
+        const deptFilter = departmentId && departmentId !== 'ALL'
+            ? Prisma.sql`AND department_id = ${departmentId}`
+            : Prisma.empty;
+        const userFilter = assignedUserId && assignedUserId !== 'ALL'
+            ? Prisma.sql`AND assigned_user_id = ${assignedUserId}`
+            : Prisma.empty;
+        const ticketDeptFilter = departmentId && departmentId !== 'ALL'
+            ? Prisma.sql`AND t.department_id = ${departmentId}`
+            : Prisma.empty;
+        const ticketUserFilter = assignedUserId && assignedUserId !== 'ALL'
+            ? Prisma.sql`AND t.assigned_user_id = ${assignedUserId}`
+            : Prisma.empty;
 
-        if (departmentId && departmentId !== 'ALL') {
-            where.departmentId = departmentId;
-            evalWhere.ticket = { ...evalWhere.ticket, departmentId };
-        }
+        const [ticketRows, evalRows] = await Promise.all([
+            this.prisma.$queryRaw<Array<{ date: string; opened: bigint; resolved: bigint }>>`
+                SELECT
+                    DATE_TRUNC('day', created_at)::date::text AS date,
+                    COUNT(*)::bigint                           AS opened,
+                    COUNT(*) FILTER (WHERE status = 'RESOLVED')::bigint AS resolved
+                FROM tickets
+                WHERE company_id = ${companyId}
+                    AND created_at >= ${startDate}
+                    ${deptFilter}
+                    ${userFilter}
+                GROUP BY 1
+                ORDER BY 1
+            `,
+            this.prisma.$queryRaw<Array<{ date: string; sentiment: number | null }>>`
+                SELECT
+                    DATE_TRUNC('day', e.created_at)::date::text AS date,
+                    AVG(e.ai_sentiment_score)::float             AS sentiment
+                FROM evaluations e
+                JOIN tickets t ON t.id = e.ticket_id
+                WHERE t.company_id = ${companyId}
+                    AND e.created_at >= ${startDate}
+                    ${ticketDeptFilter}
+                    ${ticketUserFilter}
+                GROUP BY 1
+                ORDER BY 1
+            `,
+        ]);
 
-        if (assignedUserId && assignedUserId !== 'ALL') {
-            where.assignedUserId = assignedUserId;
-            evalWhere.ticket = { ...evalWhere.ticket, assignedUserId };
-        }
-
-        const tickets = await this.prisma.ticket.findMany({
-            where,
-            select: { createdAt: true, status: true }
-        });
-
-        const evaluations = await this.prisma.evaluation.findMany({
-            where: evalWhere,
-            select: { createdAt: true, aiSentimentScore: true }
-        });
-
-        const historyMap = new Map();
-
+        // Build date map (all days in range, even empty ones)
+        const historyMap = new Map<string, { date: string; opened: number; resolved: number; sentiment: number }>();
         for (let i = 0; i <= days; i++) {
-            const date = new Date(startDate);
-            date.setDate(date.getDate() + i);
-            const dateStr = date.toISOString().split('T')[0];
-            historyMap.set(dateStr, {
-                date: dateStr,
-                opened: 0,
-                resolved: 0,
-                sentiment: 0,
-                sentimentCount: 0
-            });
+            const d = new Date(startDate);
+            d.setDate(d.getDate() + i);
+            const dateStr = d.toISOString().split('T')[0];
+            historyMap.set(dateStr, { date: dateStr, opened: 0, resolved: 0, sentiment: 0 });
         }
 
-        tickets.forEach(t => {
-            const dateStr = t.createdAt.toISOString().split('T')[0];
-            if (historyMap.has(dateStr)) {
-                const dayData = historyMap.get(dateStr);
-                dayData.opened++;
-                if (t.status === TicketStatus.RESOLVED) {
-                    dayData.resolved++;
-                }
-            }
+        ticketRows.forEach(r => {
+            const entry = historyMap.get(r.date);
+            if (entry) { entry.opened = Number(r.opened); entry.resolved = Number(r.resolved); }
         });
 
-        evaluations.forEach(e => {
-            const dateStr = e.createdAt.toISOString().split('T')[0];
-            if (historyMap.has(dateStr)) {
-                const dayData = historyMap.get(dateStr);
-                dayData.sentiment += e.aiSentimentScore ?? 0;
-                dayData.sentimentCount++;
-            }
+        evalRows.forEach(r => {
+            const entry = historyMap.get(r.date);
+            if (entry && r.sentiment != null) entry.sentiment = Number(r.sentiment.toFixed(1));
         });
 
-        return Array.from(historyMap.values()).map(day => ({
-            ...day,
-            sentiment: day.sentimentCount > 0 ? Number((day.sentiment / day.sentimentCount).toFixed(1)) : 0
-        }));
+        const result = Array.from(historyMap.values());
+        await this.setCached(cacheKey, result, 300);
+        return result;
     }
 
     private async getRecentActivity(companyId: string, departmentId?: string, assignedUserId?: string) {
-        // companyId OBRIGATÓRIO
         const where: any = { companyId };
-        if (departmentId && departmentId !== 'ALL') {
-            where.departmentId = departmentId;
-        }
-        if (assignedUserId && assignedUserId !== 'ALL') {
-            where.assignedUserId = assignedUserId;
-        }
+        if (departmentId && departmentId !== 'ALL') where.departmentId = departmentId;
+        if (assignedUserId && assignedUserId !== 'ALL') where.assignedUserId = assignedUserId;
 
         const recentTickets = await this.prisma.ticket.findMany({
             where,
@@ -269,8 +291,8 @@ export class DashboardService {
             orderBy: { updatedAt: 'desc' },
             include: {
                 contact: { select: { name: true } },
-                assignedUser: { select: { name: true } }
-            }
+                assignedUser: { select: { name: true } },
+            },
         });
 
         return recentTickets.map(t => ({
@@ -278,13 +300,17 @@ export class DashboardService {
             contactName: t.contact.name,
             userName: t.assignedUser?.name || 'Sistema',
             status: t.status,
-            updatedAt: t.updatedAt
+            updatedAt: t.updatedAt,
         }));
     }
 
     // ─── Ranking de agentes ──────────────────────────────────────────────────
 
     async getAgentRanking(companyId: string, filters: { startDate?: string; departmentId?: string }) {
+        const cacheKey = `dash:ranking:${companyId}:${filters.startDate ?? ''}:${filters.departmentId ?? ''}`;
+        const cached = await this.getCached<object[]>(cacheKey);
+        if (cached) return cached;
+
         const where: any = { companyId, status: TicketStatus.RESOLVED };
         if (filters.departmentId && filters.departmentId !== 'ALL') where.departmentId = filters.departmentId;
         if (filters.startDate) {
@@ -307,54 +333,60 @@ export class DashboardService {
             select: { id: true, name: true, avatar: true },
         });
 
-        return grouped.map((g, idx) => ({
+        const result = grouped.map((g, idx) => ({
             rank: idx + 1,
             userId: g.assignedUserId,
             name: users.find(u => u.id === g.assignedUserId)?.name || 'Desconhecido',
             avatar: users.find(u => u.id === g.assignedUserId)?.avatar,
             resolved: g._count.id,
         }));
+
+        await this.setCached(cacheKey, result, 1800);
+        return result;
     }
 
     // ─── Heatmap de volume por hora/dia da semana ─────────────────────────────
 
     async getHeatmap(companyId: string, filters: { startDate?: string; departmentId?: string }) {
-        const where: any = { companyId };
-        if (filters.departmentId && filters.departmentId !== 'ALL') where.departmentId = filters.departmentId;
-        if (filters.startDate) {
-            const d = new Date(filters.startDate);
-            d.setHours(0, 0, 0, 0);
-            where.createdAt = { gte: d };
-        } else {
-            const d = new Date();
-            d.setDate(d.getDate() - 30);
-            where.createdAt = { gte: d };
-        }
+        const cacheKey = `dash:heatmap:${companyId}:${filters.startDate ?? ''}:${filters.departmentId ?? ''}`;
+        const cached = await this.getCached<object[]>(cacheKey);
+        if (cached) return cached;
 
-        const tickets = await this.prisma.ticket.findMany({
-            where,
-            select: { createdAt: true },
-        });
+        const startDate = filters.startDate
+            ? new Date(filters.startDate)
+            : (() => { const d = new Date(); d.setDate(d.getDate() - 30); return d; })();
+        startDate.setHours(0, 0, 0, 0);
 
-        // Inicializar grade 7 dias × 24 horas
-        const grid: Record<string, number> = {};
-        for (let d = 0; d < 7; d++) {
-            for (let h = 0; h < 24; h++) {
-                grid[`${d}-${h}`] = 0;
-            }
-        }
+        const deptFilter = filters.departmentId && filters.departmentId !== 'ALL'
+            ? Prisma.sql`AND department_id = ${filters.departmentId}`
+            : Prisma.empty;
 
-        tickets.forEach(t => {
-            const day = t.createdAt.getDay(); // 0 Dom … 6 Sáb
-            const hour = t.createdAt.getHours();
-            grid[`${day}-${hour}`]++;
-        });
+        const rows = await this.prisma.$queryRaw<Array<{ day: number; hour: number; count: bigint }>>`
+            SELECT
+                EXTRACT(DOW  FROM created_at)::int  AS day,
+                EXTRACT(HOUR FROM created_at)::int  AS hour,
+                COUNT(*)::bigint                    AS count
+            FROM tickets
+            WHERE company_id = ${companyId}
+                AND created_at >= ${startDate}
+                ${deptFilter}
+            GROUP BY 1, 2
+            ORDER BY 1, 2
+        `;
 
         const DAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-        return Object.entries(grid).map(([key, count]) => {
+
+        // Build full 7×24 grid, fill from SQL results
+        const grid = new Map<string, number>();
+        for (let d = 0; d < 7; d++) for (let h = 0; h < 24; h++) grid.set(`${d}-${h}`, 0);
+        rows.forEach(r => grid.set(`${r.day}-${r.hour}`, Number(r.count)));
+
+        const result = Array.from(grid.entries()).map(([key, count]) => {
             const [d, h] = key.split('-').map(Number);
             return { day: DAYS[d], hour: h, count };
         });
+
+        await this.setCached(cacheKey, result, 3600);
+        return result;
     }
 }
-

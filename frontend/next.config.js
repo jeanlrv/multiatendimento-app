@@ -55,4 +55,16 @@ const nextConfig = {
     },
 }
 
-module.exports = withPWA(nextConfig);
+const { withSentryConfig } = require('@sentry/nextjs');
+
+const sentryConfig = {
+    silent: true,
+    org: process.env.SENTRY_ORG,
+    project: process.env.SENTRY_PROJECT,
+    dryRun: !process.env.SENTRY_AUTH_TOKEN,
+    disableLogger: true,
+};
+
+module.exports = process.env.NEXT_PUBLIC_SENTRY_DSN
+    ? withSentryConfig(withPWA(nextConfig), sentryConfig)
+    : withPWA(nextConfig);

@@ -5,13 +5,34 @@ import { AppModule } from './app.module';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
 import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
+import * as Sentry from '@sentry/node';
+import { WinstonLogger } from './common/logger/winston.logger';
+
+// Inicializar Sentry antes de tudo (captura erros do bootstrap também)
+if (process.env.SENTRY_DSN) {
+    Sentry.init({
+        dsn: process.env.SENTRY_DSN,
+        environment: process.env.NODE_ENV || 'development',
+        tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 0,
+        // Remove dados sensíveis de autenticação antes de enviar ao Sentry (LGPD)
+        beforeSend(event) {
+            if (event.request?.cookies) delete event.request.cookies;
+            if (event.request?.headers?.cookie) delete event.request.headers.cookie;
+            if (event.request?.headers?.authorization) delete event.request.headers.authorization;
+            return event;
+        },
+    });
+}
 
 process.on('uncaughtException', (err) => {
-    console.error('❌ FATAL: Uncaught Exception:', err);
+    if (process.env.SENTRY_DSN) Sentry.captureException(err);
+    console.error('❌ FATAL: Uncaught Exception:', err.message);
 });
 
-process.on('unhandledRejection', (reason, promise) => {
-    console.error('❌ FATAL: Unhandled Rejection at:', promise, 'reason:', reason);
+process.on('unhandledRejection', (reason) => {
+    if (process.env.SENTRY_DSN) Sentry.captureException(reason);
+    console.error('❌ FATAL: Unhandled Rejection:', reason instanceof Error ? reason.message : reason);
 });
 
 function validateRequiredEnvVars() {
@@ -59,6 +80,7 @@ async function bootstrap() {
     try {
         validateRequiredEnvVars();
         const logger = new Logger('Bootstrap');
+        const winstonLogger = new WinstonLogger('Bootstrap');
         const isDev = process.env.NODE_ENV !== 'production';
         const allowedOrigins = process.env.CORS_ORIGIN
             ? process.env.CORS_ORIGIN.split(',').map(o => o.trim())
@@ -67,7 +89,12 @@ async function bootstrap() {
                 : [];
 
         // Criamos o app SEM cors para poder registrar embed CORS antes do global
-        const app = await NestFactory.create<NestExpressApplication>(AppModule);
+        const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+            logger: new WinstonLogger(),
+        });
+
+        // Cookie parser — necessário para ler httpOnly cookies nos guards e controllers
+        app.use(cookieParser());
 
         // ── CORS para Embed (deve ser PRIMEIRO, antes do enableCors global) ──────
         // Preflight OPTIONS de sites externos chega aqui ANTES do global CORS,
@@ -94,7 +121,19 @@ async function bootstrap() {
         // Helmet — headers de segurança HTTP adicionais (complementa os do nginx)
         app.use(helmet({
             crossOriginResourcePolicy: { policy: 'cross-origin' }, // permite static assets
-            contentSecurityPolicy: isDev ? false : undefined,      // desabilitar CSP em dev (Swagger)
+            contentSecurityPolicy: isDev ? false : {
+                directives: {
+                    defaultSrc: ["'self'"],
+                    scriptSrc: ["'self'", "'unsafe-inline'"],       // webhooks/embed JS inline necessário
+                    styleSrc: ["'self'", "'unsafe-inline'"],
+                    imgSrc: ["'self'", 'data:', 'blob:', '*'],       // upload previews e avatares externos
+                    connectSrc: ["'self'", 'wss:', 'https:'],        // WebSocket + APIs externas
+                    fontSrc: ["'self'", 'data:'],
+                    objectSrc: ["'none'"],
+                    frameSrc: ["'none'"],
+                    upgradeInsecureRequests: [],
+                },
+            },
         }));
 
         // Static assets

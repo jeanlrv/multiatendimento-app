@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter, usePathname } from 'next/navigation';
 import { ModeToggle } from '@/components/mode-toggle';
@@ -468,7 +469,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
                     {/* ── CONTEÚDO DAS PÁGINAS ─────────────────────────────── */}
                     <main className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 px-3 md:px-5 xl:px-7 2xl:px-10 pt-1 pb-[64px] md:pb-8 custom-scrollbar">
-                        {children}
+                        <ErrorBoundary>
+                            {children}
+                        </ErrorBoundary>
                     </main>
                 </div>
 

@@ -1,3 +1,5 @@
+'use client';
+
 import React from 'react';
 import { CheckCheck, Paperclip, Video, Reply, X, Copy } from 'lucide-react';
 import { motion } from 'framer-motion';

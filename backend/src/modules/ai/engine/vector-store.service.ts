@@ -89,9 +89,9 @@ export class VectorStoreService {
                 this.logger.debug(`${loggerPrefix} Cache HIT — ${cached.chunks.length} chunks em memória`);
                 chunks = cached.chunks;
             } else {
-                // Document não tem companyId direto — buscar IDs via Document e filtrar por documentId
+                // Buscar documentos filtrando por companyId E knowledgeBaseId (evita data leak entre tenants)
                 const validDocs = await prisma.document.findMany({
-                    where: { knowledgeBaseId, status: 'READY' },
+                    where: { knowledgeBaseId, companyId, status: 'READY' },
                     select: { id: true },
                 });
                 const validDocIds = validDocs.map((d: any) => d.id);
@@ -243,6 +243,7 @@ export class VectorStoreService {
                         FROM "document_chunks" dc
                         JOIN "documents" d ON dc."documentId" = d.id
                         WHERE d."knowledgeBaseId" = ${knowledgeBaseId}
+                        AND d."companyId" = ${companyId}
                         AND d.status = 'READY'
                         AND LOWER(dc.content) LIKE '%' || LOWER(${query}) || '%'
                         ORDER BY LENGTH(dc.content) DESC

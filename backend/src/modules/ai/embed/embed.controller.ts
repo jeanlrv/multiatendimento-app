@@ -66,6 +66,17 @@ export class EmbedController {
     @UseInterceptors(FileInterceptor('file', {
         storage: memoryStorage(),
         limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
+        fileFilter: (_req, file, cb) => {
+            const allowed = [
+                'image/jpeg', 'image/png', 'image/webp', 'image/gif',
+                'application/pdf', 'text/plain', 'text/csv',
+            ];
+            if (allowed.includes(file.mimetype)) {
+                cb(null, true);
+            } else {
+                cb(new BadRequestException(`Tipo de arquivo não permitido: ${file.mimetype}. Use imagens, PDF ou texto.`), false);
+            }
+        },
     }))
     async chatWithAttachment(
         @Param('embedId') embedId: string,

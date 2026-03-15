@@ -8,6 +8,7 @@ import {
     Lock, Unlock, CheckSquare, Square, Zap, ChevronLeft
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { EmptyState } from '@/components/EmptyState';
 import { useAuth } from '@/contexts/AuthContext';
 import { rolesService, Role, CreateRolePayload, UpdateRolePayload } from '@/services/roles';
 import { PERMISSION_GROUPS, ALL_PERMISSION_KEYS, hasPermission, isAdmin } from '@/lib/permissions';
@@ -171,20 +172,12 @@ export default function RolesPage() {
                     {[1, 2, 3].map(i => <div key={i} className="h-64 liquid-glass rounded-[2.5rem] animate-pulse" />)}
                 </div>
             ) : filteredRoles.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-32 text-slate-400">
-                    <Shield size={48} className="mb-4 opacity-20" />
-                    <p className="font-bold text-sm">
-                        {roles.length === 0 ? 'Nenhum perfil encontrado.' : 'Nenhum perfil corresponde à busca.'}
-                    </p>
-                    {roles.length === 0 && canCreate && (
-                        <button
-                            onClick={openCreate}
-                            className="mt-4 px-6 py-3 bg-primary text-white rounded-2xl font-bold text-xs uppercase tracking-widest"
-                        >
-                            Criar primeiro perfil
-                        </button>
-                    )}
-                </div>
+                <EmptyState
+                    icon={Shield}
+                    title={roles.length === 0 ? 'Nenhum perfil encontrado' : 'Nenhum perfil corresponde à busca'}
+                    description={roles.length === 0 ? 'Crie perfis de acesso para controlar as permissões dos usuários.' : 'Tente ajustar o filtro de busca.'}
+                    action={roles.length === 0 && canCreate ? { label: 'Criar primeiro perfil', onClick: openCreate } : undefined}
+                />
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 px-4">
                     <AnimatePresence mode="popLayout">

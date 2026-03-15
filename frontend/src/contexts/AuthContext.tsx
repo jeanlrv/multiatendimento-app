@@ -45,21 +45,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const router = useRouter();
 
     useEffect(() => {
-        const storedToken = localStorage.getItem('token');
+        // Tokens agora em httpOnly cookies (não acessíveis via JS — proteção XSS).
+        // Apenas dados não-sensíveis (perfil, branding da empresa) permanecem no localStorage.
         const storedUser = localStorage.getItem('user');
         const storedCompany = localStorage.getItem('company');
 
-        if (storedToken && storedUser) {
+        if (storedUser) {
             try {
-                setToken(storedToken);
                 setUser(JSON.parse(storedUser));
                 if (storedCompany) {
                     setCompany(JSON.parse(storedCompany));
                 }
             } catch (e) {
-                console.error('Error parsing stored user:', e);
+                console.error('Error parsing stored user data');
                 localStorage.removeItem('user');
-                localStorage.removeItem('token');
                 localStorage.removeItem('company');
             }
         }
@@ -81,18 +80,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const login = async (email: string, pass: string) => {
         try {
             const response = await api.post('/auth/login', { email, password: pass });
-            const { access_token, refresh_token, user: userData } = response.data;
+            const { user: userData } = response.data;
 
-            localStorage.setItem('token', access_token);
-            if (refresh_token) {
-                localStorage.setItem('refresh_token', refresh_token);
-            }
+            // Tokens access_token e refresh_token são setados pelo backend como httpOnly cookies.
+            // Aqui guardamos apenas dados de perfil (não-sensíveis) para UX rápida no reload.
             localStorage.setItem('user', JSON.stringify(userData));
-            setToken(access_token);
 
-            // Cookie de curta duração: segurança JWT (15min)
-            document.cookie = `token=${access_token}; path=/; max-age=900; SameSite=Lax`;
-            // Cookie de sessão: 7 dias — garante que middleware deixa passar em cold starts do PWA
+            // Cookie de sessão (não-httpOnly) para o middleware Next.js detectar autenticação no SSR
             document.cookie = `session=1; path=/; max-age=${7 * 24 * 60 * 60}; SameSite=Lax`;
 
             setUser(userData);
@@ -109,17 +103,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     const logout = () => {
-        // Invalidar refresh token no servidor (fire-and-forget)
-        const storedRefreshToken = localStorage.getItem('refresh_token');
-        if (storedRefreshToken) {
-            api.post('/auth/logout', { refresh_token: storedRefreshToken }).catch(() => { });
-        }
+        // POST /auth/logout limpa os httpOnly cookies no servidor (fire-and-forget)
+        api.post('/auth/logout', {}).catch(() => { });
 
-        localStorage.removeItem('token');
-        localStorage.removeItem('refresh_token');
         localStorage.removeItem('user');
         localStorage.removeItem('company');
-        document.cookie = 'token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
         document.cookie = 'session=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
 
         // Disconnect all sockets

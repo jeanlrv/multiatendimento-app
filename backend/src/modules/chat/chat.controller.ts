@@ -5,6 +5,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Company } from '../../common/decorators/company.decorator';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { MessageType } from '@prisma/client';
+import { SendMessageDto, CreateMacroDto } from './dto/send-message.dto';
 
 @ApiTags('Chat')
 @Controller('chat')
@@ -37,7 +38,7 @@ export class ChatController {
     @ApiOperation({ summary: 'Criar nova macro' })
     createMacro(
         @Company() companyId: string,
-        @Body() body: { title: string, content: string }
+        @Body() body: CreateMacroDto,
     ) {
         return this.chatService.createMacro(companyId, body);
     }
@@ -47,13 +48,13 @@ export class ChatController {
     sendMessage(
         @Param('ticketId') ticketId: string,
         @Company() companyId: string,
-        @Body() body: { content: string, type?: string, mediaUrl?: string, quotedMessageId?: string },
+        @Body() body: SendMessageDto,
     ) {
         return this.chatService.sendMessage(
             ticketId,
             body.content,
             true, // Mensagem enviada pelo atendente (fromMe)
-            (body.type as MessageType) || MessageType.TEXT,
+            body.type || MessageType.TEXT,
             body.mediaUrl,
             companyId,
             'AGENT',

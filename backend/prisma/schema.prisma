@@ -315,6 +315,7 @@ model Contact {
   csatPending  Boolean @default(false)
   csatTicketId String?
 
+  @@index([companyId, phoneNumber])
   @@index([phoneNumber])
   @@index([riskScore])
   @@index([companyId])
@@ -436,6 +437,8 @@ model Ticket {
   @@index([companyId, status])
   @@index([companyId, updatedAt])
   @@index([companyId, departmentId])
+  @@index([companyId, createdAt])
+  @@index([companyId, assignedUserId])
   @@index([departmentId])
   @@index([lastMessageAt])
   @@index([contactId])
@@ -489,6 +492,7 @@ model Message {
   quotedMessage Message?  @relation("MessageReplies", fields: [quotedMessageId], references: [id])
   replies       Message[] @relation("MessageReplies")
 
+  @@index([ticketId, sentAt])
   @@index([ticketId])
   @@index([externalId])
   @@index([status])

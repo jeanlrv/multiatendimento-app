@@ -17,7 +17,9 @@ import { OnEvent } from '@nestjs/event-emitter';
 
 @WebSocketGateway({
     cors: {
-        origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : '*',
+        origin: process.env.CORS_ORIGIN
+            ? process.env.CORS_ORIGIN.split(',').map(s => s.trim())
+            : (process.env.NODE_ENV === 'development' ? true : false),
         credentials: true,
     },
     namespace: 'chat',
@@ -75,16 +77,24 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect, On
         }, 5 * 60 * 1000);
     }
 
+    private extractTokenFromCookie(cookieHeader: string | undefined): string | null {
+        if (!cookieHeader) return null;
+        const match = cookieHeader.match(/(?:^|;\s*)access_token=([^;]+)/);
+        return match ? decodeURIComponent(match[1]) : null;
+    }
+
     async handleConnection(client: Socket) {
         try {
-            const token = client.handshake.auth.token || client.handshake.headers.authorization;
-            if (!token) {
+            const authToken = client.handshake.auth.token || client.handshake.headers.authorization;
+            const cookieToken = this.extractTokenFromCookie(client.handshake.headers.cookie as string);
+            const rawToken = authToken || cookieToken;
+            if (!rawToken) {
                 this.logger.warn(`Cliente tentou conectar sem token: ${client.id}`);
                 client.disconnect();
                 return;
             }
 
-            const payload = this.jwtService.verify(token.replace('Bearer ', ''));
+            const payload = this.jwtService.verify(rawToken.replace('Bearer ', ''));
             client.data.user = payload;
 
             // Entrar na sala do usuário para notificações privadas
