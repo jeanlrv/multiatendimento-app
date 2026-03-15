@@ -85,7 +85,6 @@ export class VectorStoreService {
                 FROM document_chunks dc
                 JOIN documents d ON dc."documentId" = d.id
                 WHERE d."knowledgeBaseId" = ${knowledgeBaseId}
-                  AND d."companyId" = ${companyId}
                   AND d.status = 'READY'
                   AND dc.embedding IS NOT NULL
                   AND vector_dims(dc.embedding) = ${dim}
@@ -105,7 +104,6 @@ export class VectorStoreService {
                         FROM document_chunks dc
                         JOIN documents d ON dc."documentId" = d.id
                         WHERE d."knowledgeBaseId" = ${knowledgeBaseId}
-                          AND d."companyId" = ${companyId}
                           AND d.status = 'READY'
                           AND dc.embedding IS NOT NULL
                         LIMIT 3
@@ -130,7 +128,6 @@ export class VectorStoreService {
                             FROM document_chunks dc
                             JOIN documents d ON dc."documentId" = d.id
                             WHERE d."knowledgeBaseId" = ${knowledgeBaseId}
-                              AND d."companyId" = ${companyId}
                               AND d.status = 'READY'
                               AND dc.embedding IS NOT NULL
                               AND vector_dims(dc.embedding) = ${nativeDim}
@@ -241,7 +238,6 @@ export class VectorStoreService {
                         FROM "document_chunks" dc
                         JOIN "documents" d ON dc."documentId" = d.id
                         WHERE d."knowledgeBaseId" = ${knowledgeBaseId}
-                        AND d."companyId" = ${companyId}
                         AND d.status = 'READY'
                         AND LOWER(dc.content) LIKE '%' || LOWER(${query}) || '%'
                         ORDER BY LENGTH(dc.content) DESC
