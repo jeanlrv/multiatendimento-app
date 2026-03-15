@@ -77,13 +77,10 @@ export const AIAgentsService = {
 
     /** AsyncGenerator que emite eventos SSE token a token: { type: 'chunk'|'end'|'error', content: string } */
     streamChat: async function* (agentId: string, message: string, history: { role: string; content: string }[] = []) {
-        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
         const res = await fetch(`/api/ai/agents/${agentId}/chat-stream`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                ...(token ? { Authorization: `Bearer ${token}` } : {}),
-            },
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include', // envia httpOnly cookie (access_token) para autenticação
             body: JSON.stringify({ message, history }),
         });
         if (!res.ok) {

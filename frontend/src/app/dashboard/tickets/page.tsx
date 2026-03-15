@@ -87,6 +87,20 @@ interface Ticket {
 }
 
 
+/** Aplica formatação estilo WhatsApp no conteúdo de texto das mensagens */
+function formatWhatsApp(text: string): string {
+    const escape = (t: string) => t
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    return escape(text)
+        .replace(/```([\s\S]*?)```/g, '<pre class="bg-black/20 text-xs px-2 py-1 rounded mt-1 overflow-x-auto font-mono whitespace-pre-wrap"><code>$1</code></pre>')
+        .replace(/`([^`\n]+)`/g, '<code class="bg-black/20 text-xs px-1 py-0.5 rounded font-mono">$1</code>')
+        .replace(/\*([^*\n]+)\*/g, '<strong class="font-black">$1</strong>')
+        .replace(/_([^_\n]+)_/g, '<em class="italic opacity-90">$1</em>')
+        .replace(/~([^~\n]+)~/g, '<del class="line-through opacity-70">$1</del>');
+}
+
 export default function TicketsPage() {
     const [tickets, setTickets] = useState<Ticket[]>([]);
     const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
@@ -1017,7 +1031,7 @@ export default function TicketsPage() {
             >
                 {selectedTicketIds.includes(ticket.id) && <CheckCheck size={12} />}
             </div>
-            <div className={`flex items-start justify-between mb-2 transition-transform ${selectedTicketIds.length > 0 || selectedTicketIds.includes(ticket.id) ? 'pl-6' : ''}`}>
+            <div className={`flex items-start justify-between mb-2 transition-all duration-150 ${selectedTicketIds.length > 0 || selectedTicketIds.includes(ticket.id) ? 'pl-6' : 'group-hover/card:pl-6'}`}>
                 <div className="flex items-center gap-3">
                     <div className="relative">
                         <div
@@ -1092,10 +1106,10 @@ export default function TicketsPage() {
                                 </span>
                             )}
                         </div>
-                        <div className="flex items-center justify-between mt-auto overflow-hidden gap-1">
-                            <div className="flex items-center gap-1 min-w-0 overflow-hidden">
+                        <div className="flex flex-col mt-auto gap-0.5">
+                            <div className="flex items-center gap-1 min-w-0">
                                 <p
-                                    className="text-[10px] font-black uppercase tracking-widest italic truncate max-w-[90px]"
+                                    className="text-[10px] font-black uppercase tracking-widest italic truncate"
                                     style={{ color: ticket.department.color || undefined, opacity: selectedTicket?.id === ticket.id ? 1 : 0.6 }}
                                 >
                                     {ticket.department.name}
@@ -2154,9 +2168,10 @@ export default function TicketsPage() {
                                                             )}
 
                                                             {msg.messageType === 'INTERNAL' || msg.messageType === 'TEXT' ? (
-                                                                <p className={`text-sm font-medium leading-relaxed ${msg.fromMe && msg.messageType !== 'INTERNAL' ? 'text-white' : 'text-slate-900 dark:text-white'}`}>
-                                                                    {msg.content}
-                                                                </p>
+                                                                <div
+                                                                    className={`text-sm font-medium leading-relaxed whitespace-pre-wrap break-words select-text ${msg.fromMe && msg.messageType !== 'INTERNAL' ? 'text-white' : 'text-slate-900 dark:text-white'}`}
+                                                                    dangerouslySetInnerHTML={{ __html: formatWhatsApp(msg.content || '') }}
+                                                                />
                                                             ) : msg.messageType === 'IMAGE' ? (
                                                                 <div className="space-y-2">
                                                                     <img src={msg.mediaUrl} alt="Imagem" className="rounded-xl max-w-full shadow-sm cursor-pointer hover:opacity-95 transition-opacity" onClick={() => window.open(msg.mediaUrl, '_blank')} />
