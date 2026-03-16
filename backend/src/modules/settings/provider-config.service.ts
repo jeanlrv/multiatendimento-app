@@ -55,6 +55,10 @@ export interface ProviderConfigDecrypted {
 @Injectable()
 export class ProviderConfigService {
     private readonly logger = new Logger(ProviderConfigService.name);
+    /** Cache em memória de configs descriptografados por empresa — TTL 5 minutos */
+    private readonly decryptedCache = new Map<string, { data: Map<string, ProviderConfigDecrypted>; expiry: number }>();
+    private readonly CACHE_TTL_MS = 5 * 60 * 1000;
+
     constructor(
         private prisma: PrismaService,
         private crypto: CryptoService,
@@ -105,8 +109,8 @@ export class ProviderConfigService {
                 update: payload,
             });
 
-            // Inválida quaisquer pipelines que precisem ser re-avaliados com os novos settings
-            this.logger.log(`Upsert do provider ${provider} completo. O modelo selecionado foi atualizado no banco.`);
+            this.invalidateCache(companyId);
+            this.logger.log(`Upsert do provider ${provider} completo. Cache invalidado para empresa ${companyId}.`);
 
             return this.maskConfig(config);
         } catch (error) {
@@ -126,10 +130,16 @@ export class ProviderConfigService {
         await this.prisma.providerConfig.delete({
             where: { id: existing.id },
         });
+        this.invalidateCache(companyId);
     }
 
-    /** Retorna configs descriptografados para uso interno (factories) */
+    /** Retorna configs descriptografados para uso interno (factories) — com cache 5 min */
     async getDecryptedForCompany(companyId: string): Promise<Map<string, ProviderConfigDecrypted>> {
+        const cached = this.decryptedCache.get(companyId);
+        if (cached && cached.expiry > Date.now()) {
+            return cached.data;
+        }
+
         const configs = await this.prisma.providerConfig.findMany({
             where: { companyId, isEnabled: true },
         });
@@ -152,7 +162,13 @@ export class ProviderConfigService {
             }
         }
 
+        this.decryptedCache.set(companyId, { data: result, expiry: Date.now() + this.CACHE_TTL_MS });
         return result;
+    }
+
+    /** Invalida o cache de configs descriptografados da empresa */
+    private invalidateCache(companyId: string): void {
+        this.decryptedCache.delete(companyId);
     }
 
     async getAvailableLLMProviders(companyId: string): Promise<{

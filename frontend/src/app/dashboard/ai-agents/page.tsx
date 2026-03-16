@@ -41,12 +41,14 @@ export default function AIAgentsPage() {
             const [agentsData, kbData, modelsData, embProviders] = await Promise.all([
                 AIAgentsService.findAll(signal),
                 AIKnowledgeService.findAllBases(signal),
-                AIAgentsService.getModels().catch((e) => {
+                AIAgentsService.getModels(signal).catch((e) => {
+                    if (e?.name === 'CanceledError' || e?.name === 'AbortError') return [];
                     console.error('Falha crítica ao buscar Modelos LLMs:', e);
                     toast.error('Erro ao listar opções de modelos de IA.');
                     return [];
                 }),
-                AIAgentsService.getEmbeddingProviders().catch((e) => {
+                AIAgentsService.getEmbeddingProviders(signal).catch((e) => {
+                    if (e?.name === 'CanceledError' || e?.name === 'AbortError') return [];
                     console.error('Falha crítica ao buscar Embedding Providers:', e);
                     toast.error('Erro ao listar providers de embedding.');
                     // Garante que o fallback do Native no mínimo seja gerado em falhas severas

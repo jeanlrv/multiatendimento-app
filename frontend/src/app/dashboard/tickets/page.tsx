@@ -12,7 +12,8 @@ import { Trash2, Send, Phone, User, Clock, CheckCheck, Check, Paperclip, MoreVer
 import { AudioRecorder } from '@/components/chat/AudioRecorder';
 import { toast } from 'sonner';
 import { io, Socket } from 'socket.io-client';
-import EmojiPicker from 'emoji-picker-react';
+import dynamic from 'next/dynamic';
+const EmojiPicker = dynamic(() => import('emoji-picker-react'), { ssr: false });
 import { CreateTicketModal } from '@/components/tickets/create-ticket-modal';
 import TransferTicketModal from '@/components/tickets/transfer-ticket-modal';
 import { CreateScheduleModal } from '@/components/chat/CreateScheduleModal';

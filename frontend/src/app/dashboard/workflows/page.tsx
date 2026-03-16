@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
+import { Skeleton } from '@/components/ui/skeleton';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Zap,
@@ -93,9 +94,17 @@ export default function WorkflowsPage() {
         } catch { toast.error('Erro ao usar template'); }
     };
 
+    const MAX_IMPORT_SIZE = 5 * 1024 * 1024; // 5MB
+
     const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
+
+        if (file.size > MAX_IMPORT_SIZE) {
+            toast.error('Arquivo muito grande. O limite é 5MB.');
+            if (fileInputRef.current) fileInputRef.current.value = '';
+            return;
+        }
 
         const reader = new FileReader();
         reader.onload = async (event) => {
@@ -655,8 +664,20 @@ export default function WorkflowsPage() {
                         className="p-2"
                     >
                         {loadingTemplates ? (
-                            <div className="flex items-center justify-center py-16">
-                                <div className="h-8 w-8 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {[1, 2, 3].map(i => (
+                                    <div key={i} className="p-5 rounded-2xl border border-slate-200 dark:border-white/10 space-y-3">
+                                        <div className="flex items-start justify-between gap-2">
+                                            <div className="space-y-1.5 flex-1">
+                                                <Skeleton className="h-4 w-32" />
+                                                <Skeleton className="h-3 w-48" />
+                                            </div>
+                                            <Skeleton className="h-5 w-12 rounded-full shrink-0" />
+                                        </div>
+                                        <Skeleton className="h-3 w-full" />
+                                        <Skeleton className="h-8 w-full rounded-xl" />
+                                    </div>
+                                ))}
                             </div>
                         ) : templates.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-20 text-slate-400 gap-3">

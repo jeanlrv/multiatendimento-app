@@ -317,6 +317,7 @@ model Contact {
   csatTicketId String?
 
   @@index([companyId, phoneNumber])
+  @@index([companyId, customerId])
   @@index([phoneNumber])
   @@index([riskScore])
   @@index([companyId])
@@ -494,6 +495,7 @@ model Message {
   replies       Message[] @relation("MessageReplies")
 
   @@index([ticketId, sentAt])
+  @@index([ticketId, origin])
   @@index([ticketId])
   @@index([externalId])
   @@index([status])

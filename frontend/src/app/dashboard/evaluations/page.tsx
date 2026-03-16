@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { Skeleton } from '@/components/ui/skeleton';
 import { api } from '@/services/api';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -90,10 +91,12 @@ function DiagnosticModal({ ev, onClose }: { ev: Evaluation; onClose: () => void 
     const SentimentIcon = sentCfg.icon;
 
     useEffect(() => {
-        api.get(`/chat/${ev.ticket.id}/messages`)
+        const ctrl = new AbortController();
+        api.get(`/chat/${ev.ticket.id}/messages`, { signal: ctrl.signal })
             .then(r => setMessages(r.data?.messages || r.data || []))
-            .catch(() => {})
+            .catch(err => { if (err?.code === 'ERR_CANCELED') return; })
             .finally(() => setLoadingMsgs(false));
+        return () => ctrl.abort();
     }, [ev.ticket.id]);
 
     const closedAt = ev.ticket.closedAt || ev.ticket.resolvedAt;
@@ -287,13 +290,18 @@ export default function EvaluationsPage() {
     const [filterSentiment, setFilterSentiment] = useState('');
     const [filterRating, setFilterRating] = useState('');
 
-    useEffect(() => { fetchEvaluations(); }, []);
+    useEffect(() => {
+        const ctrl = new AbortController();
+        fetchEvaluations(ctrl.signal);
+        return () => ctrl.abort();
+    }, []);
 
-    const fetchEvaluations = async () => {
+    const fetchEvaluations = async (signal?: AbortSignal) => {
         try {
-            const response = await api.get('/evaluations');
+            const response = await api.get('/evaluations', { signal });
             setEvaluations(response.data);
         } catch (error: any) {
+            if (error?.code === 'ERR_CANCELED' || error?.name === 'CanceledError') return;
             toast.error(error.response?.data?.message || 'Erro ao buscar avaliações');
         } finally {
             setLoading(false);
@@ -444,7 +452,25 @@ export default function EvaluationsPage() {
             {loading ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {[1, 2, 3].map(i => (
-                        <div key={i} className="h-72 bg-gray-100 dark:bg-gray-800 animate-pulse rounded-3xl" />
+                        <div key={i} className="bg-white dark:bg-gray-900 rounded-3xl p-6 border border-gray-100 dark:border-gray-800 space-y-4">
+                            <div className="flex items-start justify-between gap-3">
+                                <div className="space-y-2 flex-1">
+                                    <Skeleton className="h-4 w-28" />
+                                    <Skeleton className="h-3.5 w-20" />
+                                </div>
+                                <Skeleton className="h-10 w-10 rounded-2xl shrink-0" />
+                            </div>
+                            <div className="flex gap-1">
+                                {[1,2,3,4,5].map(s => <Skeleton key={s} className="h-6 w-6 rounded" />)}
+                            </div>
+                            <Skeleton className="h-3 w-full" />
+                            <Skeleton className="h-3 w-4/5" />
+                            <Skeleton className="h-px w-full" />
+                            <div className="flex items-center justify-between">
+                                <Skeleton className="h-3.5 w-24" />
+                                <Skeleton className="h-7 w-20 rounded-xl" />
+                            </div>
+                        </div>
                     ))}
                 </div>
             ) : filteredEvaluations.length === 0 ? (

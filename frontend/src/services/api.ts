@@ -66,6 +66,17 @@ api.interceptors.response.use(
             }
         }
 
+        // Retry automático para erros 5xx (máx 2 tentativas, backoff exponencial)
+        const originalRequestWithRetry = error.config as AxiosRequestConfig & { _retry?: boolean; _retryCount?: number };
+        if (error.response?.status >= 500 && !originalRequestWithRetry._retry) {
+            originalRequestWithRetry._retryCount = (originalRequestWithRetry._retryCount ?? 0) + 1;
+            if (originalRequestWithRetry._retryCount <= 2) {
+                const delay = 500 * Math.pow(2, originalRequestWithRetry._retryCount - 1); // 500ms, 1s
+                await new Promise(r => setTimeout(r, delay));
+                return api(originalRequestWithRetry);
+            }
+        }
+
         return Promise.reject(error);
     }
 );

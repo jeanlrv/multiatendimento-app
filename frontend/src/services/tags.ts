@@ -8,8 +8,8 @@ export interface Tag {
 }
 
 export const TagsService = {
-    findAll: async () => {
-        const response = await api.get<Tag[]>('/tags');
+    findAll: async (signal?: AbortSignal) => {
+        const response = await api.get<Tag[]>('/tags', { signal });
         return response.data;
     },
 

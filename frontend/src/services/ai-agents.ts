@@ -60,13 +60,13 @@ export const AIAgentsService = {
         await api.delete(`/ai/agents/${id}`);
     },
 
-    getModels: async () => {
-        const response = await api.get<AIProviderModels[]>('/ai/models');
+    getModels: async (signal?: AbortSignal) => {
+        const response = await api.get<AIProviderModels[]>('/ai/models', { signal });
         return response.data;
     },
 
-    getEmbeddingProviders: async (): Promise<{ id: string; name: string; models: { id: string; name: string; dimensions: number }[] }[]> => {
-        const response = await api.get('/ai/embedding-providers');
+    getEmbeddingProviders: async (signal?: AbortSignal): Promise<{ id: string; name: string; models: { id: string; name: string; dimensions: number }[] }[]> => {
+        const response = await api.get('/ai/embedding-providers', { signal });
         return response.data;
     },
 

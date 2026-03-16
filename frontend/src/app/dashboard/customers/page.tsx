@@ -8,6 +8,7 @@ import {
     Phone, Mail, CreditCard, Tag, Star, Merge, Edit3, Trash2, ChevronLeft,
     ChevronRight, Filter, Download
 } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -71,21 +72,26 @@ export default function CustomersPage() {
     const [mergeTarget, setMergeTarget] = useState<Customer | null>(null);
     const [merging, setMerging] = useState(false);
 
-    const load = useCallback(async () => {
+    const load = useCallback(async (signal?: AbortSignal) => {
         setLoading(true);
         try {
-            const res = await customersService.findAll({ search, status: statusFilter || undefined, page, limit: 20 });
+            const res = await customersService.findAll({ search, status: statusFilter || undefined, page, limit: 20 }, signal);
             setCustomers(res.data);
             setTotal(res.total);
             setLastPage(res.lastPage);
-        } catch {
+        } catch (err: any) {
+            if (err?.code === 'ERR_CANCELED' || err?.name === 'CanceledError') return;
             toast.error('Erro ao carregar clientes');
         } finally {
             setLoading(false);
         }
     }, [search, statusFilter, page]);
 
-    useEffect(() => { load(); }, [load]);
+    useEffect(() => {
+        const ctrl = new AbortController();
+        load(ctrl.signal);
+        return () => ctrl.abort();
+    }, [load]);
 
     // Reseta página quando busca muda
     useEffect(() => { setPage(1); }, [search]);
@@ -256,8 +262,17 @@ export default function CustomersPage() {
                 {/* Customer list */}
                 <div className="flex-1 overflow-y-auto p-4">
                     {loading ? (
-                        <div className="flex items-center justify-center py-20">
-                            <Loader2 size={28} className="animate-spin text-primary" />
+                        <div className="space-y-3 py-2">
+                            {[1, 2, 3, 4, 5, 6].map(i => (
+                                <div key={i} className="flex items-center gap-3 p-3 rounded-xl border border-slate-100 dark:border-white/5">
+                                    <Skeleton className="h-10 w-10 rounded-full shrink-0" />
+                                    <div className="flex-1 space-y-1.5">
+                                        <Skeleton className="h-4 w-36" />
+                                        <Skeleton className="h-3 w-24" />
+                                    </div>
+                                    <Skeleton className="h-5 w-16 rounded-full shrink-0" />
+                                </div>
+                            ))}
                         </div>
                     ) : customers.length === 0 ? (
                         <div className="flex flex-col items-center gap-3 py-20 text-slate-400">
@@ -364,17 +379,20 @@ export default function CustomersPage() {
                         onClick={e => { if (e.target === e.currentTarget) setShowModal(false); }}
                     >
                         <motion.div
+                            role="dialog"
+                            aria-modal="true"
+                            aria-labelledby="customer-modal-title"
                             initial={{ scale: 0.95, opacity: 0 }}
                             animate={{ scale: 1, opacity: 1 }}
                             exit={{ scale: 0.95, opacity: 0 }}
                             className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg border border-slate-200 dark:border-white/10 overflow-hidden"
                         >
                             <div className="px-6 py-4 border-b border-slate-200 dark:border-white/8 flex items-center justify-between">
-                                <h2 className="font-black text-slate-900 dark:text-white">
+                                <h2 id="customer-modal-title" className="font-black text-slate-900 dark:text-white">
                                     {editingCustomer ? 'Editar Cliente' : 'Novo Cliente'}
                                 </h2>
-                                <button onClick={() => setShowModal(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg">
-                                    <X size={16} />
+                                <button onClick={() => setShowModal(false)} aria-label="Fechar" className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg">
+                                    <X size={16} aria-hidden="true" />
                                 </button>
                             </div>
 
@@ -509,13 +527,16 @@ export default function CustomersPage() {
                         onClick={e => { if (e.target === e.currentTarget) setShowMergeModal(false); }}
                     >
                         <motion.div
+                            role="dialog"
+                            aria-modal="true"
+                            aria-labelledby="merge-modal-title"
                             initial={{ scale: 0.95, opacity: 0 }}
                             animate={{ scale: 1, opacity: 1 }}
                             exit={{ scale: 0.95, opacity: 0 }}
                             className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md border border-slate-200 dark:border-white/10"
                         >
                             <div className="px-6 py-4 border-b border-slate-200 dark:border-white/8">
-                                <h2 className="font-black text-slate-900 dark:text-white flex items-center gap-2">
+                                <h2 id="merge-modal-title" className="font-black text-slate-900 dark:text-white flex items-center gap-2">
                                     <Merge size={18} className="text-primary" /> Mesclar Clientes
                                 </h2>
                                 <p className="text-xs text-slate-400 mt-1">

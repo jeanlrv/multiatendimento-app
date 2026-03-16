@@ -32,32 +32,38 @@ export default function ReportsPage() {
     const [selectedCustomer, setSelectedCustomer] = useState<CustomerOption | null>(null);
 
     useEffect(() => {
-        fetchData();
+        const controller = new AbortController();
+        fetchData(controller.signal);
+        return () => controller.abort();
     }, [dateRange, selectedCustomer]);
 
     useEffect(() => {
-        api.get('/reports/satisfaction-trend', { params: { days: trendDays } })
+        const controller = new AbortController();
+        api.get('/reports/satisfaction-trend', { params: { days: trendDays }, signal: controller.signal })
             .then(r => setSatisfactionTrend(r.data))
-            .catch(() => {});
+            .catch((e) => { if (e?.name !== 'CanceledError' && e?.name !== 'AbortError') {} });
+        return () => controller.abort();
     }, [trendDays]);
 
-    const fetchData = async () => {
+    const fetchData = async (signal?: AbortSignal) => {
         setLoading(true);
         const params: any = {
             ...dateRange,
             ...(selectedCustomer && { customerId: selectedCustomer.id }),
         };
         const [statsResult, perfResult, auditResult, slaResult, rtResult, trendResult] = await Promise.allSettled([
-            api.get('/reports/stats', { params }),
-            api.get('/reports/performance', { params }),
-            api.get('/reports/audit/internal-chat', { params: { ...dateRange, query: auditQuery } }),
-            api.get('/reports/sla-compliance', { params }),
-            api.get('/reports/resolution-time', { params }),
-            api.get('/reports/satisfaction-trend', { params: { days: trendDays } }),
+            api.get('/reports/stats', { params, signal }),
+            api.get('/reports/performance', { params, signal }),
+            api.get('/reports/audit/internal-chat', { params: { ...dateRange, query: auditQuery }, signal }),
+            api.get('/reports/sla-compliance', { params, signal }),
+            api.get('/reports/resolution-time', { params, signal }),
+            api.get('/reports/satisfaction-trend', { params: { days: trendDays }, signal }),
         ]);
 
+        if (signal?.aborted) return;
+
         if (statsResult.status === 'fulfilled') setStats(statsResult.value.data);
-        else toast.error('Erro ao carregar estatísticas');
+        else if ((statsResult.reason as any)?.name !== 'CanceledError') toast.error('Erro ao carregar estatísticas');
         if (perfResult.status === 'fulfilled') setPerformance(perfResult.value.data);
         if (auditResult.status === 'fulfilled') setAuditLogs(auditResult.value.data);
         else setAuditLogs([]);

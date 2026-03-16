@@ -66,8 +66,8 @@ export interface CustomerConversation {
 }
 
 export const customersService = {
-    findAll: async (params?: { search?: string; status?: string; page?: number; limit?: number }) => {
-        const res = await api.get('/customers', { params });
+    findAll: async (params?: { search?: string; status?: string; page?: number; limit?: number }, signal?: AbortSignal) => {
+        const res = await api.get('/customers', { params, signal });
         return res.data as { data: Customer[]; total: number; page: number; lastPage: number };
     },
 

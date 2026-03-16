@@ -36,9 +36,9 @@ export class ChatService {
     async sendMessage(ticketId: string, content: string, fromMe: boolean, type: MessageType = MessageType.TEXT, mediaUrl?: string, companyId?: string, origin: 'AGENT' | 'CLIENT' | 'AI' = 'AGENT', quotedMessageId?: string, externalId?: string) {
         this.logger.log(`Processando mensagem para o ticket: ${ticketId} (${origin})`);
 
-        // Garantir isolamento multi-tenant: companyId deve ser sempre fornecido
+        // Garantir isolamento multi-tenant: companyId é obrigatório
         if (!companyId) {
-            this.logger.warn(`sendMessage chamado sem companyId para ticketId=${ticketId}. Possível multi-tenant breach.`);
+            throw new ForbiddenException('companyId ausente: acesso multi-tenant não autorizado');
         }
 
         return await this.prisma.$transaction(async (tx) => {
@@ -57,12 +57,9 @@ export class ChatService {
                 },
             });
 
-            // Sempre filtrar por companyId quando disponível (multi-tenancy isolation)
+            // companyId sempre presente — garante isolamento multi-tenant
             const ticket = await tx.ticket.findUnique({
-                where: {
-                    id: ticketId,
-                    ...(companyId ? { companyId } : {}),
-                },
+                where: { id: ticketId, companyId },
                 include: { contact: true }
             });
 
@@ -698,7 +695,7 @@ export class ChatService {
         // Merge ownership check + ticket update (updateMany com companyId serve como validação)
         await this.prisma.ticket.updateMany({
             where: { id: ticketId, companyId },
-            data: { unreadMessages: 0 },
+            data: { unreadMessages: 0, lastMessageAt: new Date() },
         });
         const result = await this.prisma.message.updateMany({
             where: { ticketId, fromMe: false, readAt: null },
@@ -758,7 +755,8 @@ export class ChatService {
         const s = await this.prisma.setting.findFirst({
             where: { companyId, key: 'canDeleteMessages' }, select: { value: true },
         });
-        if (s?.value !== 'true' && s?.value !== '"true"')
+        const allowedValues = ['true', '1', 'yes'];
+        if (!allowedValues.includes((s?.value ?? '').replace(/"/g, '').toLowerCase()))
             throw new ForbiddenException('A exclusão de mensagens está desativada nas configurações da empresa');
 
         const msg = await this.prisma.message.findFirst({

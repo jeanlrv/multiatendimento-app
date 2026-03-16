@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { Skeleton } from '@/components/ui/skeleton';
 import { TagsService, Tag } from '@/services/tags';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -29,12 +30,13 @@ export default function TagsPage() {
         }
     });
 
-    const fetchTags = async () => {
+    const fetchTags = async (signal?: AbortSignal) => {
         try {
             setLoading(true);
-            const data = await TagsService.findAll();
+            const data = await TagsService.findAll(signal);
             setTags(data);
-        } catch (error) {
+        } catch (error: any) {
+            if (error?.code === 'ERR_CANCELED' || error?.name === 'CanceledError') return;
             console.error('Erro ao buscar tags:', error);
         } finally {
             setLoading(false);
@@ -42,7 +44,9 @@ export default function TagsPage() {
     };
 
     useEffect(() => {
-        fetchTags();
+        const ctrl = new AbortController();
+        fetchTags(ctrl.signal);
+        return () => ctrl.abort();
     }, []);
 
     const openModal = (tag?: Tag) => {
@@ -209,7 +213,19 @@ export default function TagsPage() {
             {loading ? (
                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6 relative z-10 px-4">
                     {[1, 2, 3, 4, 5, 6].map(i => (
-                        <div key={i} className="h-32 glass-heavy rounded-[2rem] animate-pulse" />
+                        <div key={i} className="glass-heavy rounded-[2rem] p-5 space-y-3">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <Skeleton className="h-8 w-8 rounded-xl shrink-0" />
+                                    <Skeleton className="h-4 w-20" />
+                                </div>
+                                <Skeleton className="h-5 w-10 rounded-full" />
+                            </div>
+                            <div className="flex gap-1.5">
+                                <Skeleton className="h-7 flex-1 rounded-xl" />
+                                <Skeleton className="h-7 w-7 rounded-xl" />
+                            </div>
+                        </div>
                     ))}
                 </div>
             ) : filteredTags.length === 0 ? (
