@@ -176,10 +176,45 @@ export class ChatService {
         }
     }
 
-    private handleIncomingClientMessage(ticket: any, content: string) {
-        this.handleAIResponse(ticket.id, content).catch(err => {
+    private async handleIncomingClientMessage(ticket: any, content: string) {
+        try {
+            // Buscar a última mensagem para verificar tipo (áudio/imagem)
+            const lastMsg = await this.prisma.message.findFirst({
+                where: { ticketId: ticket.id },
+                orderBy: { sentAt: 'desc' },
+                select: { messageType: true, mediaUrl: true, id: true, content: true },
+            });
+
+            let processedContent = content;
+
+            // Transcrição automática de áudio
+            if (lastMsg?.messageType === 'AUDIO' && lastMsg?.mediaUrl) {
+                this.logger.log(`[AutoTranscribe] Transcrevendo áudio para ticket ${ticket.id}`);
+                const transcription = await this.aiService.transcribeAudio(lastMsg.mediaUrl, ticket.companyId);
+                if (transcription && !transcription.startsWith('[')) {
+                    // Atualizar mensagem no banco com a transcrição
+                    await this.prisma.message.update({
+                        where: { id: lastMsg.id },
+                        data: { transcription },
+                    });
+                    processedContent = transcription;
+                    this.logger.log(`[AutoTranscribe] Transcrição: "${transcription.substring(0, 100)}"`);
+                } else {
+                    processedContent = transcription || '[Áudio não transcrito]';
+                }
+            }
+
+            // Análise multimodal de imagem
+            if (lastMsg?.messageType === 'IMAGE' && lastMsg?.mediaUrl) {
+                this.logger.log(`[AutoVision] Processando imagem para ticket ${ticket.id}`);
+                await this.handleAIResponseMultimodal(ticket.id, processedContent, lastMsg.mediaUrl);
+                return;
+            }
+
+            await this.handleAIResponse(ticket.id, processedContent);
+        } catch (err) {
             this.logger.error(`Erro no fluxo de IA: ${err.message}`);
-        });
+        }
     }
 
     private async handleAIResponse(ticketId: string, content: string) {
@@ -431,6 +466,19 @@ export class ChatService {
             }
 
             if (finalizeMatch) {
+                // Enviar mensagem de despedida antes de resolver
+                const dept = ticket.department;
+                const closingMsg = (dept as any)?.closingMessage;
+                if (closingMsg) {
+                    await this.sendMessage(ticketId, closingMsg, true, MessageType.TEXT, undefined, ticket.companyId, 'AI');
+                } else {
+                    await this.sendMessage(
+                        ticketId,
+                        'Foi um prazer atendê-lo! Se precisar de algo mais, estamos à disposição. 😊',
+                        true, MessageType.TEXT, undefined, ticket.companyId, 'AI'
+                    );
+                }
+
                 await this.prisma.ticket.update({
                     where: { id: ticketId },
                     data: { status: 'RESOLVED', resolvedAt: new Date(), closedAt: new Date() },
@@ -442,13 +490,83 @@ export class ChatService {
                     contact: ticket.contact,
                     departmentId: ticket.departmentId ?? null,
                 });
-                this.logger.log(`IA finalizou ticket ${ticketId}`);
-                return; // Não enviar o texto do comando ao cliente
+                this.logger.log(`IA finalizou ticket ${ticketId} (despedida enviada)`);
+                return;
             }
 
             await this.sendMessage(ticketId, this.sanitizeForWhatsApp(aiResponse), true, MessageType.TEXT, undefined, ticket.companyId, 'AI');
         } catch (error) {
             this.logger.error(`Erro ao processar resposta de IA: ${error.message}`);
+        }
+    }
+
+    /**
+     * Processa resposta de IA para mensagens com imagem (multimodal).
+     * Usa chatMultimodal para enviar a imagem junto com o texto ao LLM.
+     */
+    private async handleAIResponseMultimodal(ticketId: string, content: string, imageUrl: string) {
+        try {
+            const ticket = await this.prisma.ticket.findUnique({
+                where: { id: ticketId },
+                include: { department: true, contact: true },
+            });
+
+            if (!ticket?.department?.aiAgentId) return;
+
+            const ticketMode = (ticket as any).mode || 'MANUAL';
+            if (ticketMode !== 'AI' && ticketMode !== 'HIBRIDO') return;
+
+            const messages = await this.prisma.message.findMany({
+                where: { ticketId },
+                orderBy: { sentAt: 'desc' },
+                take: 11,
+            });
+
+            const history = messages
+                .filter(m => m.content !== content)
+                .reverse()
+                .map(m => ({
+                    role: m.fromMe ? 'assistant' : 'user',
+                    content: m.content,
+                }));
+
+            const prompt = content && content !== '[Imagem]'
+                ? content
+                : 'O cliente enviou esta imagem. Analise e responda adequadamente.';
+
+            let aiResponse: string | null = null;
+            try {
+                aiResponse = await this.aiService.chatMultimodal(
+                    ticket.companyId,
+                    ticket.department.aiAgentId,
+                    prompt,
+                    [imageUrl],
+                    history,
+                );
+            } catch (err) {
+                this.logger.error(`[Multimodal] Falha para ticket ${ticketId}: ${err.message}`);
+                // Fallback: processar como texto normal
+                await this.handleAIResponse(ticketId, content);
+                return;
+            }
+
+            if (!aiResponse) return;
+
+            // Processar comandos de roteamento
+            const transferMatch = aiResponse.match(/\[TRANSFERIR:([^\]]+)\]/i);
+            const humanMatch = aiResponse.match(/\[HUMANO\]/i);
+            const finalizeMatch = aiResponse.match(/\[FINALIZAR\]/i);
+
+            if (transferMatch || humanMatch || finalizeMatch) {
+                // Delegar ao handleAIResponse para processar comandos de roteamento
+                // Injetamos a resposta da IA como se fosse texto para reutilizar a lógica
+                await this.handleAIResponse(ticketId, content);
+                return;
+            }
+
+            await this.sendMessage(ticketId, this.sanitizeForWhatsApp(aiResponse), true, MessageType.TEXT, undefined, ticket.companyId, 'AI');
+        } catch (error) {
+            this.logger.error(`Erro no processamento multimodal: ${error.message}`);
         }
     }
 
@@ -611,14 +729,45 @@ export class ChatService {
                 ? JSON.parse(department.businessHours)
                 : department.businessHours;
             const timezone = department.timezone || 'America/Sao_Paulo';
-            const localDate = new Date(new Date().toLocaleString('en-US', { timeZone: timezone }));
-            const dayConfig = bh[localDate.getDay().toString()];
+
+            // Usar Intl.DateTimeFormat para conversão confiável de timezone
+            const formatter = new Intl.DateTimeFormat('en-US', {
+                timeZone: timezone,
+                year: 'numeric', month: '2-digit', day: '2-digit',
+                hour: '2-digit', minute: '2-digit',
+                hour12: false,
+            });
+            const parts = Object.fromEntries(
+                formatter.formatToParts(new Date()).map(p => [p.type, p.value])
+            );
+            const localHour = parseInt(parts.hour, 10);
+            const localMinute = parseInt(parts.minute, 10);
+            const dayOfWeek = new Date(
+                parseInt(parts.year), parseInt(parts.month) - 1, parseInt(parts.day)
+            ).getDay().toString();
+
+            const dayConfig = bh[dayOfWeek];
+
+            this.logger.debug(
+                `[BH-AI Debug] Dept "${department.name}" | TZ: ${timezone} | ` +
+                `Hora: ${parts.hour}:${parts.minute} | Dia: ${dayOfWeek} | ` +
+                `Config: ${dayConfig ? `${dayConfig.start}-${dayConfig.end}` : 'FECHADO'}`
+            );
+
             if (!dayConfig?.start || !dayConfig?.end) return true; // dia fechado
-            const cur = localDate.getHours() * 60 + localDate.getMinutes();
+            const cur = localHour * 60 + localMinute;
             const [sh, sm] = dayConfig.start.split(':').map(Number);
             const [eh, em] = dayConfig.end.split(':').map(Number);
-            return cur < sh * 60 + sm || cur >= eh * 60 + em;
-        } catch { return false; }
+            const outside = cur < sh * 60 + sm || cur >= eh * 60 + em;
+
+            if (outside) {
+                this.logger.debug(`[BH-AI Debug] FORA do horário: ${cur}min não está entre ${sh * 60 + sm}-${eh * 60 + em}`);
+            }
+            return outside;
+        } catch (e) {
+            this.logger.warn(`[BH-AI] Erro ao verificar horário: ${e.message}`);
+            return false;
+        }
     }
 
     /** Converte markdown padrão para formato WhatsApp antes de enviar */

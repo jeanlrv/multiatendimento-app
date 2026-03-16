@@ -90,10 +90,31 @@ export class WebhookProcessingService {
                 : department.businessHours;
 
             const timezone = department.timezone || 'America/Sao_Paulo';
-            const now = new Date();
-            const localDate = new Date(now.toLocaleString('en-US', { timeZone: timezone }));
-            const dayOfWeek = localDate.getDay().toString();
+
+            // Usar Intl.DateTimeFormat para conversão confiável de timezone (independe de locale do OS)
+            const formatter = new Intl.DateTimeFormat('en-US', {
+                timeZone: timezone,
+                year: 'numeric', month: '2-digit', day: '2-digit',
+                hour: '2-digit', minute: '2-digit', second: '2-digit',
+                hour12: false,
+            });
+            const parts = Object.fromEntries(
+                formatter.formatToParts(new Date()).map(p => [p.type, p.value])
+            );
+            const localHour = parseInt(parts.hour, 10);
+            const localMinute = parseInt(parts.minute, 10);
+            // Intl.DateTimeFormat não tem dayOfWeek direto, usamos toLocaleString
+            const dayOfWeek = new Date(
+                parseInt(parts.year), parseInt(parts.month) - 1, parseInt(parts.day)
+            ).getDay().toString();
+
             const dayConfig = bh[dayOfWeek];
+
+            this.logger.debug(
+                `[BH Debug] Dept "${department.name}" | TZ: ${timezone} | ` +
+                `Hora local: ${parts.hour}:${parts.minute} | Dia: ${dayOfWeek} | ` +
+                `Config: ${dayConfig ? `${dayConfig.start}-${dayConfig.end}` : 'FECHADO'}`
+            );
 
             if (!dayConfig || !dayConfig.start || !dayConfig.end) {
                 return department.outOfHoursMessage;
@@ -102,14 +123,16 @@ export class WebhookProcessingService {
             const [startH, startM] = dayConfig.start.split(':').map(Number);
             const [endH, endM] = dayConfig.end.split(':').map(Number);
 
-            const currentMinutes = localDate.getHours() * 60 + localDate.getMinutes();
+            const currentMinutes = localHour * 60 + localMinute;
             const startMinutes = startH * 60 + startM;
             const endMinutes = endH * 60 + endM;
 
             if (currentMinutes < startMinutes || currentMinutes >= endMinutes) {
+                this.logger.debug(`[BH Debug] FORA do horário: ${currentMinutes}min < ${startMinutes}min ou >= ${endMinutes}min`);
                 return department.outOfHoursMessage;
             }
 
+            this.logger.debug(`[BH Debug] DENTRO do horário comercial`);
             return null;
         } catch (err) {
             this.logger.warn(`Erro ao verificar horário comercial: ${err.message}`);
@@ -156,6 +179,21 @@ export class WebhookProcessingService {
             const text = payload.buttonResponse?.selectedButtonLabel || payload.listResponse?.selectedTitle;
             return { messageType: MessageType.TEXT, content: text };
         }
+
+        // Fallback: capturar formatos alternativos da Z-API (body, message direto, text como string)
+        const fallbackText =
+            payload.body ||
+            payload.message ||
+            (typeof payload.text === 'string' ? payload.text : null) ||
+            payload.caption ||
+            '';
+
+        if (fallbackText) {
+            this.logger.debug(`[extractMessageContent] Conteúdo capturado via fallback: "${String(fallbackText).substring(0, 80)}"`);
+            return { messageType: MessageType.TEXT, content: String(fallbackText) };
+        }
+
+        this.logger.warn(`[extractMessageContent] Nenhum conteúdo extraído do payload. Keys: ${Object.keys(payload).join(', ')}`);
         return { messageType: MessageType.TEXT, content: '' };
     }
 
