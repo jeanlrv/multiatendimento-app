@@ -49,7 +49,7 @@ export class SlaMonitorService extends WorkerHost implements OnModuleInit {
         if (job.name === 'check-expiration') return this.handleExpiration();
     }
 
-    // ─── SLA breach ────────────────────────────────────────────────────────────
+    // ─── SLA breach with proactive thresholds ──────────────────────────────────
 
     private async handleSlaCheck() {
         this.logger.log('Iniciando verificação de SLA...');
@@ -74,40 +74,131 @@ export class SlaMonitorService extends WorkerHost implements OnModuleInit {
             const department = ticket.department;
             if (!department) continue;
 
-            let isBreached = false;
+            // Calcular % de consumo do SLA
+            let slaPercent = 0;
             let breachType: 'FIRST_RESPONSE' | 'RESOLUTION' | null = null;
+            let slaLimitMs = 0;
 
             if (department.slaFirstResponseMin && !ticket.firstResponseAt) {
-                const limitDate = new Date(ticket.createdAt.getTime() + department.slaFirstResponseMin * 60_000);
-                if (now > limitDate) { isBreached = true; breachType = 'FIRST_RESPONSE'; }
+                slaLimitMs = department.slaFirstResponseMin * 60_000;
+                const elapsed = now.getTime() - ticket.createdAt.getTime();
+                slaPercent = (elapsed / slaLimitMs) * 100;
+                breachType = 'FIRST_RESPONSE';
+            } else if (department.slaResolutionMin && !ticket.resolvedAt) {
+                slaLimitMs = department.slaResolutionMin * 60_000;
+                const elapsed = now.getTime() - ticket.createdAt.getTime();
+                slaPercent = (elapsed / slaLimitMs) * 100;
+                breachType = 'RESOLUTION';
             }
 
-            if (!isBreached && department.slaResolutionMin && !ticket.resolvedAt) {
-                const limitDate = new Date(ticket.createdAt.getTime() + department.slaResolutionMin * 60_000);
-                if (now > limitDate) { isBreached = true; breachType = 'RESOLUTION'; }
-            }
+            if (!breachType || slaPercent < 75) continue;
 
-            if (isBreached && breachType) {
+            const cacheKey = `${ticket.id}:${breachType}`;
+            const lastNotified = this.breachNotifiedAt.get(cacheKey) ?? 0;
+            const cooldownMs = slaPercent >= 100 ? this.BREACH_NOTIFY_COOLDOWN_MS : 10 * 60 * 1000; // 10min para warnings
+
+            if (Date.now() - lastNotified <= cooldownMs) continue;
+            this.breachNotifiedAt.set(cacheKey, Date.now());
+
+            if (slaPercent >= 100) {
+                // 🔴 100% — Viola + Redistribuir para outro atendente com menor carga
                 breachCount++;
-                const cacheKey = `${ticket.id}:${breachType}`;
-                const lastNotified = this.breachNotifiedAt.get(cacheKey) ?? 0;
-                if (Date.now() - lastNotified > this.BREACH_NOTIFY_COOLDOWN_MS) {
-                    this.breachNotifiedAt.set(cacheKey, Date.now());
-                    this.eventEmitter.emit('sla.breach', {
-                        ticketId: ticket.id,
-                        companyId: ticket.companyId,
-                        assignedUserId: ticket.assignedUserId,
-                        departmentName: department.name,
-                        breachType,
-                        ticket,
+                this.eventEmitter.emit('sla.breach', {
+                    ticketId: ticket.id,
+                    companyId: ticket.companyId,
+                    assignedUserId: ticket.assignedUserId,
+                    departmentName: department.name,
+                    breachType,
+                    ticket,
+                });
+
+                // Redistribuir para atendente com menor carga
+                await this.redistributeTicket(ticket);
+                this.logger.warn(`SLA breach 100%: ticket=${ticket.id} type=${breachType} — redistribuído`);
+
+            } else if (slaPercent >= 90) {
+                // 🟠 90% — Alerta supervisor + escalar prioridade
+                if (ticket.priority !== 'CRITICAL' && ticket.priority !== 'HIGH') {
+                    await this.prisma.ticket.update({
+                        where: { id: ticket.id },
+                        data: { priority: 'HIGH' },
                     });
-                    this.logger.warn(`SLA breach: ticket=${ticket.id} type=${breachType} empresa=${ticket.companyId}`);
                 }
+                // Notificar supervisores
+                this.eventEmitter.emit('sla.warning', {
+                    ticketId: ticket.id,
+                    companyId: ticket.companyId,
+                    assignedUserId: ticket.assignedUserId,
+                    departmentName: department.name,
+                    level: '90%',
+                    breachType,
+                });
+                this.logger.warn(`SLA warning 90%: ticket=${ticket.id} prioridade escalada para HIGH`);
+
+            } else {
+                // 🟡 75% — Alerta ao atendente
+                this.eventEmitter.emit('sla.warning', {
+                    ticketId: ticket.id,
+                    companyId: ticket.companyId,
+                    assignedUserId: ticket.assignedUserId,
+                    departmentName: department.name,
+                    level: '75%',
+                    breachType,
+                });
+                this.logger.log(`SLA warning 75%: ticket=${ticket.id}`);
             }
         }
 
         this.logger.log(`SLA concluído. ${breachCount} violações.`);
         return { checked: openTickets.length, breached: breachCount };
+    }
+
+    /**
+     * Redistribui ticket para o atendente do departamento com menor carga.
+     */
+    private async redistributeTicket(ticket: any) {
+        try {
+            const agents = await this.prisma.user.findMany({
+                where: {
+                    companyId: ticket.companyId,
+                    departments: { some: { id: ticket.departmentId } },
+                    isActive: true,
+                    id: { not: ticket.assignedUserId || undefined }, // exclui atendente atual
+                },
+                select: {
+                    id: true,
+                    name: true,
+                    _count: {
+                        select: {
+                            assignedTickets: {
+                                where: { status: { in: [TicketStatus.OPEN, TicketStatus.PENDING, TicketStatus.IN_PROGRESS] } }
+                            }
+                        }
+                    }
+                },
+                orderBy: { assignedTickets: { _count: 'asc' } },
+            });
+
+            if (agents.length === 0) {
+                this.logger.warn(`[Redistribuir] Nenhum agente disponível para ticket ${ticket.id}`);
+                return;
+            }
+
+            const bestAgent = agents[0];
+            await this.prisma.ticket.update({
+                where: { id: ticket.id },
+                data: { assignedUserId: bestAgent.id },
+            });
+
+            this.eventEmitter.emit('ticket.assigned', {
+                ticket,
+                assignedUserId: bestAgent.id,
+            });
+
+            this.logger.log(`[Redistribuir] ticket=${ticket.id} → agente ${bestAgent.name} (${bestAgent._count.assignedTickets} tickets)`);
+        } catch (err) {
+            this.logger.error(`[Redistribuir] Falha: ${(err as any).message}`);
+        }
     }
 
     // ─── Ticket expiration + CSAT expiration ───────────────────────────────────

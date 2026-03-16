@@ -104,15 +104,16 @@ export class WebhookProcessingService {
             const localHour = parseInt(parts.hour, 10);
             const localMinute = parseInt(parts.minute, 10);
             // Intl.DateTimeFormat não tem dayOfWeek direto, usamos toLocaleString
-            const dayOfWeek = new Date(
+            const dayOfWeekNum = new Date(
                 parseInt(parts.year), parseInt(parts.month) - 1, parseInt(parts.day)
-            ).getDay().toString();
-
-            const dayConfig = bh[dayOfWeek];
+            ).getDay();
+            // Suporta ambos os formatos de keys: numérico ("0","1") e nome do dia ("sunday","monday")
+            const DAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+            const dayConfig = bh[dayOfWeekNum.toString()] || bh[DAY_NAMES[dayOfWeekNum]];
 
             this.logger.log(
                 `[BH Debug] Dept "${department.name}" | TZ: ${timezone} | ` +
-                `Hora local: ${parts.hour}:${parts.minute} | Dia: ${dayOfWeek} | ` +
+                `Hora local: ${parts.hour}:${parts.minute} | Dia: ${dayOfWeekNum} (${DAY_NAMES[dayOfWeekNum]}) | ` +
                 `Config: ${dayConfig ? `${dayConfig.start}-${dayConfig.end}` : 'FECHADO'} | ` +
                 `BH keys: ${Object.keys(bh).join(',')}`
             );

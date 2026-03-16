@@ -527,6 +527,7 @@ export class TicketsService {
         connectionId?: string | null;
         departmentId?: string | null;
     }) {
+        this.logger.log(`[onTicketResolved] Evento recebido para ticket ${data.ticketId} (company: ${data.companyId}, connectionId: ${data.connectionId || 'N/A'})`);
         try {
             let contact = data.contact;
             let connectionId = data.connectionId ?? null;
@@ -538,13 +539,18 @@ export class TicketsService {
                     where: { id: data.ticketId },
                     include: { contact: true },
                 });
-                if (!ticket) return;
-                contact = ticket.contact;
-                connectionId = (ticket as any).connectionId;
+                if (!ticket) {
+                    this.logger.warn(`[onTicketResolved] Ticket ${data.ticketId} não encontrado no banco`);
+                    return;
+                }
+                contact = contact || ticket.contact;
+                connectionId = connectionId || (ticket as any).connectionId;
                 departmentId = departmentId ?? (ticket as any).departmentId ?? null;
+                this.logger.log(`[onTicketResolved] Dados complementados do banco: connectionId=${connectionId}, contactPhone=${contact?.phoneNumber}`);
             }
 
             const csatSent = await this.sendCsatIfEnabled(data.companyId, data.ticketId, contact, connectionId, departmentId);
+            this.logger.log(`[onTicketResolved] CSAT enviado: ${csatSent}`);
 
             // Se CSAT não foi enviado, dispara sentimento como fallback imediato
             if (!csatSent) {
@@ -552,9 +558,57 @@ export class TicketsService {
                     this.logger.warn(`[onTicketResolved] Falha na análise de sentimento para ticket ${data.ticketId}: ${err.message}`);
                 });
             }
+
+            // Follow-up automático (24h) se habilitado
+            this.scheduleFollowUp(data.companyId, data.ticketId, contact, connectionId).catch(err => {
+                this.logger.warn(`[onTicketResolved] Falha ao agendar follow-up: ${err.message}`);
+            });
         } catch (err) {
             this.logger.warn(`[onTicketResolved] Falha ao processar CSAT para ticket ${data.ticketId}: ${err.message}`);
         }
+    }
+
+    /**
+     * Agenda mensagem de follow-up 24h após resolução, se habilitado nas settings.
+     */
+    private async scheduleFollowUp(companyId: string, ticketId: string, contact: any, connectionId: string | null) {
+        const followupSetting = await this.prisma.setting.findFirst({
+            where: { companyId, key: 'followup_enabled' },
+            select: { value: true },
+        });
+
+        const enabled = followupSetting?.value === 'true' || followupSetting?.value === '"true"';
+        if (!enabled) return;
+
+        const msgSetting = await this.prisma.setting.findFirst({
+            where: { companyId, key: 'followup_message' },
+            select: { value: true },
+        });
+
+        let message = 'Olá! Como foi sua experiência com nosso atendimento? Seu problema foi resolvido? Estamos à disposição! 😊';
+        if (msgSetting?.value) {
+            try { message = JSON.parse(String(msgSetting.value)); } catch { message = String(msgSetting.value).replace(/^"|"$/g, ''); }
+        }
+
+        const phone = contact?.phoneNumber;
+        if (!phone || !connectionId) {
+            this.logger.warn(`[FollowUp] Sem phone/connectionId para ticket ${ticketId}`);
+            return;
+        }
+
+        // Agendar para 24h depois
+        const scheduledAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+        await this.prisma.scheduledMessage.create({
+            data: {
+                ticketId,
+                content: message,
+                scheduledAt,
+                status: 'PENDING',
+            },
+        });
+
+        this.logger.log(`[FollowUp] Mensagem agendada para ${scheduledAt.toISOString()} (ticket=${ticketId})`);
     }
 
     private async checkCanDeleteTickets(companyId: string): Promise<boolean> {
@@ -569,7 +623,11 @@ export class TicketsService {
     }
 
     private async sendCsatIfEnabled(companyId: string, ticketId: string, contact: any, connectionId: string | null, departmentId?: string | null): Promise<boolean> {
-        if (!contact?.phoneNumber || !connectionId) return false;
+        this.logger.log(`[sendCsatIfEnabled] ticket=${ticketId} phone=${contact?.phoneNumber} connectionId=${connectionId}`);
+        if (!contact?.phoneNumber || !connectionId) {
+            this.logger.log(`[sendCsatIfEnabled] Abortado: phone=${contact?.phoneNumber || 'N/A'}, connectionId=${connectionId || 'N/A'}`);
+            return false;
+        }
 
         // 1. Enviar mensagem de encerramento do departamento (se configurada)
         if (departmentId) {
@@ -616,7 +674,7 @@ export class TicketsService {
         const csatMessage = csatConf.message;
 
         if (!csatEnabled || !csatMessage) {
-            this.logger.debug(`CSAT desabilitado ou sem mensagem configurada para empresa ${companyId}`);
+            this.logger.log(`CSAT desabilitado ou sem mensagem configurada para empresa ${companyId} (enabled=${csatConf.enabled}, message=${csatConf.message ? 'SIM' : 'NAO'})`);
             return false;
         }
 

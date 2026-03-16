@@ -424,6 +424,7 @@ model Ticket {
   resolvedAt       DateTime?
   lastMessageAt    DateTime?      @default(now())
   summary          String?        @db.Text
+  realtimeSentimentScore Int?
 
   company Company @relation(fields: [companyId], references: [id])
 

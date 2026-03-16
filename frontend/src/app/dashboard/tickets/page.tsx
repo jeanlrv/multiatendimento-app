@@ -827,10 +827,21 @@ export default function TicketsPage() {
             fetchTickets();
         };
 
-        const handleTicketHumanQueue = (data: { ticketId: string; contactName: string; departmentId: string }) => {
+        const handleTicketHumanQueue = (data: { ticketId: string; contactName: string; departmentId: string; summary?: string }) => {
             playSound('message');
             toast('🧑 Novo atendimento na fila!', {
-                description: `${data.contactName} aguardando atendente`,
+                description: (
+                    <div className="flex flex-col gap-1.5 mt-1">
+                        <span className="font-medium text-slate-800 dark:text-slate-200">
+                            {data.contactName} aguardando atendente
+                        </span>
+                        {data.summary && (
+                            <div className="text-[11px] bg-slate-100 dark:bg-slate-800 p-2 rounded-lg border border-slate-200 dark:border-slate-700 italic line-clamp-4 text-slate-600 dark:text-slate-400">
+                                "{data.summary}"
+                            </div>
+                        )}
+                    </div>
+                ),
                 duration: 30000,
                 action: {
                     label: 'Aceitar',
@@ -848,7 +859,7 @@ export default function TicketsPage() {
             });
             if (Notification.permission === 'granted') {
                 new Notification('🧑 Atendimento aguardando!', {
-                    body: `${data.contactName} precisa de um atendente`,
+                    body: data.summary ? `${data.contactName} — ${data.summary}` : `${data.contactName} precisa de um atendente`,
                     icon: '/logo.png',
                 });
             }
@@ -1599,15 +1610,15 @@ export default function TicketsPage() {
                                     </div>
 
                                     {/* Indicador de sentimento — apenas desktop */}
-                                    {(selectedTicket as any).evaluation && (
+                                    {((selectedTicket as any).realtimeSentimentScore !== undefined && (selectedTicket as any).realtimeSentimentScore !== null) || (selectedTicket as any).evaluation ? (
                                         <div className="shrink-0 hidden lg:block">
                                             <SentimentIndicator
-                                                sentiment={(selectedTicket as any).evaluation.aiSentiment}
-                                                score={(selectedTicket as any).evaluation.aiSentimentScore}
+                                                sentiment={(selectedTicket as any).realtimeSentimentScore !== null ? undefined : (selectedTicket as any).evaluation?.aiSentiment}
+                                                score={(selectedTicket as any).realtimeSentimentScore ?? (selectedTicket as any).evaluation?.aiSentimentScore}
                                                 className="scale-90 origin-right"
                                             />
                                         </div>
-                                    )}
+                                    ) : null}
 
                                     {/* Menu de Ações Secundárias */}
                                     <div ref={optionsMenuRef} className="relative shrink-0">

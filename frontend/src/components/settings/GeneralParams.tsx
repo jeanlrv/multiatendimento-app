@@ -45,6 +45,8 @@ const DEFAULT_PARAMS: Record<string, any> = {
     csat_enabled: false,
     csat_message: 'Olá! Gostaríamos de saber sua opinião sobre o atendimento que você recebeu.\n\nPor favor, avalie de 1 a 5:\n1️⃣ Péssimo\n2️⃣ Ruim\n3️⃣ Regular\n4️⃣ Bom\n5️⃣ Excelente\n\nResponda apenas com o número da sua nota.',
     post_evaluation_message: 'Obrigado pela sua avaliação! Seu feedback é muito importante para nós. 😊',
+    followup_enabled: false,
+    followup_message: 'Olá! Como foi sua experiência com nosso atendimento? Seu problema foi resolvido? Estamos à disposição! 😊',
 };
 
 // ============================================
@@ -347,6 +349,33 @@ export function GeneralParams() {
                                 placeholder="Ex: Obrigado pela sua avaliação! Seu feedback é muito importante para nós. 😊"
                             />
                         </div>
+                    </div>
+                )}
+            </ParamSection>
+
+            {/* Follow-up Pós-Atendimento */}
+            <ParamSection title="Follow-up Pós-Atendimento">
+                <ParamRow icon={Clock} label="Ativar envio de follow-up (24h)" description="Envia mensagem automática acompanhando o cliente 24 horas após a resolução.">
+                    <ToggleSwitch enabled={!!params.followup_enabled} onChange={(v) => updateParam('followup_enabled', v)} />
+                </ParamRow>
+                {params.followup_enabled && (
+                    <div className="p-5 bg-slate-50 dark:bg-white/5 rounded-[1.5rem] border border-slate-100 dark:border-white/5 space-y-3">
+                        <div className="flex items-center gap-3 mb-2">
+                            <div className="p-2 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-slate-100 dark:border-white/5">
+                                <MessageSquare size={16} className="text-primary" />
+                            </div>
+                            <div>
+                                <span className="text-sm font-black text-slate-800 dark:text-white italic">Mensagem de follow-up</span>
+                                <span className="text-[10px] text-slate-400 block font-black uppercase tracking-widest opacity-70">Enviada ao cliente 24h após encerramento do ticket resolvido</span>
+                            </div>
+                        </div>
+                        <textarea
+                            value={params.followup_message || ''}
+                            onChange={(e) => updateParam('followup_message', e.target.value)}
+                            rows={3}
+                            className="w-full bg-white dark:bg-gray-900 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-sm focus:ring-4 focus:ring-primary/10 outline-none transition-all resize-none font-medium text-slate-600 dark:text-slate-300"
+                            placeholder="Ex: Seu problema foi resolvido? Estamos à disposição! 😊"
+                        />
                     </div>
                 )}
             </ParamSection>

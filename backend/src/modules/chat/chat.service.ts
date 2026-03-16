@@ -300,6 +300,23 @@ export class ChatService {
                 : '(nenhum outro departamento disponível)';
             const currentDeptName = ticket.department?.name ?? 'desconhecido';
 
+            // Buscar workflow ativo do departamento para injetar contexto na IA
+            let workflowBlock = '';
+            const deptWorkflowId = (ticket.department as any)?.workflowId;
+            if (deptWorkflowId) {
+                try {
+                    const workflow = await this.prisma.workflowRule.findUnique({
+                        where: { id: deptWorkflowId },
+                        select: { name: true, nodes: true, edges: true, actions: true },
+                    });
+                    if (workflow) {
+                        workflowBlock = this.buildWorkflowInstructions(workflow);
+                    }
+                } catch (wfErr) {
+                    this.logger.warn(`[Workflow] Falha ao carregar workflow ${deptWorkflowId}: ${wfErr.message}`);
+                }
+            }
+
             // Data/hora local no fuso do departamento
             const { deptTimezone, dateStr, timeStr } = this.getDeptLocalDateTime((ticket.department as any)?.timezone);
 
@@ -356,6 +373,7 @@ export class ChatService {
                 `Você está ATUALMENTE no departamento: ${currentDeptName}`,
                 identityOverrideBlock,
                 outOfHoursBlock,
+                workflowBlock,
                 'Você pode usar EXCLUSIVAMENTE um dos comandos abaixo quando necessário:',
                 '',
                 `• [TRANSFERIR:NomeDoDepartamento] — transfere para outro departamento (IA do destino assume)`,
@@ -454,6 +472,28 @@ export class ChatService {
             }
 
             if (humanMatch) {
+                // Gerar resumo automático da conversa para o atendente
+                let conversationSummary = '';
+                try {
+                    const recentMsgs = messages.slice(-10).map(m =>
+                        `${m.fromMe ? 'Assistente' : 'Cliente'}: ${m.content}`
+                    ).join('\n');
+                    conversationSummary = await this.aiService.chat(
+                        ticket.companyId,
+                        ticket.department.aiAgentId,
+                        `Resuma esta conversa em 2-3 frases para um atendente humano que vai assumir. Inclua: problema do cliente, o que já foi tentado, e o sentimento percebido.\n\nConversa:\n${recentMsgs}`,
+                    ) || '';
+                    // Salvar resumo no ticket
+                    if (conversationSummary) {
+                        await this.prisma.ticket.update({
+                            where: { id: ticketId },
+                            data: { summary: conversationSummary },
+                        });
+                    }
+                } catch (summaryErr) {
+                    this.logger.warn(`[Handoff] Falha ao gerar resumo: ${(summaryErr as any).message}`);
+                }
+
                 await this.prisma.ticket.update({
                     where: { id: ticketId },
                     data: { mode: 'HUMANO' },
@@ -464,13 +504,14 @@ export class ChatService {
                     companyId: ticket.companyId,
                     departmentId: ticket.departmentId,
                     contactName: ticket.contact?.name,
+                    summary: conversationSummary, // resumo para a notificação
                 });
                 await this.sendMessage(
                     ticketId,
                     'Vou transferir você para um de nossos atendentes. Aguarde um momento! 👤',
                     true, MessageType.TEXT, undefined, ticket.companyId, 'AI'
                 );
-                this.logger.log(`IA transferiu ticket ${ticketId} para atendimento humano`);
+                this.logger.log(`IA transferiu ticket ${ticketId} para atendimento humano (resumo: ${conversationSummary ? 'SIM' : 'NÃO'})`);
                 return;
             }
 
@@ -504,6 +545,14 @@ export class ChatService {
             }
 
             await this.sendMessage(ticketId, this.sanitizeForWhatsApp(aiResponse), true, MessageType.TEXT, undefined, ticket.companyId, 'AI');
+
+            // ─── Sentimento em Tempo Real (a cada 5 mensagens do cliente) ────
+            const clientMsgCount = messages.filter(m => !m.fromMe).length;
+            if (clientMsgCount > 0 && clientMsgCount % 5 === 0) {
+                this.checkRealtimeSentiment(ticketId, ticket.companyId, messages).catch(err =>
+                    this.logger.warn(`[Sentimento] Falha: ${err.message}`)
+                );
+            }
         } catch (error) {
             this.logger.error(`Erro ao processar resposta de IA: ${error.message}`);
         }
@@ -767,6 +816,210 @@ export class ChatService {
         }
     }
 
+    /**
+     * Analisa sentimento em tempo real das últimas mensagens do cliente.
+     * Se negativo (score ≤ 3/10), escala prioridade e notifica supervisores.
+     */
+    private async checkRealtimeSentiment(ticketId: string, companyId: string, messages: any[]) {
+        const clientMessages = messages.filter(m => !m.fromMe).slice(-5);
+        if (clientMessages.length < 3) return; // precisa de contexto mínimo
+
+        const conversationText = clientMessages.map(m => m.content).join('\n');
+
+        try {
+            const sentimentResponse = await this.aiService.chat(
+                companyId,
+                undefined, // usa agente default
+                `Analise o sentimento do cliente nesta conversa. Responda APENAS com um número de 1 a 10 (1=muito insatisfeito, 10=muito satisfeito).\n\nMensagens do cliente:\n${conversationText}`,
+            );
+
+            const score = parseInt(sentimentResponse?.replace(/[^0-9]/g, '') || '5', 10);
+            this.logger.log(`[Sentimento] ticket=${ticketId} score=${score}/10`);
+
+            const ticket = await this.prisma.ticket.findUnique({
+                where: { id: ticketId },
+                select: { priority: true, departmentId: true },
+            });
+
+            if (!ticket) return;
+
+            if (score <= 3) {
+                // Escalar prioridade automaticamente se não for critical
+                if (ticket.priority !== 'CRITICAL') {
+                    await this.prisma.ticket.update({
+                        where: { id: ticketId },
+                        data: { priority: 'HIGH', realtimeSentimentScore: score },
+                    });
+                    this.logger.warn(`[Sentimento] ticket=${ticketId} escalado para HIGH (score=${score})`);
+
+                    // Notificar supervisores
+                    this.eventEmitter.emit('evaluation.negative_score', {
+                        ticketId,
+                        companyId,
+                        score,
+                        threshold: 3,
+                        summary: `Sentimento negativo detectado em tempo real (${score}/10). Mensagens recentes indicam insatisfação.`,
+                    });
+                } else {
+                    await this.prisma.ticket.update({
+                        where: { id: ticketId },
+                        data: { realtimeSentimentScore: score },
+                    });
+                }
+            } else {
+                // Apenas atualiza o score
+                await this.prisma.ticket.update({
+                    where: { id: ticketId },
+                    data: { realtimeSentimentScore: score },
+                });
+            }
+
+            // Avisar o frontend para atualizar as badges visuais (sentimento e prioridade)
+            this.eventEmitter.emit('ticket.status_changed', { ticketId, companyId });
+        } catch (err) {
+            this.logger.warn(`[Sentimento] Análise falhou: ${(err as any).message}`);
+        }
+    }
+
+    /**
+     * Converte nodes/edges de um workflow em instruções legíveis para a IA.
+     * A IA recebe este bloco no prompt e sabe quais etapas o fluxo exige.
+     */
+    private buildWorkflowInstructions(workflow: { name: string; nodes: any; edges: any; actions: any }): string {
+        try {
+            const nodes: any[] = Array.isArray(workflow.nodes) ? workflow.nodes : [];
+            const edges: any[] = Array.isArray(workflow.edges) ? workflow.edges : [];
+
+            if (nodes.length === 0) return '';
+
+            // Mapeamento de action types para descrições legíveis
+            const ACTION_LABELS: Record<string, string> = {
+                send_message: 'Enviar mensagem ao cliente',
+                update_ticket: 'Atualizar status do ticket',
+                transfer_to_human: 'Transferir para atendente humano',
+                transfer_department: 'Transferir para outro departamento',
+                ai_respond: 'IA responde ao cliente',
+                ai_intent: 'IA analisa intenção do cliente',
+                analyze_sentiment: 'Analisar sentimento da conversa',
+                add_tag: 'Adicionar tag ao ticket',
+                create_schedule: 'Criar agendamento',
+                update_schedule_status: 'Atualizar status do agendamento',
+                http_webhook: 'Chamar webhook externo',
+                send_email: 'Enviar e-mail',
+            };
+
+            // Construir mapa de adjacência para ordem topológica
+            const childrenMap = new Map<string, string[]>();
+            const edgeLabelMap = new Map<string, string>();
+            for (const edge of edges) {
+                if (!childrenMap.has(edge.source)) childrenMap.set(edge.source, []);
+                childrenMap.get(edge.source)!.push(edge.target);
+                if (edge.label || edge.data?.condition !== undefined) {
+                    edgeLabelMap.set(`${edge.source}->${edge.target}`, edge.label || String(edge.data?.condition));
+                }
+            }
+
+            // Encontrar node trigger (início)
+            const triggerNode = nodes.find(n => n.type === 'trigger');
+            if (!triggerNode) return '';
+
+            // BFS para descrever o fluxo em ordem
+            const visited = new Set<string>();
+            const steps: string[] = [];
+            const queue: string[] = [triggerNode.id];
+            let stepNum = 1;
+
+            while (queue.length > 0) {
+                const nodeId = queue.shift()!;
+                if (visited.has(nodeId)) continue;
+                visited.add(nodeId);
+
+                const node = nodes.find((n: any) => n.id === nodeId);
+                if (!node) continue;
+
+                const label = node.data?.label || '';
+                const actionType = node.data?.actionType || node.type;
+
+                // Descrever cada tipo de nó
+                let stepDesc = '';
+                switch (node.type) {
+                    case 'trigger':
+                        stepDesc = `Gatilho: ${label || 'Início do fluxo'}`;
+                        break;
+                    case 'action': {
+                        const actionLabel = ACTION_LABELS[actionType] || actionType;
+                        const params = node.data?.params || {};
+                        // Incluir detalhes relevantes dos params
+                        const details: string[] = [];
+                        if (params.message) details.push(`mensagem: "${String(params.message).substring(0, 80)}"`);
+                        if (params.status) details.push(`status: ${params.status}`);
+                        if (params.departmentId) details.push(`departamento alvo`);
+                        if (params.agentId) details.push(`via agente de IA`);
+                        stepDesc = `${actionLabel}${label ? ` — "${label}"` : ''}${details.length > 0 ? ` (${details.join(', ')})` : ''}`;
+                        break;
+                    }
+                    case 'condition': {
+                        const conditions = node.data?.conditions || [];
+                        const condDesc = conditions.map((c: any) => `${c.field} ${c.operator} ${c.value}`).join(' E ');
+                        stepDesc = `Decisão: ${label || condDesc || 'Avaliar condição'}`;
+                        // Descrever branches
+                        const children = childrenMap.get(nodeId) || [];
+                        for (const childId of children) {
+                            const edgeKey = `${nodeId}->${childId}`;
+                            const branchLabel = edgeLabelMap.get(edgeKey);
+                            if (branchLabel) {
+                                const childNode = nodes.find((n: any) => n.id === childId);
+                                const childLabel = childNode?.data?.label || ACTION_LABELS[childNode?.data?.actionType] || 'próxima etapa';
+                                stepDesc += `\n     → Se ${branchLabel}: ${childLabel}`;
+                            }
+                        }
+                        break;
+                    }
+                    case 'delay':
+                        stepDesc = `Aguardar: ${label || 'pausa antes da próxima etapa'}`;
+                        break;
+                    case 'wait_for_event':
+                        stepDesc = `Aguardar evento: ${node.data?.event || label || 'resposta do cliente'}`;
+                        break;
+                    case 'end':
+                        stepDesc = 'Fim do fluxo';
+                        break;
+                    default:
+                        stepDesc = label || actionType;
+                }
+
+                if (stepDesc) {
+                    steps.push(`${stepNum}. ${stepDesc}`);
+                    stepNum++;
+                }
+
+                // Enfileirar filhos
+                const children = childrenMap.get(nodeId) || [];
+                for (const childId of children) {
+                    if (!visited.has(childId)) queue.push(childId);
+                }
+            }
+
+            if (steps.length <= 1) return ''; // Só tem trigger, sem passos reais
+
+            return [
+                '',
+                '📋 FLUXO DE ATENDIMENTO DO DEPARTAMENTO — SIGA RIGOROSAMENTE:',
+                `Workflow: "${workflow.name}"`,
+                '',
+                ...steps,
+                '',
+                'IMPORTANTE: Siga este fluxo como guia para o atendimento.',
+                'As ações técnicas (update_ticket, analyze_sentiment, etc.) são executadas automaticamente pelo sistema.',
+                'Você deve focar na interação natural com o cliente seguindo a sequência descrita acima.',
+                '',
+            ].join('\n');
+        } catch (err) {
+            this.logger.warn(`[buildWorkflowInstructions] Erro ao processar workflow: ${(err as any).message}`);
+            return '';
+        }
+    }
+
     /** Retorna true se o departamento estiver fora do horário comercial */
     private isOutsideBusinessHours(department: any): boolean {
         if (!department?.businessHours) return false;
@@ -788,15 +1041,16 @@ export class ChatService {
             );
             const localHour = parseInt(parts.hour, 10);
             const localMinute = parseInt(parts.minute, 10);
-            const dayOfWeek = new Date(
+            const dayOfWeekNum = new Date(
                 parseInt(parts.year), parseInt(parts.month) - 1, parseInt(parts.day)
-            ).getDay().toString();
-
-            const dayConfig = bh[dayOfWeek];
+            ).getDay();
+            // Suporta ambos os formatos de keys: numérico ("0","1") e nome do dia ("sunday","monday")
+            const DAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+            const dayConfig = bh[dayOfWeekNum.toString()] || bh[DAY_NAMES[dayOfWeekNum]];
 
             this.logger.log(
                 `[BH-AI] Dept "${department.name}" | TZ: ${timezone} | ` +
-                `Hora: ${parts.hour}:${parts.minute} | Dia: ${dayOfWeek} | ` +
+                `Hora: ${parts.hour}:${parts.minute} | Dia: ${dayOfWeekNum} (${DAY_NAMES[dayOfWeekNum]}) | ` +
                 `Config: ${dayConfig ? `${dayConfig.start}-${dayConfig.end}` : 'FECHADO'} | ` +
                 `BH keys: ${Object.keys(bh).join(',')}`
             );

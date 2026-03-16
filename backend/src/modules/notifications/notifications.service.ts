@@ -162,8 +162,8 @@ export class NotificationsService {
             userId: payload.assignedUserId,
             companyId: payload.companyId,
             type: 'sla.breach',
-            title: 'SLA violado!',
-            body: `Um ticket ${payload.departmentName ? 'em ' + payload.departmentName : ''} violou o SLA.`,
+            title: '🔴 SLA violado!',
+            body: `Um ticket ${payload.departmentName ? 'em ' + payload.departmentName : ''} violou o SLA e foi redistribuído.`,
             entityType: 'ticket',
             entityId: payload.ticketId,
         }).catch(err => { this.logger.error('Erro ao criar notificação sla.breach:', err.message); return null; });
@@ -175,6 +175,44 @@ export class NotificationsService {
                 notification.body ?? '',
                 `/dashboard/tickets?id=${payload.ticketId}`,
             );
+        }
+    }
+
+    @OnEvent('sla.warning')
+    async onSlaWarning(payload: { ticketId: string; companyId: string; assignedUserId?: string; departmentName?: string; level: string }) {
+        if (payload.level === '90%') {
+            // Notificar supervisores
+            const managers = await this.prisma.user.findMany({
+                where: {
+                    companyId: payload.companyId,
+                    role: { name: { in: ['ADMIN', 'MANAGER', 'SUPERVISOR', 'admin', 'manager', 'supervisor'] } },
+                },
+                include: { role: true },
+            });
+            for (const manager of managers) {
+                const n = await this.create({
+                    userId: manager.id,
+                    companyId: payload.companyId,
+                    type: 'sla.warning',
+                    title: `🟠 SLA em ${payload.level}`,
+                    body: `Ticket ${payload.departmentName ? 'em ' + payload.departmentName : ''} próximo de violar o SLA. Prioridade escalada.`,
+                    entityType: 'ticket',
+                    entityId: payload.ticketId,
+                }).catch(() => null);
+                if (n) await this.sendWebPush(manager.id, n.title, n.body ?? '', `/dashboard/tickets?id=${payload.ticketId}`);
+            }
+        } else if (payload.assignedUserId) {
+            // 75% — notificar atendente
+            const n = await this.create({
+                userId: payload.assignedUserId,
+                companyId: payload.companyId,
+                type: 'sla.warning',
+                title: `🟡 SLA em ${payload.level}`,
+                body: `Seu ticket ${payload.departmentName ? 'em ' + payload.departmentName : ''} está próximo do limite de SLA.`,
+                entityType: 'ticket',
+                entityId: payload.ticketId,
+            }).catch(() => null);
+            if (n) await this.sendWebPush(payload.assignedUserId, n.title, n.body ?? '', `/dashboard/tickets?id=${payload.ticketId}`);
         }
     }
 
@@ -207,7 +245,7 @@ export class NotificationsService {
     }
 
     @OnEvent('ticket.human_queue')
-    async onTicketHumanQueue(payload: { ticketId: string; companyId: string; departmentId: string; contactName?: string }) {
+    async onTicketHumanQueue(payload: { ticketId: string; companyId: string; departmentId: string; contactName?: string; summary?: string }) {
         if (!payload?.departmentId || !payload?.companyId) return;
 
         // Buscar todos os agentes que pertencem ao departamento
@@ -242,7 +280,9 @@ export class NotificationsService {
                 companyId: payload.companyId,
                 type: 'ticket.human_queue',
                 title: '🧑 Novo atendimento na fila!',
-                body: `${contactLabel} aguardando atendente (Ticket #${ticketShort})`,
+                body: payload.summary
+                    ? `${contactLabel} — ${payload.summary.substring(0, 150)}`
+                    : `${contactLabel} aguardando atendente (Ticket #${ticketShort})`,
                 entityType: 'ticket',
                 entityId: payload.ticketId,
             }).catch(err => { this.logger.error(`Erro ao notificar agente ${agent.id}:`, err.message); return null; });
