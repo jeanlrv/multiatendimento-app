@@ -755,8 +755,8 @@ export class ChatService {
         const s = await this.prisma.setting.findFirst({
             where: { companyId, key: 'canDeleteMessages' }, select: { value: true },
         });
-        const allowedValues = ['true', '1', 'yes'];
-        if (!allowedValues.includes((s?.value ?? '').replace(/"/g, '').toLowerCase()))
+        const rawValue = String(s?.value ?? '').replace(/"/g, '').toLowerCase();
+        if (!['true', '1', 'yes'].includes(rawValue))
             throw new ForbiddenException('A exclusão de mensagens está desativada nas configurações da empresa');
 
         const msg = await this.prisma.message.findFirst({
