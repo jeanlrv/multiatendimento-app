@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Activity, Clock, Terminal, ChevronRight, CheckCircle2, AlertCircle, Trash2 } from 'lucide-react';
+import { X, Activity, Clock, Terminal, ChevronRight, CheckCircle2, AlertCircle, Trash2, Radio, Hourglass } from 'lucide-react';
 import { WorkflowExecution } from '@/app/dashboard/workflows/types/workflow.types';
 
 interface ExecutionDrawerProps {
@@ -40,9 +40,15 @@ export default function ExecutionDrawer({ execution, onClose }: ExecutionDrawerP
                                 <h2 className="text-xl font-black text-slate-900 dark:text-white tracking-tighter uppercase italic">
                                     Observabilidade <span className="text-primary">Aero</span>
                                 </h2>
-                                <div className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${execution.status === 'success' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'
-                                    }`}>
-                                    {execution.status}
+                                <div className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${
+                                    execution.status === 'success' ? 'bg-emerald-500/10 text-emerald-500' :
+                                    execution.status === 'running' ? 'bg-primary/10 text-primary' :
+                                    execution.status === 'waiting_event' ? 'bg-amber-500/10 text-amber-500' :
+                                    execution.status === 'delayed' ? 'bg-blue-500/10 text-blue-500' :
+                                    execution.status === 'partial' ? 'bg-orange-500/10 text-orange-500' :
+                                    'bg-red-500/10 text-red-500'
+                                }`}>
+                                    {execution.status === 'waiting_event' ? 'aguardando' : execution.status}
                                 </div>
                             </div>
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">ID: {execution.id}</p>
@@ -53,6 +59,34 @@ export default function ExecutionDrawer({ execution, onClose }: ExecutionDrawerP
                     </div>
 
                     <div className="p-8 space-y-10">
+                        {/* Active Node Banner — only for in-progress executions */}
+                        {(execution.status === 'running' || execution.status === 'waiting_event') && execution.currentNodeId && (
+                            <div className={`rounded-3xl border p-5 flex items-start gap-4 ${execution.status === 'waiting_event' ? 'bg-amber-500/5 border-amber-500/20' : 'bg-primary/5 border-primary/20'}`}>
+                                <div className={`mt-0.5 h-9 w-9 rounded-2xl flex items-center justify-center shrink-0 ${execution.status === 'waiting_event' ? 'bg-amber-500/10' : 'bg-primary/10'}`}>
+                                    {execution.status === 'waiting_event'
+                                        ? <Hourglass size={16} className="text-amber-500" />
+                                        : <Radio size={16} className="text-primary animate-pulse" />
+                                    }
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="text-[10px] font-black uppercase tracking-widest mb-1 text-slate-500">
+                                        {execution.status === 'waiting_event' ? 'Aguardando Evento' : 'Nó Em Execução'}
+                                    </p>
+                                    <p className="text-sm font-black text-slate-900 dark:text-white font-mono truncate">
+                                        {execution.currentNodeId}
+                                    </p>
+                                    {execution.waitingFor && (
+                                        <p className="text-[10px] font-bold text-slate-400 mt-1 italic">
+                                            Evento: <span className={execution.status === 'waiting_event' ? 'text-amber-500' : 'text-primary'}>{execution.waitingFor.eventName}</span>
+                                            {execution.waitingFor.timeoutAt && (
+                                                <> · timeout {new Date(execution.waitingFor.timeoutAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</>
+                                            )}
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
                         {/* Meta Grid */}
                         <div className="grid grid-cols-3 gap-6">
                             <div className="liquid-glass p-6 rounded-3xl border border-white/10">

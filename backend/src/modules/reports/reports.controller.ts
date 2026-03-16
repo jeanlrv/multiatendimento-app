@@ -1,4 +1,5 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Controller, Get, Query, Res } from '@nestjs/common';
+import { Response } from 'express';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { ReportsService } from './reports.service';
 import { Company } from '../../common/decorators/company.decorator';
@@ -67,6 +68,28 @@ export class ReportsController {
         @Query('customerId') customerId?: string,
     ) {
         return this.reportsService.getResolutionTime(companyId, startDate, endDate, customerId);
+    }
+
+    @Get('export')
+    @RequirePermission(Permission.REPORTS_READ)
+    @ApiOperation({ summary: 'Exportar relatório em CSV' })
+    async exportCsv(
+        @Company() companyId: string,
+        @Res() res: Response,
+        @Query('type') type: 'agent_performance' | 'sla_compliance' | 'resolution_time' | 'satisfaction',
+        @Query('startDate') startDate?: string,
+        @Query('endDate') endDate?: string,
+        @Query('days') days?: string,
+    ) {
+        const csv = await this.reportsService.exportToCsv(companyId, type, {
+            startDate,
+            endDate,
+            days: days ? Number(days) : undefined,
+        });
+        const filename = `relatorio-${type}-${new Date().toISOString().slice(0, 10)}.csv`;
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.send('\uFEFF' + csv); // BOM for Excel UTF-8 compatibility
     }
 
     @Get('audit/internal-chat')

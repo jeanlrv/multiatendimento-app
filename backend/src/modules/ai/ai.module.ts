@@ -1,5 +1,7 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { AIService } from './ai.service';
+import { AIChatService } from './ai-chat.service';
+import { AIMetricsService } from './ai-metrics.service';
 import { AIController } from './ai.controller';
 import { DatabaseModule } from '../../database/database.module';
 
@@ -26,7 +28,7 @@ import { SettingsModule } from '../settings/settings.module';
         SettingsModule,
     ],
     controllers: [AIController],
-    providers: [AIService],
-    exports: [AIService, EmbedModule],
+    providers: [AIService, AIChatService, AIMetricsService],
+    exports: [AIService, AIChatService, AIMetricsService, EmbedModule],
 })
 export class AIModule { }

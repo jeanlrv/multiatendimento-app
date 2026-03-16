@@ -3,6 +3,8 @@ import { Observable } from 'rxjs';
 import { PrismaService } from '../../../database/prisma.service';
 import { AIService } from '../ai.service';
 
+const SESSION_TTL_DAYS = 30;
+
 @Injectable()
 export class EmbedService implements OnModuleDestroy {
     private readonly logger = new Logger(EmbedService.name);
@@ -10,17 +12,35 @@ export class EmbedService implements OnModuleDestroy {
     // Simulando 20 mensagens por 10 min
     private rateLimiter: Map<string, { count: number, resetAt: number }> = new Map();
     private cleanupInterval: NodeJS.Timeout;
+    private sessionCleanupInterval: NodeJS.Timeout;
 
     constructor(
         private prisma: PrismaService,
         private aiService: AIService,
     ) {
-        // Limpeza periódica de entradas expiradas (a cada 5 minutos)
+        // Limpeza periódica de entradas expiradas do rate limiter (a cada 5 minutos)
         this.cleanupInterval = setInterval(() => this.cleanupExpiredEntries(), 5 * 60 * 1000);
+        // Limpeza semanal de sessões de chat embed inativas há mais de SESSION_TTL_DAYS dias
+        this.sessionCleanupInterval = setInterval(() => this.cleanupOldSessions(), 7 * 24 * 60 * 60 * 1000);
     }
 
     onModuleDestroy() {
         clearInterval(this.cleanupInterval);
+        clearInterval(this.sessionCleanupInterval);
+    }
+
+    private async cleanupOldSessions() {
+        const cutoff = new Date(Date.now() - SESSION_TTL_DAYS * 24 * 60 * 60 * 1000);
+        try {
+            const result = await this.prisma.embedChatSession.deleteMany({
+                where: { lastMessageAt: { lt: cutoff } },
+            });
+            if (result.count > 0) {
+                this.logger.log(`EmbedSession cleanup: ${result.count} sessões inativas removidas (TTL ${SESSION_TTL_DAYS}d)`);
+            }
+        } catch (err) {
+            this.logger.error(`EmbedSession cleanup falhou: ${err.message}`);
+        }
     }
 
     private cleanupExpiredEntries() {

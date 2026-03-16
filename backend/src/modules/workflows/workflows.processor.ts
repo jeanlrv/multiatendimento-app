@@ -1,6 +1,7 @@
 import { Processor, WorkerHost, InjectQueue, OnWorkerEvent } from '@nestjs/bullmq';
 import { Job, Queue } from 'bullmq';
 import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../database/prisma.service';
 import { LockService } from './core/lock.service';
 import { WorkflowOrchestrator } from './core/workflow.orchestrator';
@@ -20,6 +21,7 @@ export class WorkflowsProcessor extends WorkerHost {
         @Inject(forwardRef(() => WorkflowsService))
         private readonly workflowsService: WorkflowsService,
         @InjectQueue('workflows') private readonly workflowsQueue: Queue,
+        private readonly configService: ConfigService,
     ) {
         super();
     }
@@ -135,6 +137,17 @@ export class WorkflowsProcessor extends WorkerHost {
                 return { success: true, reason: 'completed' };
             }
 
+            // Buscar publicToken do ticket para usar em links do portal
+            const resolvedTicketId = payload?.id || payload?.ticketId || entityId;
+            let publicToken: string | undefined;
+            if (resolvedTicketId && resolvedTicketId !== 'unknown') {
+                const ticketRow = await this.prisma.ticket.findUnique({
+                    where: { id: resolvedTicketId },
+                    select: { publicToken: true },
+                }).catch(() => null);
+                publicToken = ticketRow?.publicToken;
+            }
+
             const context: WorkflowContext = {
                 workflowId: rule.id,
                 executionId: execution.id,
@@ -145,7 +158,12 @@ export class WorkflowsProcessor extends WorkerHost {
                 payload: payload,
                 variables: {
                     ...payload,
-                    event
+                    event,
+                    // System variables available in all template expressions
+                    ticketId: resolvedTicketId,
+                    publicToken: publicToken ?? resolvedTicketId,
+                    companyId,
+                    portalUrl: this.configService.get<string>('CUSTOMER_PORTAL_URL') ?? '',
                 },
                 correlationId: execution.id
             };

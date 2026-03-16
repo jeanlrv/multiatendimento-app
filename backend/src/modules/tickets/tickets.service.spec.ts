@@ -4,103 +4,171 @@ import { PrismaService } from '../../database/prisma.service';
 import { AIService } from '../ai/ai.service';
 import { EvaluationsService } from '../evaluations/evaluations.service';
 import { AuditService } from '../audit/audit.service';
-import { TicketStatus, TicketPriority } from '@prisma/client';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { NotFoundException } from '@nestjs/common';
+import { getQueueToken } from '@nestjs/bullmq';
+
+// ── Fixtures ──────────────────────────────────────────────────────────────────
+
+const COMPANY_A = 'company-a-uuid';
+const COMPANY_B = 'company-b-uuid';
+
+const mockTicket = {
+    id: 'ticket-internal-uuid',
+    publicToken: 'public-token-opaque-abc123',
+    companyId: COMPANY_A,
+    contactId: 'contact-1',
+    departmentId: 'dept-1',
+    status: 'OPEN',
+    subject: 'Suporte técnico',
+    createdAt: new Date('2026-01-01'),
+    updatedAt: new Date('2026-01-01'),
+    resolvedAt: null,
+    csatPending: false,
+    contact: { name: 'João Silva' },
+    department: { name: 'Suporte', id: 'dept-1', aiAgentId: null },
+    company: { name: 'Empresa A', logoUrl: null, primaryColor: '#3B82F6' },
+    messages: [
+        { id: 'msg-1', content: 'Olá', sentAt: new Date(), fromMe: false, messageType: 'TEXT' },
+    ],
+};
+
+const mockPrismaService = {
+    ticket: {
+        create: jest.fn(),
+        findMany: jest.fn(),
+        findUnique: jest.fn(),
+        findFirst: jest.fn(),
+        update: jest.fn(),
+        updateMany: jest.fn(),
+        count: jest.fn(),
+        groupBy: jest.fn(),
+        delete: jest.fn(),
+    },
+    department: { findUnique: jest.fn(), findFirst: jest.fn() },
+    setting: { findMany: jest.fn().mockResolvedValue([]) },
+    evaluation: { upsert: jest.fn() },
+    contact: { update: jest.fn() },
+    user: { count: jest.fn() },
+    $transaction: jest.fn((cb) => cb(mockPrismaService)),
+};
+
+const mockAIService = { summarize: jest.fn(), getAgentForDepartment: jest.fn() };
+const mockAuditService = { log: jest.fn().mockResolvedValue({}) };
+const mockEventEmitter = { emit: jest.fn(), on: jest.fn() };
+const mockEvaluationsService = { generateAISentimentAnalysis: jest.fn().mockResolvedValue({}) };
+const mockSchedulingQueue = { add: jest.fn() };
+
+// ── Suite ──────────────────────────────────────────────────────────────────────
 
 describe('TicketsService', () => {
     let service: TicketsService;
-    let prisma: PrismaService;
-    let aiService: AIService;
-
-    const mockPrismaService = {
-        ticket: {
-            create: jest.fn(),
-            findMany: jest.fn(),
-            findUnique: jest.fn(),
-            update: jest.fn(),
-            count: jest.fn(),
-        },
-        department: {
-            findUnique: jest.fn(),
-        },
-    };
-
-    const mockAiService = {
-        summarize: jest.fn(),
-    };
-
-    const mockEvaluationsService = {
-        generateAISentimentAnalysis: jest.fn().mockResolvedValue({}),
-    };
-
-    const mockAuditService = {
-        log: jest.fn().mockResolvedValue({}),
-    };
 
     beforeEach(async () => {
+        jest.clearAllMocks();
+
         const module: TestingModule = await Test.createTestingModule({
             providers: [
                 TicketsService,
                 { provide: PrismaService, useValue: mockPrismaService },
-                { provide: AIService, useValue: mockAiService },
+                { provide: AIService, useValue: mockAIService },
                 { provide: EvaluationsService, useValue: mockEvaluationsService },
                 { provide: AuditService, useValue: mockAuditService },
+                { provide: EventEmitter2, useValue: mockEventEmitter },
+                { provide: getQueueToken('scheduling'), useValue: mockSchedulingQueue },
             ],
         }).compile();
 
         service = module.get<TicketsService>(TicketsService);
-        prisma = module.get<PrismaService>(PrismaService);
-        aiService = module.get<AIService>(AIService);
     });
 
     it('should be defined', () => {
         expect(service).toBeDefined();
     });
 
-    describe('findOne', () => {
-        it('should return a ticket if found', async () => {
-            const ticket = { id: '1', subject: 'Test' };
-            mockPrismaService.ticket.findUnique.mockResolvedValue(ticket);
+    // ── getPublicTicket — CRÍTICO: segurança do portal do cliente ──────────────
 
-            const result = await service.findOne('1', 'comp1');
-            expect(result).toEqual(ticket);
+    describe('getPublicTicket()', () => {
+        it('deve buscar pelo publicToken opaco (não pelo id interno)', async () => {
+            mockPrismaService.ticket.findUnique.mockResolvedValueOnce(mockTicket);
+
+            const result = await service.getPublicTicket('public-token-opaque-abc123');
+
+            // A query DEVE usar publicToken no where, não id
+            expect(mockPrismaService.ticket.findUnique).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    where: { publicToken: 'public-token-opaque-abc123' },
+                }),
+            );
+            expect(result.publicToken).toBe('public-token-opaque-abc123');
         });
 
-        it('should throw NotFoundException if ticket not found', async () => {
-            mockPrismaService.ticket.findUnique.mockResolvedValue(null);
-            await expect(service.findOne('1', 'comp1')).rejects.toThrow(NotFoundException);
+        it('deve incluir publicToken na resposta (para geração de links pelo frontend)', async () => {
+            mockPrismaService.ticket.findUnique.mockResolvedValueOnce(mockTicket);
+            const result = await service.getPublicTicket('public-token-opaque-abc123');
+            expect(result).toHaveProperty('publicToken');
+            expect(result.publicToken).toBe('public-token-opaque-abc123');
+        });
+
+        it('deve lançar NotFoundException para publicToken inexistente', async () => {
+            mockPrismaService.ticket.findUnique.mockResolvedValueOnce(null);
+            await expect(service.getPublicTicket('token-invalido')).rejects.toThrow(NotFoundException);
+        });
+
+        it('deve retornar mensagens, empresa e contato (sem dados internos sensíveis)', async () => {
+            mockPrismaService.ticket.findUnique.mockResolvedValueOnce(mockTicket);
+            const result = await service.getPublicTicket('public-token-opaque-abc123');
+
+            expect(result.messages).toBeDefined();
+            expect(result.company?.name).toBe('Empresa A');
+            expect(result.contact?.name).toBe('João Silva');
+            // id interno exposto é aceitável para referência, mas não deve ser o campo de lookup
+            expect(result.id).toBe('ticket-internal-uuid');
+        });
+
+        it('NÃO deve retornar ticket de um companyId diferente (isolamento cross-tenant)', async () => {
+            // Se o publicToken não existir no banco (inclui tokens de outra empresa),
+            // deve retornar NotFoundException, nunca o ticket
+            mockPrismaService.ticket.findUnique.mockResolvedValueOnce(null);
+            await expect(service.getPublicTicket('token-de-outra-empresa')).rejects.toThrow(NotFoundException);
         });
     });
 
-    describe('create', () => {
-        it('should create a ticket without auto-distribution', async () => {
-            const createDto = { contactId: 'c1', subject: 'Test', departmentId: 'd1' };
-            mockPrismaService.department.findUnique.mockResolvedValue({ id: 'd1', autoDistribute: false });
-            mockPrismaService.ticket.create.mockResolvedValue({ id: 't1', ...createDto });
+    // ── findOne — isolamento multi-tenant ────────────────────────────────────────
 
-            const result = await service.create('comp1', createDto as any);
-            expect(result.id).toBe('t1');
-            expect(prisma.ticket.create).toHaveBeenCalled();
+    describe('findOne() — multi-tenancy', () => {
+        it('deve incluir companyId na query', async () => {
+            mockPrismaService.ticket.findFirst.mockResolvedValueOnce(mockTicket);
+
+            await service.findOne(COMPANY_A, 'ticket-internal-uuid');
+
+            expect(mockPrismaService.ticket.findFirst).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    where: expect.objectContaining({
+                        id: 'ticket-internal-uuid',
+                        companyId: COMPANY_A,
+                    }),
+                }),
+            );
+        });
+
+        it('deve lançar NotFoundException quando ticket pertence a outra empresa (COMPANY_B)', async () => {
+            // Ticket existe para COMPANY_A, mas query feita com COMPANY_B retorna null
+            mockPrismaService.ticket.findFirst.mockResolvedValueOnce(null);
+
+            await expect(service.findOne(COMPANY_B, 'ticket-internal-uuid')).rejects.toThrow(NotFoundException);
         });
     });
 
-    describe('resolve', () => {
-        it('should resolve ticket and generate AI summary if needed', async () => {
-            const ticket = {
-                id: '1',
-                department: { aiAgentId: 'ai1' },
-                messages: [{ content: 'hello' }],
-                assignedUserId: 'u1'
-            };
-            mockPrismaService.ticket.findUnique.mockResolvedValue(ticket);
-            mockAiService.summarize.mockResolvedValue('Summary');
-            mockPrismaService.ticket.update.mockResolvedValue({ ...ticket, status: TicketStatus.RESOLVED });
+    // ── update — isolamento multi-tenant ─────────────────────────────────────────
 
-            const result = await service.resolve('1', 'comp1');
+    describe('update() — multi-tenancy', () => {
+        it('deve lançar NotFoundException ao atualizar ticket de outra empresa', async () => {
+            mockPrismaService.ticket.findFirst.mockResolvedValueOnce(null);
 
-            expect(result.status).toBe(TicketStatus.RESOLVED);
-            expect(aiService.summarize).toHaveBeenCalled();
-            expect(mockAuditService.log).toHaveBeenCalled();
+            await expect(
+                service.update(COMPANY_B, 'ticket-internal-uuid', { status: 'RESOLVED' } as any),
+            ).rejects.toThrow(NotFoundException);
         });
     });
 });

@@ -161,7 +161,14 @@ export class WorkflowsService implements OnModuleInit {
         const [items, total] = await Promise.all([
             this.prisma.workflowExecution.findMany({
                 where,
-                include: { workflowRule: true },
+                include: {
+                    workflowRule: true,
+                    suspensions: {
+                        orderBy: { createdAt: 'desc' },
+                        take: 1,
+                        select: { stepId: true, eventName: true, timeoutAt: true },
+                    },
+                },
                 orderBy: { executedAt: 'desc' },
                 take: limit,
                 skip,
@@ -169,7 +176,23 @@ export class WorkflowsService implements OnModuleInit {
             this.prisma.workflowExecution.count({ where }),
         ]);
 
-        return { items, total };
+        // Enrich each execution with currentNodeId and waitingFor metadata
+        const enriched = items.map(exec => {
+            const suspension = (exec as any).suspensions?.[0];
+            const steps = Array.isArray(exec.steps) ? exec.steps as any[] : [];
+            const lastStep = steps[steps.length - 1];
+            const currentNodeId = suspension?.stepId ?? lastStep?.nodeId ?? null;
+            return {
+                ...exec,
+                suspensions: undefined, // strip internal detail
+                currentNodeId,
+                waitingFor: suspension
+                    ? { eventName: suspension.eventName, timeoutAt: suspension.timeoutAt }
+                    : null,
+            };
+        });
+
+        return { items: enriched, total };
     }
 
     async getRuleStats(id: string, companyId: string) {

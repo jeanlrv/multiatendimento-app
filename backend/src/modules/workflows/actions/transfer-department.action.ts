@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ActionExecutor, WorkflowContext, ActionResult } from '../interfaces/action-executor.interface';
 import { PrismaService } from '../../../database/prisma.service';
+import { resolveTemplate } from '../utils/resolve-template';
 
 @Injectable()
 export class TransferDepartmentAction implements ActionExecutor {
@@ -11,7 +12,9 @@ export class TransferDepartmentAction implements ActionExecutor {
     async execute(context: WorkflowContext, params: any): Promise<ActionResult> {
         this.logger.log(`Executing TransferDepartmentAction for workflow ${context.workflowId}`);
 
-        const { departmentId, departmentName, mode } = params;
+        const departmentId = resolveTemplate(params.departmentId, context);
+        const departmentName = resolveTemplate(params.departmentName, context);
+        const mode = resolveTemplate(params.mode, context);
         const ticketId = context.entityId || context.variables?.ticketId;
 
         if (!ticketId || context.entityType !== 'ticket') {

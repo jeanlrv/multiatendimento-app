@@ -1,14 +1,18 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Skeleton } from '@/components/ui/skeleton';
 import { AIAgentsService, AIAgent, AIProviderModels } from '@/services/ai-agents';
 import { AIKnowledgeService, KnowledgeBase } from '@/services/ai-knowledge';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Bot, Plus, Trash2, CheckCircle, Settings, X, RefreshCcw, Save, Shield, Activity, Brain, Database, MessageSquare, Zap, Cpu, Globe, Key, ChevronLeft, Paperclip } from 'lucide-react';
+import { motion } from 'framer-motion';
+import {
+    Bot, Plus, Trash2, CheckCircle, X, RefreshCcw, Save,
+    Brain, Database, MessageSquare, Zap, Key, Globe, ChevronLeft,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import WidgetConfigTab from './components/WidgetConfigTab';
 import ApiKeysSection from './components/ApiKeysSection';
+import { AgentListView } from './_components/AgentListView';
+import { PlaygroundTab } from './_components/PlaygroundTab';
 
 export default function AIAgentsPage() {
     const [agents, setAgents] = useState<AIAgent[]>([]);
@@ -30,7 +34,6 @@ export default function AIAgentsPage() {
 
     const isDirty = JSON.stringify(currentAgent) !== JSON.stringify(originalAgent);
 
-    // Auto-scroll para o fim do chat sempre que uma mensagem é adicionada
     useEffect(() => {
         chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [chatHistory, chatLoading]);
@@ -51,7 +54,6 @@ export default function AIAgentsPage() {
                     if (e?.name === 'CanceledError' || e?.name === 'AbortError') return [];
                     console.error('Falha crítica ao buscar Embedding Providers:', e);
                     toast.error('Erro ao listar providers de embedding.');
-                    // Garante que o fallback do Native no mínimo seja gerado em falhas severas
                     return [{ id: 'native', name: 'Nativo (built-in CPU)', models: [{ id: 'Xenova/all-MiniLM-L6-v2', name: 'all-MiniLM-L6-v2', dimensions: 384 }] }];
                 }),
             ]);
@@ -86,7 +88,7 @@ export default function AIAgentsPage() {
         if (isDirty) {
             toast('Descartar alterações não salvas?', {
                 action: { label: 'Descartar', onClick: () => setIsModalOpen(false) },
-                cancel: { label: 'Continuar editando', onClick: () => { } },
+                cancel: { label: 'Continuar editando', onClick: () => {} },
                 duration: 5000,
             });
         } else {
@@ -94,7 +96,6 @@ export default function AIAgentsPage() {
         }
     };
 
-    // Modelo realmente salvo no banco (não o corrigido pelo sync local)
     const savedModelId = originalAgent?.modelId;
     const isSavedProviderConfigured = !savedModelId || availableModels.some(p => p.models.some(m => m.id === savedModelId));
 
@@ -102,13 +103,11 @@ export default function AIAgentsPage() {
         if (!chatMessage && !attachedFile) return;
         if (!currentAgent?.id) return;
 
-        // Bloqueia teste se o provider do modelo SALVO não estiver configurado
         if (!isSavedProviderConfigured) {
             toast.error(`Provider do modelo "${getModelDisplayName(savedModelId)}" não está configurado. Configure em Configurações → IA & Modelos ou salve o agente com outro modelo.`);
             return;
         }
 
-        // Bloqueia se houver alterações não salvas (backend usa o agente do DB)
         if (isDirty) {
             toast.warning('Salve as alterações antes de testar no Playground.');
             return;
@@ -123,7 +122,6 @@ export default function AIAgentsPage() {
         setChatMessage('');
         setAttachedFile(null);
 
-        // Com arquivo anexado: usa endpoint síncrono (sem streaming)
         if (file) {
             try {
                 const { response } = await AIAgentsService.chatWithAttachment(
@@ -149,7 +147,6 @@ export default function AIAgentsPage() {
             return;
         }
 
-        // Sem arquivo: streaming normal
         try {
             for await (const event of AIAgentsService.streamChat(currentAgent.id, chatMessage, prevHistory.map(m => ({ role: m.role, content: m.content })))) {
                 if (event.type === 'chunk') {
@@ -185,7 +182,6 @@ export default function AIAgentsPage() {
         try {
             setSubmitting(true);
             if (currentAgent?.id) {
-                // Remover campos internos ou derivados que o Prisma não deve receber via spread no update
                 // eslint-disable-next-line @typescript-eslint/no-unused-vars
                 const { id: _id, companyId: _co, createdAt: _cr, updatedAt: _up, embedId: _ei, ...payload } = currentAgent as any;
                 await AIAgentsService.update(currentAgent.id, payload);
@@ -218,20 +214,17 @@ export default function AIAgentsPage() {
                     }
                 }
             },
-            cancel: { label: 'Cancelar', onClick: () => { } },
+            cancel: { label: 'Cancelar', onClick: () => {} },
             duration: 5000,
         });
     };
 
     const getModelDisplayName = (modelId?: string) => {
         if (!modelId) return 'Não configurado';
-
         for (const provider of availableModels) {
             const model = provider.models.find(m => m.id === modelId);
             if (model) return model.name;
         }
-
-        // Caso o modelo não seja encontrado (ex: provider desabilitado)
         const parts = modelId.split(':');
         const name = parts.length > 1 ? parts[1] : modelId;
         return `${name} (Não configurado)`;
@@ -242,14 +235,11 @@ export default function AIAgentsPage() {
         for (const provider of availableModels) {
             if (provider.models.some(m => m.id === modelId)) return provider.providerName;
         }
-
-        // Detecta provider por prefixo ou fallback
         const prefix = modelId.split(':')[0];
         const knownProviders: Record<string, string> = {
             'gpt': 'OpenAI', 'claude': 'Anthropic', 'gemini': 'Google',
             'deepseek': 'DeepSeek', 'mistral': 'Mistral', 'codestral': 'Mistral'
         };
-
         if (knownProviders[prefix]) return knownProviders[prefix];
         return prefix.charAt(0).toUpperCase() + prefix.slice(1) || 'Desconhecido';
     };
@@ -259,178 +249,36 @@ export default function AIAgentsPage() {
         || (embeddingProviders.find(p => p.id === 'native')?.models)
         || (embeddingProviders.length > 0 ? embeddingProviders[0].models : []);
 
-    // Garantir que um modelo válido esteja selecionado (sync de estado)
     useEffect(() => {
         if (isModalOpen && currentAgent) {
-            // 1. Sincroniza LLM se o modelo atual for inválido/desconfigurado
             const isModelValid = availableModels.some(p => p.models.some(m => m.id === currentAgent.modelId));
             if (!isModelValid && availableModels.length > 0) {
                 const firstModelId = availableModels[0].models[0]?.id;
                 if (firstModelId && currentAgent.modelId !== firstModelId) {
-                    console.log(`[Sync] Corrigindo modelId inválido: ${currentAgent.modelId} -> ${firstModelId}`);
                     setCurrentAgent(prev => ({ ...prev, modelId: firstModelId }));
                 }
             }
-
-            // 2. Sincroniza Embedding se o modelo atual for inválido
             const currentModels = embeddingProviders.find(p => p.id === currentEmbeddingProvider)?.models || [];
             const isEmbValid = currentModels.some(m => m.id === (currentAgent as any).embeddingModel);
-
             if (!isEmbValid && currentModels.length > 0) {
                 setCurrentAgent(prev => ({ ...prev, embeddingModel: currentModels[0].id } as any));
             }
         }
     }, [isModalOpen, availableModels, currentEmbeddingProvider, embeddingProviders]);
 
-    if (!isModalOpen) return (
-        <div className="space-y-8 relative liquid-glass aurora min-h-[calc(100dvh-6rem)] md:min-h-[calc(100vh-6rem)] pb-12">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10 px-4 pt-4">
-                <div>
-                    <h2 className="text-4xl font-black text-slate-900 dark:text-white tracking-tighter italic flex items-center gap-4">
-                        <Bot className="text-primary h-10 w-10 shadow-[0_0_25px_rgba(2,132,199,0.3)]" />
-                        Rede <span className="text-primary italic">Neural</span>
-                    </h2>
-                    <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-1 italic flex items-center gap-2">
-                        <Activity size={14} className="text-primary" />
-                        Gerenciamento de Inteligência Artificial
-                    </p>
-                </div>
-
-                <div className="flex items-center gap-4">
-                    <button
-                        onClick={() => {
-                            const defaultModel = availableModels[0]?.models[0]?.id || 'gpt-4o-mini';
-                            const defaultEmbProv = embeddingProviders[0]?.id || 'native';
-                            const defaultEmbModel = embeddingProviders[0]?.models[0]?.id || 'Xenova/all-MiniLM-L6-v2';
-
-                            openModal({
-                                name: '',
-                                modelId: defaultModel,
-                                temperature: 0.7,
-                                isActive: true,
-                                embeddingProvider: defaultEmbProv,
-                                embeddingModel: defaultEmbModel
-                            });
-                        }}
-                        className="flex items-center gap-3 px-8 py-4 bg-primary text-white rounded-[1.5rem] shadow-2xl shadow-primary/30 transition-all active:scale-95 font-bold text-xs uppercase tracking-widest group"
-                    >
-                        <Plus className="h-5 w-5 group-hover:rotate-90 transition-transform" />
-                        <span className="hidden sm:inline">Criar Agente</span>
-                    </button>
-                </div>
-            </div>
-
-            {loading ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 relative z-10 px-4">
-                    {[1, 2, 3].map(i => (
-                        <div key={i} className="glass-heavy rounded-[2.5rem] p-6 space-y-4">
-                            <div className="flex items-center gap-4">
-                                <Skeleton className="h-14 w-14 rounded-2xl shrink-0" />
-                                <div className="flex-1 space-y-2">
-                                    <Skeleton className="h-5 w-32" />
-                                    <Skeleton className="h-3.5 w-20" />
-                                </div>
-                            </div>
-                            <Skeleton className="h-3 w-full" />
-                            <Skeleton className="h-3 w-4/5" />
-                            <div className="flex gap-2 pt-2">
-                                <Skeleton className="h-6 w-16 rounded-full" />
-                                <Skeleton className="h-6 w-20 rounded-full" />
-                            </div>
-                            <div className="flex gap-2 pt-1">
-                                <Skeleton className="h-9 flex-1 rounded-xl" />
-                                <Skeleton className="h-9 w-9 rounded-xl" />
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            ) : agents.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-32 glass-heavy rounded-[3rem] border border-white/80 dark:border-white/10 mx-4 relative z-10">
-                    <div className="h-24 w-24 bg-primary/10 rounded-full flex items-center justify-center mb-6 shadow-[0_0_50px_rgba(2,132,199,0.2)]">
-                        <Bot className="h-12 w-12 text-primary opacity-40" />
-                    </div>
-                    <h3 className="text-3xl font-black text-slate-900 dark:text-white mb-3 uppercase tracking-tighter italic">Intelecto Nulo</h3>
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-12 text-center max-w-sm leading-relaxed italic opacity-80">
-                        Nenhum agente cognitivo vinculado. Crie um agente e forneça conhecimento para ele operar.
-                    </p>
-                    <button
-                        onClick={() => openModal({ name: '', modelId: 'gpt-4o-mini', temperature: 0.7, isActive: true, embeddingProvider: 'native', embeddingModel: 'Xenova/all-MiniLM-L6-v2' })}
-                        className="px-14 py-5 bg-primary text-white rounded-[2rem] font-bold text-sm uppercase tracking-widest shadow-2xl shadow-primary/40 hover:scale-[1.02] active:scale-95 transition-all"
-                    >
-                        Criar Conexão Neural
-                    </button>
-                </div>
-            ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 relative z-10 px-4">
-                    <AnimatePresence>
-                        {agents.map((agent, index) => (
-                            <motion.div
-                                key={agent.id}
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0, scale: 0.95 }}
-                                transition={{ duration: 0.4, delay: index * 0.05 }}
-                                className="glass-heavy p-8 rounded-[2.5rem] border border-white/80 dark:border-white/10 shadow-2xl hover:shadow-[0_20px_60px_rgba(0,0,0,0.1)] dark:hover:shadow-[0_20px_60px_rgba(0,0,0,0.5)] transition-all group relative overflow-hidden flex flex-col h-[280px]"
-                            >
-                                <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 group-hover:bg-primary/10 transition-colors" />
-
-                                <div className="flex justify-between items-start mb-6 relative z-10">
-                                    <div className={`p-4 rounded-2xl ${agent.isActive ? 'bg-primary shadow-[0_10px_30px_rgba(2,132,199,0.3)]' : 'bg-slate-400 shadow-lg'} text-white`}>
-                                        <Bot size={28} />
-                                    </div>
-                                    <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity transform translate-x-4 group-hover:translate-x-0">
-                                        <button
-                                            onClick={() => openModal(agent)}
-                                            className="h-10 w-10 flex items-center justify-center bg-white dark:bg-white/5 hover:bg-primary hover:text-white text-primary rounded-[1.2rem] shadow-lg transition-all border border-slate-100 dark:border-white/10"
-                                            title="Configurar IA"
-                                        >
-                                            <Settings size={18} />
-                                        </button>
-                                        <button
-                                            onClick={() => handleDelete(agent.id)}
-                                            className="h-10 w-10 flex items-center justify-center bg-white dark:bg-white/5 hover:bg-rose-500 hover:text-white text-rose-500 rounded-[1.2rem] shadow-lg transition-all border border-slate-100 dark:border-white/10"
-                                            title="Excluir Agente"
-                                        >
-                                            <Trash2 size={18} />
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <div className="flex-1 min-h-0 relative z-10">
-                                    <h3 className="text-2xl font-black text-slate-900 dark:text-white mb-2 uppercase tracking-tight italic truncate flex items-center gap-2">
-                                        {agent.name}
-                                        {agent.isActive && <Shield size={16} className="text-primary animate-pulse" />}
-                                    </h3>
-                                    <p className="text-sm font-semibold text-slate-500 dark:text-slate-400 line-clamp-2 leading-relaxed italic opacity-80 border-l-2 border-primary/20 pl-4 mb-4">
-                                        {agent.description || 'Processamento cognitivo neural em modo de espera.'}
-                                    </p>
-                                </div>
-
-                                <div className="mt-auto pt-6 border-t border-slate-100 dark:border-white/5 space-y-4 relative z-10">
-                                    <div className="flex items-center justify-between text-xs">
-                                        <span className="text-slate-400 font-bold uppercase tracking-widest flex items-center gap-2">
-                                            <Cpu size={14} className="text-primary/60" /> Modelo
-                                        </span>
-                                        <span className="font-mono text-primary font-bold bg-primary/10 px-3 py-1.5 rounded-xl text-[11px] truncate max-w-[180px]" title={agent.modelId || 'gpt-4o-mini'}>
-                                            {getModelDisplayName(agent.modelId)}
-                                        </span>
-                                    </div>
-                                    <div className="flex items-center justify-between text-xs">
-                                        <span className="text-slate-400 font-bold uppercase tracking-widest flex items-center gap-2">
-                                            <Activity size={14} className={agent.isActive ? 'text-primary/60' : 'text-slate-400/60'} /> Status
-                                        </span>
-                                        <span className={`flex items-center gap-1.5 font-bold uppercase tracking-wider px-3 py-1.5 rounded-xl ${agent.isActive ? 'text-primary bg-primary/10' : 'text-slate-500 bg-slate-100 dark:bg-white/5'}`}>
-                                            {agent.isActive ? 'Operacional' : 'Inativo'}
-                                        </span>
-                                    </div>
-                                </div>
-                            </motion.div>
-                        ))}
-                    </AnimatePresence>
-                </div>
-            )}
-        </div>
-    );
+    if (!isModalOpen) {
+        return (
+            <AgentListView
+                agents={agents}
+                loading={loading}
+                openModal={openModal}
+                handleDelete={handleDelete}
+                getModelDisplayName={getModelDisplayName}
+                availableModels={availableModels}
+                embeddingProviders={embeddingProviders}
+            />
+        );
+    }
 
     return (
         <div className="w-full relative z-10 p-4 transition-all">
@@ -499,7 +347,6 @@ export default function AIAgentsPage() {
                                         placeholder="Ex: Assistente Jurídico"
                                     />
                                 </div>
-
                                 <div className="space-y-3">
                                     <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1 block">Descrição Curta</label>
                                     <input
@@ -509,7 +356,6 @@ export default function AIAgentsPage() {
                                         placeholder="Breve descrição do propósito deste agente"
                                     />
                                 </div>
-
                                 <div className="flex items-center gap-4 group cursor-pointer" onClick={() => setCurrentAgent({ ...currentAgent, isActive: !currentAgent?.isActive })}>
                                     <div className="relative">
                                         <input
@@ -570,10 +416,7 @@ export default function AIAgentsPage() {
                                         <span className="text-xs font-mono font-bold text-primary">{currentAgent?.temperature || 0.7}</span>
                                     </div>
                                     <input
-                                        type="range"
-                                        min="0"
-                                        max="1"
-                                        step="0.1"
+                                        type="range" min="0" max="1" step="0.1"
                                         value={currentAgent?.temperature || 0.7}
                                         onChange={e => setCurrentAgent({ ...currentAgent, temperature: parseFloat(e.target.value) })}
                                         className="w-full accent-primary h-2 bg-slate-200 dark:bg-white/10 rounded-lg appearance-none cursor-pointer"
@@ -625,6 +468,7 @@ export default function AIAgentsPage() {
                                         )}
                                     </div>
                                 </div>
+
                                 <div className="space-y-3">
                                     <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1 block">Provedor de Embedding</label>
                                     <p className="text-[10px] text-slate-400 ml-1">Modelo usado para vetorizar documentos e consultas RAG.</p>
@@ -639,9 +483,7 @@ export default function AIAgentsPage() {
                                                 }}
                                                 className="w-full mt-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-sm font-semibold outline-none dark:text-white appearance-none focus:ring-4 focus:ring-primary/10"
                                             >
-                                                {embeddingProviders.length === 0 && (
-                                                    <option value="" className="dark:bg-slate-800 dark:text-white">Nenhum provider configurado</option>
-                                                )}
+                                                {embeddingProviders.length === 0 && <option value="" className="dark:bg-slate-800 dark:text-white">Nenhum provider configurado</option>}
                                                 {embeddingProviders.map(p => (
                                                     <option key={p.id} value={p.id} className="dark:bg-slate-800 dark:text-white">{p.name}</option>
                                                 ))}
@@ -654,9 +496,7 @@ export default function AIAgentsPage() {
                                                 onChange={e => setCurrentAgent({ ...currentAgent, embeddingModel: e.target.value } as any)}
                                                 className="w-full mt-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-sm font-semibold outline-none dark:text-white appearance-none focus:ring-4 focus:ring-primary/10"
                                             >
-                                                {embeddingModelsForProvider.length === 0 && (
-                                                    <option value="" className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white">Nenhum modelo disponível</option>
-                                                )}
+                                                {embeddingModelsForProvider.length === 0 && <option value="" className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white">Nenhum modelo disponível</option>}
                                                 {embeddingModelsForProvider.map((m: { id: string; name: string; dimensions: number }) => (
                                                     <option key={m.id} value={m.id} className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white">{m.name}</option>
                                                 ))}
@@ -679,122 +519,22 @@ export default function AIAgentsPage() {
                         )}
 
                         {activeTab === 'playground' && (
-                            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="flex flex-col h-[400px]">
-                                {/* Aviso: provider do modelo SALVO não configurado */}
-                                {currentAgent?.id && !isSavedProviderConfigured && (
-                                    <div className="bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800/50 rounded-2xl p-4 mb-4">
-                                        <p className="text-xs font-black text-rose-800 dark:text-rose-300 uppercase tracking-wider flex items-center gap-2">
-                                            ⚠️ Provider Desconfigurado
-                                        </p>
-                                        <p className="text-[11px] text-rose-700 dark:text-rose-400 mt-1 font-semibold">
-                                            O modelo salvo <strong>{getModelDisplayName(savedModelId)}</strong> pertence a um provider sem API Key configurada.
-                                            Vá em <strong>Cérebro</strong>, selecione outro modelo e clique em <strong>Sincronizar IA</strong>.
-                                        </p>
-                                    </div>
-                                )}
-                                {/* Aviso: alterações pendentes de salvar */}
-                                {currentAgent?.id && isDirty && (
-                                    <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-600/30 rounded-2xl p-4 mb-4 text-xs font-bold text-amber-700 dark:text-amber-300 uppercase tracking-widest text-center">
-                                        ⚠️ Salve as alterações antes de testar
-                                    </div>
-                                )}
-                                {!currentAgent?.id && (
-                                    <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-600/30 rounded-2xl p-4 mb-4 text-xs font-bold text-amber-700 dark:text-amber-300 uppercase tracking-widest text-center">
-                                        Salve o agente antes de testar no Playground
-                                    </div>
-                                )}
-                                <div className="flex-1 overflow-y-auto space-y-4 p-4 bg-slate-50 dark:bg-black/20 rounded-3xl mb-4 border border-slate-100 dark:border-white/5 custom-scrollbar">
-                                    {chatHistory.length === 0 ? (
-                                        <div className="flex flex-col items-center justify-center h-full opacity-30 italic text-sm">
-                                            <MessageSquare size={32} className="mb-2" />
-                                            Nenhuma mensagem trocada.
-                                        </div>
-                                    ) : (
-                                        chatHistory.map((msg, i) => (
-                                            <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                                <div className={`max-w-[80%] p-4 rounded-2xl text-sm font-medium ${msg.role === 'user' ? 'bg-primary text-white ml-12 rounded-tr-none' : 'bg-white dark:bg-white/10 text-slate-800 dark:text-slate-200 mr-12 rounded-tl-none shadow-sm'}`}>
-                                                    <div
-                                                        className="whitespace-pre-wrap break-words leading-relaxed"
-                                                        dangerouslySetInnerHTML={{
-                                                            __html: (() => {
-                                                                const e = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                                                                return e(msg.content)
-                                                                    .replace(/```([\s\S]*?)```/g, '<pre class="bg-black/20 text-xs px-2 py-1 rounded mt-1 overflow-x-auto font-mono whitespace-pre-wrap"><code>$1</code></pre>')
-                                                                    .replace(/`([^`\n]+)`/g, '<code class="bg-black/20 text-xs px-1 py-0.5 rounded font-mono">$1</code>')
-                                                                    .replace(/\*([^*\n]+)\*/g, '<strong class="font-black">$1</strong>')
-                                                                    .replace(/_([^_\n]+)_/g, '<em class="italic opacity-90">$1</em>')
-                                                                    .replace(/~([^~\n]+)~/g, '<del class="line-through opacity-70">$1</del>');
-                                                            })()
-                                                        }}
-                                                    />
-                                                </div>
-                                            </div>
-                                        ))
-                                    )}
-                                    {chatLoading && (
-                                        <div className="flex justify-start">
-                                            <div className="bg-white dark:bg-white/10 p-4 rounded-2xl rounded-tl-none animate-pulse flex gap-1">
-                                                <div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" />
-                                                <div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:0.2s]" />
-                                                <div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:0.4s]" />
-                                            </div>
-                                        </div>
-                                    )}
-                                    <div ref={chatEndRef} />
-                                </div>
-                                {/* Preview do arquivo anexado */}
-                                {attachedFile && (
-                                    <div className="flex items-center gap-2 px-3 py-1.5 mb-2 bg-primary/5 border border-primary/20 rounded-xl text-xs">
-                                        <Paperclip size={12} className="text-primary flex-shrink-0" />
-                                        <span className="truncate font-semibold text-slate-700 dark:text-slate-200">{attachedFile.name}</span>
-                                        <span className="text-slate-400 flex-shrink-0">({(attachedFile.size / 1024).toFixed(0)} KB)</span>
-                                        <button type="button" onClick={() => setAttachedFile(null)} className="ml-auto text-slate-400 hover:text-red-500 transition-colors flex-shrink-0">
-                                            <X size={12} />
-                                        </button>
-                                    </div>
-                                )}
-                                {/* Input oculto para seleção de arquivo */}
-                                <input
-                                    ref={fileInputRef}
-                                    type="file"
-                                    className="hidden"
-                                    accept=".pdf,.docx,.xlsx,.xls,.txt,.xml,.csv,.json,.png,.jpg,.jpeg,.gif,.webp"
-                                    onChange={e => { if (e.target.files?.[0]) setAttachedFile(e.target.files[0]); e.target.value = ''; }}
-                                />
-                                <div className="flex gap-2">
-                                    <button
-                                        type="button"
-                                        title="Anexar arquivo (PDF, DOCX, XLSX, XML, TXT, imagens — máx 10 MB)"
-                                        disabled={!currentAgent?.id || isDirty || !isSavedProviderConfigured}
-                                        onClick={() => fileInputRef.current?.click()}
-                                        className={`p-4 rounded-2xl border transition-all flex-shrink-0 disabled:opacity-50 ${attachedFile ? 'border-primary bg-primary/10 text-primary' : 'border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-white/5 text-slate-500 dark:text-slate-300'}`}
-                                    >
-                                        <Paperclip size={18} />
-                                    </button>
-                                    <input
-                                        value={chatMessage}
-                                        onChange={e => setChatMessage(e.target.value)}
-                                        onKeyDown={e => e.key === 'Enter' && !isDirty && isSavedProviderConfigured && (e.preventDefault(), handleChatTest())}
-                                        placeholder={
-                                            !currentAgent?.id ? 'Salve o agente antes de testar...' :
-                                            isDirty ? 'Salve as alterações antes de testar...' :
-                                            !isSavedProviderConfigured ? 'Provider não configurado...' :
-                                            attachedFile ? 'Adicione uma mensagem (opcional) e envie...' :
-                                            'Envie uma mensagem para testar...'
-                                        }
-                                        disabled={!currentAgent?.id || isDirty || !isSavedProviderConfigured}
-                                        className="flex-1 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl px-6 py-4 text-sm font-semibold outline-none focus:ring-2 focus:ring-primary/20 dark:text-white disabled:opacity-50"
-                                    />
-                                    <button
-                                        type="button"
-                                        disabled={chatLoading || !currentAgent?.id || isDirty || !isSavedProviderConfigured || (!chatMessage && !attachedFile)}
-                                        onClick={handleChatTest}
-                                        className="p-4 bg-primary text-white rounded-2xl hover:scale-105 active:scale-95 transition-all shadow-lg disabled:opacity-50"
-                                    >
-                                        <Zap size={20} />
-                                    </button>
-                                </div>
-                            </motion.div>
+                            <PlaygroundTab
+                                currentAgent={currentAgent}
+                                chatHistory={chatHistory}
+                                chatLoading={chatLoading}
+                                chatMessage={chatMessage}
+                                setChatMessage={setChatMessage}
+                                attachedFile={attachedFile}
+                                setAttachedFile={setAttachedFile}
+                                fileInputRef={fileInputRef}
+                                chatEndRef={chatEndRef}
+                                onSendMessage={handleChatTest}
+                                isDirty={isDirty}
+                                isSavedProviderConfigured={isSavedProviderConfigured}
+                                savedModelId={savedModelId}
+                                getModelDisplayName={getModelDisplayName}
+                            />
                         )}
 
                         {activeTab !== 'playground' && activeTab !== 'api' && (

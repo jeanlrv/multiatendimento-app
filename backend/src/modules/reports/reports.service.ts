@@ -174,6 +174,38 @@ export class ReportsService {
             .sort((a, b) => a.avgMinutes - b.avgMinutes);
     }
 
+    async exportToCsv(
+        companyId: string,
+        type: 'agent_performance' | 'sla_compliance' | 'resolution_time' | 'satisfaction',
+        params: { startDate?: string; endDate?: string; days?: number },
+    ): Promise<string> {
+        let rows: Record<string, any>[] = [];
+
+        if (type === 'agent_performance') {
+            rows = await this.getAgentPerformance(companyId, params.startDate, params.endDate);
+        } else if (type === 'sla_compliance') {
+            rows = await this.getSlaCompliance(companyId, params.startDate, params.endDate);
+        } else if (type === 'resolution_time') {
+            rows = await this.getResolutionTime(companyId, params.startDate, params.endDate);
+        } else if (type === 'satisfaction') {
+            rows = await this.getSatisfactionTrend(companyId, params.days ?? 30);
+        }
+
+        if (!rows.length) return '';
+
+        const headers = Object.keys(rows[0]);
+        const escape = (v: any) => {
+            const s = v == null ? '' : String(v);
+            return s.includes(',') || s.includes('"') || s.includes('\n')
+                ? `"${s.replace(/"/g, '""')}"` : s;
+        };
+        const lines = [
+            headers.join(','),
+            ...rows.map(r => headers.map(h => escape(r[h])).join(',')),
+        ];
+        return lines.join('\r\n');
+    }
+
     async getInternalChatAudit(
         companyId: string,
         query?: string,

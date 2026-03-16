@@ -292,12 +292,15 @@ export class TicketsService {
         return ticket;
     }
 
-    async getPublicTicket(id: string) {
+    async getPublicTicket(publicToken: string) {
+        // Busca por publicToken (campo opaco), não pelo id UUID interno.
+        // Isso evita que usuários descubram tickets por força bruta / enumeração de IDs.
         const ticket = await this.prisma.ticket.findUnique({
-            where: { id },
+            where: { publicToken },
             include: {
                 contact: { select: { name: true } },
                 department: { select: { name: true } },
+                company: { select: { name: true, logoUrl: true, primaryColor: true } },
                 messages: {
                     orderBy: { sentAt: 'asc' },
                     select: {
@@ -318,12 +321,15 @@ export class TicketsService {
 
         return {
             id: ticket.id,
+            publicToken: ticket.publicToken,
             status: ticket.status,
             subject: ticket.subject,
             createdAt: ticket.createdAt,
             resolvedAt: (ticket as any).resolvedAt ?? null,
+            csatPending: (ticket as any).csatPending ?? false,
             contact: ticket.contact,
             department: ticket.department,
+            company: ticket.company,
             messages: ticket.messages,
         };
     }

@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ActionExecutor, WorkflowContext, ActionResult } from '../interfaces/action-executor.interface';
 import { PrismaService } from '../../../database/prisma.service';
+import { resolveTemplate } from '../utils/resolve-template';
 
 @Injectable()
 export class UpdateTicketAction implements ActionExecutor {
@@ -20,11 +21,11 @@ export class UpdateTicketAction implements ActionExecutor {
         try {
             const updateData: any = {};
 
-            if (params.priority) updateData.priority = params.priority;
-            if (params.status) updateData.status = params.status;
-            if (params.departmentId) updateData.departmentId = params.departmentId;
-            if (params.assignedUserId) updateData.assignedUserId = params.assignedUserId;
-            if (params.mode) updateData.mode = params.mode;
+            if (params.priority) updateData.priority = resolveTemplate(params.priority, context);
+            if (params.status) updateData.status = resolveTemplate(params.status, context);
+            if (params.departmentId) updateData.departmentId = resolveTemplate(params.departmentId, context);
+            if (params.assignedUserId) updateData.assignedUserId = resolveTemplate(params.assignedUserId, context);
+            if (params.mode) updateData.mode = resolveTemplate(params.mode, context);
 
             const updatedTicket = await this.prisma.ticket.update({
                 where: { id: ticketId },

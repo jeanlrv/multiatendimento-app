@@ -1,5 +1,6 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Query, Req, Res } from '@nestjs/common';
 import { Response } from 'express';
+import { Throttle } from '@nestjs/throttler';
 import { TicketsService } from './tickets.service';
 import { CreateTicketDto } from './dto/create-ticket.dto';
 import { UpdateTicketDto, TicketStatus } from './dto/update-ticket.dto';
@@ -135,11 +136,12 @@ export class TicketsController {
         res.send('\uFEFF' + csv);
     }
 
-    @Get('public/:id')
+    @Get('public/:token')
     @Public()
-    @ApiOperation({ summary: 'Portal do cliente — visualizar ticket sem autenticação' })
-    getPublicTicket(@Param('id') id: string) {
-        return this.ticketsService.getPublicTicket(id);
+    @Throttle({ default: { ttl: 60000, limit: 20 } }) // 20 req/min por IP no endpoint público
+    @ApiOperation({ summary: 'Portal do cliente — visualizar ticket via publicToken opaco' })
+    getPublicTicket(@Param('token') token: string) {
+        return this.ticketsService.getPublicTicket(token);
     }
 
     @Get(':id')

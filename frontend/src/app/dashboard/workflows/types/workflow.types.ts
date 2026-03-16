@@ -136,6 +136,11 @@ export interface WorkflowExecution {
     workflowRule: {
         name: string;
     };
+    currentNodeId?: string | null;
+    waitingFor?: {
+        eventName: string;
+        timeoutAt?: string | null;
+    } | null;
 }
 
 export interface WorkflowStats {

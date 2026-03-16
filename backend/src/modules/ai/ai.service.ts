@@ -1,6 +1,4 @@
-import { Injectable, Logger, ForbiddenException, NotFoundException, BadRequestException, ServiceUnavailableException, HttpException, HttpStatus } from '@nestjs/common';
-import { OnEvent } from '@nestjs/event-emitter';
-import { EventEmitter2 } from '@nestjs/event-emitter';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateAIAgentDto } from './dto/create-ai-agent.dto';
 import { UpdateAIAgentDto } from './dto/update-ai-agent.dto';
@@ -9,897 +7,95 @@ import { VectorStoreService } from './engine/vector-store.service';
 import { ProviderConfigService } from '../settings/provider-config.service';
 import { Observable } from 'rxjs';
 import { v4 as uuidv4 } from 'uuid';
-import axios from 'axios';
-import { OpenAI, toFile } from 'openai';
-import { getCircuitBreaker } from '../../common/utils/circuit-breaker';
+import { AIChatService } from './ai-chat.service';
+import { AIMetricsService } from './ai-metrics.service';
 
+/**
+ * AIService — orquestrador público.
+ *
+ * Responsabilidades:
+ *  - CRUD de AIAgent
+ *  - Delegação para AIChatService (chat, stream, multimodal, attachment, transcribe)
+ *  - Delegação para AIMetricsService (usage, metrics)
+ *  - Funções analíticas: summarize, analyzeSentiment, copilotSuggest
+ *  - RAG direto: queryKnowledgeBase, searchKnowledge
+ */
 @Injectable()
 export class AIService {
     private readonly logger = new Logger(AIService.name);
-
-    /**
-     * Model routing: quando o agente permite downgrade e a query é simples,
-     * substitui modelos pesados por equivalentes econômicos.
-     */
-    private readonly MODEL_DOWNGRADE: Record<string, string> = {
-        'gpt-4o': 'gpt-4o-mini',
-        'gpt-4.1': 'gpt-4.1-mini',
-        'claude-sonnet-4-20250514': 'claude-3-5-haiku-20241022',
-        'claude-3-5-sonnet-20241022': 'claude-3-5-haiku-20241022',
-        'gemini-1.5-pro': 'gemini-2.0-flash',
-        'mistral-large-latest': 'mistral-small-latest',
-        'deepseek-reasoner': 'deepseek-chat',
-        'cohere:command-r-plus': 'cohere:command-r',
-    };
-
-    /** Circuit breaker por provider LLM: 3 falhas → OPEN por 60s */
-    private readonly llmCircuitBreaker = getCircuitBreaker('llm', {
-        failureThreshold: 3,
-        cooldownMs: 60_000,
-        timeoutMs: 45_000, // LLMs podem demorar mais que APIs tradicionais
-    });
 
     constructor(
         private prisma: PrismaService,
         private llmService: LLMService,
         private vectorStoreService: VectorStoreService,
         private providerConfigService: ProviderConfigService,
-        private eventEmitter: EventEmitter2,
+        private chatService: AIChatService,
+        private metricsService: AIMetricsService,
     ) { }
 
-    // AIAgent CRUD
+    // ── Agent CRUD ────────────────────────────────────────────────────────────
+
     async createAgent(companyId: string, data: CreateAIAgentDto) {
         return this.prisma.aIAgent.create({
-            data: {
-                ...data,
-                companyId,
-                embedId: uuidv4()
-            }
+            data: { ...data, companyId, embedId: uuidv4() }
         });
     }
 
     async findAllAgents(companyId: string) {
-        return this.prisma.aIAgent.findMany({
-            where: { companyId }
-        });
+        return this.prisma.aIAgent.findMany({ where: { companyId } });
     }
 
     async findOneAgent(companyId: string, id: string) {
-        return this.prisma.aIAgent.findFirst({
-            where: { id, companyId }
-        });
+        return this.prisma.aIAgent.findFirst({ where: { id, companyId } });
     }
 
     async updateAgent(companyId: string, id: string, data: UpdateAIAgentDto) {
-        // Verifica que o agente pertence à empresa antes de atualizar
         const agent = await this.findOneAgent(companyId, id);
         if (!agent) throw new NotFoundException('Agente não encontrado');
 
-        // Spread para plain object — evita problemas de class-transformer passando instância de classe para o Prisma
         const updateData = { ...data };
+        if (!agent.embedId) (updateData as any).embedId = uuidv4();
 
-        // Se o agente não tiver um embedId ainda, gera um agora
-        if (!agent.embedId) {
-            (updateData as any).embedId = uuidv4();
-        }
-
-        return this.prisma.aIAgent.update({
-            where: { id },
-            data: updateData
-        });
+        return this.prisma.aIAgent.update({ where: { id }, data: updateData });
     }
 
     async removeAgent(companyId: string, id: string) {
-        return this.prisma.aIAgent.deleteMany({
-            where: { id, companyId }
-        });
+        return this.prisma.aIAgent.deleteMany({ where: { id, companyId } });
     }
 
-    private semanticCache = new Map<string, { embedding: number[], response: string, timestamp: number }>();
-    private readonly CACHE_TTL_MS = 60 * 60 * 1000; // 1 hora — evita respostas obsoletas após atualização da base
+    // ── Chat delegation ───────────────────────────────────────────────────────
 
-    /** Custo estimado por 1.000 tokens de entrada (USD) — para rastreamento de custo */
-    private readonly COST_INPUT: Record<string, number> = {
-        'gpt-4o-mini': 0.00015, 'gpt-4o': 0.005,
-        'claude-3-5-sonnet-20241022': 0.003, 'claude-3-5-haiku-20241022': 0.0008,
-        'claude-3-opus-20240229': 0.015,
-        'gemini-2.0-flash': 0.0001, 'gemini-1.5-pro': 0.00125,
-        'deepseek-chat': 0.00027, 'deepseek-reasoner': 0.00055,
-        'llama-3.1-8b-instant': 0.00005, 'llama-3.1-70b-versatile': 0.00059,
-        'mistral-large-latest': 0.002,
-    };
-    private readonly COST_OUTPUT: Record<string, number> = {
-        'gpt-4o-mini': 0.0006, 'gpt-4o': 0.015,
-        'claude-3-5-sonnet-20241022': 0.015, 'claude-3-5-haiku-20241022': 0.004,
-        'claude-3-opus-20240229': 0.075,
-        'gemini-2.0-flash': 0.0004, 'gemini-1.5-pro': 0.005,
-        'deepseek-chat': 0.00110, 'deepseek-reasoner': 0.00219,
-        'llama-3.1-8b-instant': 0.00008, 'llama-3.1-70b-versatile': 0.00079,
-        'mistral-large-latest': 0.006,
-    };
-
-    /** Tamanho máximo de contexto por modelo (em chars ≈ tokens × 3.5) */
-    private readonly MODEL_CONTEXT_CHARS: Record<string, number> = {
-        'gpt-4o-mini': 128000 * 3, 'gpt-4o': 128000 * 3,
-        'claude-3-5-sonnet-20241022': 200000 * 3, 'claude-3-5-haiku-20241022': 200000 * 3,
-        'gemini-2.0-flash': 1000000 * 3, 'gemini-1.5-pro': 1000000 * 3,
-        'deepseek-chat': 64000 * 3, 'deepseek-reasoner': 64000 * 3,
-    };
-    private readonly DEFAULT_MAX_CONTEXT_CHARS = 30000; // ~8k tokens, seguro para modelos desconhecidos
-
-    /** Invalidação de cache semântico + RAG quando a base de conhecimento é atualizada */
-    @OnEvent('knowledge.updated')
-    handleKnowledgeUpdated(payload: { knowledgeBaseId: string; companyId: string }) {
-        const before = this.semanticCache.size;
-        this.semanticCache.clear();
-        this.vectorStoreService.invalidateRagCache(payload.knowledgeBaseId, payload.companyId);
-        this.logger.log(`[Cache] Cache semântico + RAG limpos após atualização da KB ${payload.knowledgeBaseId} (${before} entradas removidas)`);
+    chat(companyId: string, agentId: string, message: string, history: any[] = [], conversationId?: string, systemSuffix?: string) {
+        return this.chatService.chat(companyId, agentId, message, history, conversationId, systemSuffix);
     }
 
-    /**
-     * Verifica se o custo diário da empresa ultrapassou o limite configurado.
-     * Emite uma notificação de alerta se o threshold for excedido (fire-and-forget).
-     */
-    private async checkCostAlert(companyId: string, estimatedCost: number): Promise<void> {
-        try {
-            const company = await this.prisma.company.findUnique({
-                where: { id: companyId },
-                select: { dailyCostAlertUsd: true },
-            });
-            if (!company?.dailyCostAlertUsd || company.dailyCostAlertUsd <= 0) return;
-
-            const startOfDay = new Date();
-            startOfDay.setHours(0, 0, 0, 0);
-            const dailyCost = await this.prisma.aIUsage.aggregate({
-                where: { companyId, createdAt: { gte: startOfDay } },
-                _sum: { cost: true },
-            });
-            const totalDailyCost = (dailyCost._sum.cost ?? 0) + estimatedCost;
-            if (totalDailyCost >= company.dailyCostAlertUsd) {
-                // Cria notificação de alerta no banco (deduplicada: apenas uma por dia)
-                const existingAlert = await this.prisma.notification.findFirst({
-                    where: {
-                        companyId,
-                        event: 'ai.cost_alert',
-                        createdAt: { gte: startOfDay },
-                    },
-                });
-                if (!existingAlert) {
-                    await this.prisma.notification.create({
-                        data: {
-                            companyId,
-                            type: 'WARNING',
-                            event: 'ai.cost_alert',
-                            title: 'Alerta de custo de IA',
-                            body: `O custo diário de IA atingiu $${totalDailyCost.toFixed(4)} (limite: $${company.dailyCostAlertUsd.toFixed(4)}).`,
-                            data: { totalDailyCost, threshold: company.dailyCostAlertUsd },
-                        },
-                    });
-                    this.eventEmitter.emit('ai.cost_alert', { companyId, totalDailyCost, threshold: company.dailyCostAlertUsd });
-                    this.logger.warn(`[CostAlert] Empresa ${companyId}: custo diário $${totalDailyCost.toFixed(4)} ≥ limite $${company.dailyCostAlertUsd}`);
-                }
-            }
-        } catch (e) {
-            this.logger.warn(`[CostAlert] Falha ao verificar alerta de custo: ${e.message}`);
-        }
+    chatMultimodal(companyId: string, agentId: string, message: string, imageUrls: string[] = [], history: any[] = []) {
+        return this.chatService.chatMultimodal(companyId, agentId, message, imageUrls, history);
     }
 
-    /**
-     * Sumarização progressiva: quando uma conversa atinge 30+ mensagens,
-     * gera um resumo comprimido de forma assíncrona (fire-and-forget).
-     * O resumo é armazenado em Conversation.summary e injetado no system prompt nas próximas chamadas.
-     */
-    private triggerProgressiveSummarization(
-        conversationId: string,
-        companyId: string,
-        agentId: string,
-        history: any[],
-        existingSummary?: string,
-    ): void {
-        // Executa de forma assíncrona sem bloquear a resposta ao usuário
-        setImmediate(async () => {
-            try {
-                const agent = await this.findOneAgent(companyId, agentId);
-                if (!agent?.isActive) return;
-
-                const modelId = agent.modelId || 'gpt-4o-mini';
-                const companyConfigs = await this.providerConfigService.getDecryptedForCompany(companyId);
-                const llmConfig = companyConfigs.get(this.detectProviderFromModelId(modelId));
-
-                // Compõe texto a resumir: resumo anterior (se houver) + histórico recente
-                const contextText = existingSummary
-                    ? `Resumo anterior: ${existingSummary}\n\nMensagens recentes:\n`
-                    : 'Mensagens da conversa:\n';
-                const historyText = history
-                    .slice(-20) // últimas 20 mensagens
-                    .map(m => `${m.role === 'user' ? 'Usuário' : 'Assistente'}: ${m.content}`)
-                    .join('\n');
-
-                const summary = await this.llmService.generateResponse(
-                    modelId,
-                    'Você é um assistente que cria resumos concisos de conversas. Responda apenas com o resumo, sem prefixos ou comentários.',
-                    `${contextText}${historyText}\n\nResuma os pontos principais desta conversa em no máximo 5 frases.`,
-                    [], 0.3, undefined,
-                    llmConfig?.apiKey || undefined,
-                    llmConfig?.baseUrl || undefined,
-                );
-
-                await this.prisma.conversation.updateMany({
-                    where: { id: conversationId, companyId },
-                    data: {
-                        summary,
-                        summaryMessageCount: history.length,
-                    },
-                });
-                this.logger.log(`[Summarization] Conversa ${conversationId} resumida (${history.length} msgs → ${summary.length} chars)`);
-            } catch (e) {
-                this.logger.warn(`[Summarization] Falha ao sumarizar conversa ${conversationId}: ${e.message}`);
-            }
-        });
+    streamChat(companyId: string, agentId: string, message: string, history: any[] = []): Observable<any> {
+        return this.chatService.streamChat(companyId, agentId, message, history);
     }
 
-    /** FASE 3/7 - Compressor de Contexto histórico (com preservação de contexto inicial) */
-    private compressContext(history: any[], maxMessages = 20) {
-        if (!history || history.length === 0) return [];
-        const FILLER_WORDS = new Set(['ok', 'obrigado', 'obrigada', 'valeu', 'sim', 'nao', 'não', 'tchau']);
-        const compressed = history.filter((h, index) => {
-            const text = h.content?.trim()?.toLowerCase() ?? '';
-            // Remove mensagens curtas de preenchimento (exceto a última)
-            if (index < history.length - 1 && FILLER_WORDS.has(text)) return false;
-            return true;
-        });
-
-        // Agrupa mensagens consecutivas do mesmo role para economizar tokens
-        const grouped: any[] = [];
-        for (const h of compressed) {
-            if (grouped.length > 0 && grouped[grouped.length - 1].role === h.role) {
-                grouped[grouped.length - 1].content += '\n' + h.content;
-            } else {
-                grouped.push({ ...h });
-            }
-        }
-
-        // Se ainda acima do limite: mantém as 2 primeiras (contexto inicial) + últimas N-2
-        // Isso preserva o contexto de abertura da conversa enquanto descarta o meio menos relevante
-        if (grouped.length > maxMessages) {
-            return [...grouped.slice(0, 2), ...grouped.slice(-(maxMessages - 2))];
-        }
-        return grouped;
+    chatWithAttachment(companyId: string, agentId: string, message: string, file: Express.Multer.File, history: any[] = []) {
+        return this.chatService.chatWithAttachment(companyId, agentId, message, file, history);
     }
 
-    private allocateTokenBudget(message: string): { chunkLimit: number } {
-        const charCount = message.length;
-        const wordCount = message.trim().split(/\s+/).length;
-        // Budget maior para queries mais longas ou complexas
-        if (charCount > 300 || wordCount > 50) {
-            return { chunkLimit: 25 }; // Query longa/complexa: mais contexto
-        }
-        if (charCount > 100 || wordCount > 15) {
-            return { chunkLimit: 20 }; // Query média
-        }
-        return { chunkLimit: 15 };    // Mesmo queries curtas precisam de contexto suficiente
+    transcribeAudio(mediaUrl: string, companyId?: string) {
+        return this.chatService.transcribeAudio(mediaUrl, companyId);
     }
 
-    /** Guarda contra overflow de context window: trunca o contexto RAG se necessário */
-    private guardContextOverflow(systemPrompt: string, context: string, history: any[], message: string, modelId: string): string {
-        const maxChars = this.MODEL_CONTEXT_CHARS[modelId] ?? this.DEFAULT_MAX_CONTEXT_CHARS;
-        const fixedChars = systemPrompt.length + message.length +
-            history.reduce((s, h) => s + (h.content?.length || 0), 0);
-        const budgetForContext = maxChars * 0.65 - fixedChars; // máx 65% do contexto para RAG
-        if (budgetForContext <= 0) return '';
-        if (context.length > budgetForContext) {
-            this.logger.warn(`[ContextOverflow] Contexto RAG truncado de ${context.length} para ${budgetForContext} chars (modelo: ${modelId})`);
-            return context.substring(0, budgetForContext);
-        }
-        return context;
+    // ── Usage delegation ──────────────────────────────────────────────────────
+
+    getUsage(companyId: string) {
+        return this.metricsService.getUsage(companyId);
     }
 
-    /**
-     * Verifica limites de tokens da empresa (hora, dia, total).
-     * Lança ForbiddenException se algum limite for atingido.
-     * 0 = Ilimitado.
-     */
-    private async checkTokenLimits(companyId: string, agentId?: string) {
-        const [company, agent] = await Promise.all([
-            this.prisma.company.findUnique({
-                where: { id: companyId },
-                select: { limitTokens: true, limitTokensPerHour: true, limitTokensPerDay: true }
-            }),
-            agentId ? this.prisma.aIAgent.findUnique({
-                where: { id: agentId },
-                select: { limitTokensPerDay: true }
-            }) : null
-        ]);
-
-        if (!company) return;
-
-        const now = new Date();
-        const startOfHour = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), 0, 0, 0);
-        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-
-        const [hourlyUsage, dailyUsage, totalTokens] = await Promise.all([
-            this.prisma.aIUsage.aggregate({
-                where: { companyId, createdAt: { gte: startOfHour } },
-                _sum: { tokens: true }
-            }),
-            this.prisma.aIUsage.aggregate({
-                where: { companyId, createdAt: { gte: startOfDay } },
-                _sum: { tokens: true }
-            }),
-            this.prisma.aIUsage.aggregate({
-                where: { companyId },
-                _sum: { tokens: true }
-            }),
-        ]);
-
-        const hourlyTokens = hourlyUsage._sum.tokens || 0;
-        const dailyTokens = dailyUsage._sum.tokens || 0;
-        const totalTokensUsed = totalTokens._sum.tokens || 0;
-
-        // Regra "0 = Ilimitado" em todos os campos
-        if (company.limitTokensPerHour > 0 && hourlyTokens >= company.limitTokensPerHour) {
-            throw new ForbiddenException(`Limite de tokens por hora atingido (${company.limitTokensPerHour}). Tente novamente mais tarde.`);
-        }
-
-        // Verifica o limite diário (menor entre Agente e Empresa, se > 0)
-        let effectiveDayLimit = company.limitTokensPerDay;
-        if (agent && agent.limitTokensPerDay > 0) {
-            effectiveDayLimit = (effectiveDayLimit > 0)
-                ? Math.min(effectiveDayLimit, agent.limitTokensPerDay)
-                : agent.limitTokensPerDay;
-        }
-
-        if (effectiveDayLimit > 0 && dailyTokens >= effectiveDayLimit) {
-            throw new ForbiddenException(`Limite de tokens por dia atingido (${effectiveDayLimit}). Tente novamente amanhã.`);
-        }
-
-        if (company.limitTokens > 0 && totalTokensUsed >= company.limitTokens) {
-            throw new ForbiddenException(`Limite total de tokens de IA atingido (${company.limitTokens}). Entre em contato com o suporte.`);
-        }
+    getDetailedMetrics(companyId: string) {
+        return this.metricsService.getDetailedMetrics(companyId);
     }
 
-    /**
-     * Motor de Chat Nativo: Usa LangChain com suporte multi-provider.
-     * @param conversationId ID da conversa no playground (opcional) — habilita sumarização progressiva.
-     */
-    async chat(companyId: string, agentId: string, message: string, history: any[] = [], conversationId?: string, systemSuffix?: string) {
-        if (!message || message.trim().length === 0) {
-            throw new BadRequestException('Mensagem não pode ser vazia');
-        }
-        if (message.length > 4000) message = message.substring(0, 4000);
-
-        // Fase 3 e 7: Compressor de Contexto (preserva 2 primeiras + últimas 18)
-        history = this.compressContext(history);
-
-        const agent = await this.findOneAgent(companyId, agentId);
-        if (!agent || !agent.isActive) {
-            throw new NotFoundException('Agente não encontrado ou inativo');
-        }
-
-        try {
-            await this.checkTokenLimits(companyId, agentId);
-            // Fase 5: Semantic Cache (Interceptação por Vector)
-            let promptEmbedding: number[] = [];
-            try {
-                const companyConfigs = await this.providerConfigService.getDecryptedForCompany(companyId);
-                const embeddingProvider = agent.embeddingProvider || 'qwen';
-                const embeddingConfig = companyConfigs.get(embeddingProvider);
-
-                // Evita carregar o modelo nativo (@xenova) para cache se não for estritamente necessário
-                // ou se o ambiente estiver em modo de economia de memória (Railway 512MB)
-                promptEmbedding = await this.vectorStoreService.generateEmbedding(
-                    message,
-                    embeddingProvider,
-                    agent.embeddingModel,
-                    embeddingConfig?.apiKey || undefined,
-                    embeddingConfig?.baseUrl || undefined
-                );
-
-                const cacheKeyPrefix = `${companyId}:${agentId}:`;
-                for (const [key, cached] of this.semanticCache.entries()) {
-                    if (key.startsWith(cacheKeyPrefix)) {
-                        if (Date.now() - cached.timestamp > this.CACHE_TTL_MS) { this.semanticCache.delete(key); continue; }
-                        if (this.vectorStoreService.cosineSimilarity(promptEmbedding, cached.embedding) > 0.95) {
-                            this.logger.log(`[Cache HIT] Similarity > 0.95 para agente ${agent.name}`);
-                            return cached.response;
-                        }
-                    }
-                }
-            } catch (error) {
-                this.logger.debug(`[Cache Skip] Falha ao verificar cache semântico (possível timeout ou OOM): ${error.message}`);
-                /* fallback: avança sem cache */
-            }
-
-            // Fase 4: Token Budget Manager
-            const budget = this.allocateTokenBudget(message);
-            let finalModelId = agent.modelId || 'gpt-4o-mini';
-
-            // Model routing: downgrade para modelo econômico em queries simples
-            if (agent.allowModelDowngrade && budget.chunkLimit <= 10 && this.MODEL_DOWNGRADE[finalModelId]) {
-                const downgraded = this.MODEL_DOWNGRADE[finalModelId];
-                this.logger.debug(`[ModelRouting] Downgrade: ${finalModelId} → ${downgraded} (query simples)`);
-                finalModelId = downgraded;
-            }
-
-            this.logger.log(`Chat "${agent.name}" | modelo: ${finalModelId} | chunks: ${budget.chunkLimit}`);
-
-            const companyConfigs = await this.providerConfigService.getDecryptedForCompany(companyId);
-            const providerId = this.detectProviderFromModelId(finalModelId);
-            const llmConfig = companyConfigs.get(providerId);
-
-            // Validação de Provider LLM
-            if (!llmConfig && providerId !== 'ollama' && providerId !== 'lmstudio') {
-                this.logger.warn(`[Chat] Configuração ausente para provider '${providerId}' (empresa: ${companyId})`);
-                throw new BadRequestException(`O provider '${providerId}' não está configurado ou habilitado. Configure em Configurações > IA & Modelos.`);
-            }
-
-            const embeddingProvider = agent.embeddingProvider || 'openai';
-            const embeddingConfig = companyConfigs.get(embeddingProvider);
-
-            // Validação de Provider de Embedding (exceto nativo)
-            if (embeddingProvider !== 'native' && !embeddingConfig && embeddingProvider !== 'ollama' && embeddingProvider !== 'anythingllm') {
-                this.logger.warn(`[Chat] Configuração de embedding ausente para provider '${embeddingProvider}'`);
-                // Não trava o chat se for apenas embedding mas avisa
-            }
-
-            // Sumarização progressiva: carrega resumo da conversa se disponível
-            let conversationSummary: string | undefined;
-            if (conversationId) {
-                const conv = await this.prisma.conversation.findFirst({
-                    where: { id: conversationId, companyId },
-                    select: { summary: true, summaryMessageCount: true },
-                });
-                conversationSummary = conv?.summary ?? undefined;
-            }
-
-            // RAG: usa o embeddingProvider da knowledge base (não do agente),
-            // pois os chunks foram indexados com o provider da KB.
-            let context = '';
-            if (agent.knowledgeBaseId) {
-                const kb = await this.prisma.knowledgeBase.findUnique({
-                    where: { id: agent.knowledgeBaseId },
-                    select: { language: true, embeddingProvider: true, embeddingModel: true },
-                });
-                // Provider e modelo usados para indexar — devem ser os mesmos usados na busca
-                const kbEmbeddingProvider = kb?.embeddingProvider || agent.embeddingProvider || 'native';
-                const kbEmbeddingModel = kb?.embeddingModel || agent.embeddingModel || 'all-MiniLM-L6-v2';
-                const kbEmbeddingConfig = companyConfigs.get(kbEmbeddingProvider);
-
-                this.logger.debug(`[RAG] Buscando base ${agent.knowledgeBaseId} com provider="${kbEmbeddingProvider}" model="${kbEmbeddingModel}"`);
-
-                const chunks = await this.vectorStoreService.searchSimilarity(
-                    this.prisma, companyId, message, agent.knowledgeBaseId,
-                    budget.chunkLimit, kbEmbeddingProvider,
-                    kbEmbeddingModel, kbEmbeddingConfig?.apiKey || undefined,
-                    kbEmbeddingConfig?.baseUrl || undefined,
-                    kb?.language || 'portuguese',
-                );
-                context = chunks.map((c: any, i: number) => {
-                    const docName = c.metadata?.documentName || c.metadata?.source || c.metadata?.filename || '';
-                    const page = c.pageNumber ? ` | pág. ${c.pageNumber}` : '';
-                    const relevance = c.score != null ? ` | relevância: ${Math.round(c.score * 100)}%` : '';
-                    const prefix = docName
-                        ? `[Fonte ${i + 1}: ${docName}${page}${relevance}]\n`
-                        : `[Trecho ${i + 1}${relevance}]\n`;
-                    return `${prefix}${c.content}`;
-                }).join('\n---\n');
-                this.logger.log(`[RAG] ${chunks.length} chunks retornados para contexto na KB ${agent.knowledgeBaseId}.`);
-            } else {
-                this.logger.log(`[RAG] Ignorado. Agente ${agent.name} não possui knowledgeBaseId configurado.`);
-            }
-
-            // Overflow guard: trunca RAG se context window exceder limite do modelo
-            context = this.guardContextOverflow(agent.prompt || '', context, history, message, finalModelId);
-
-            // Injeta resumo da conversa no system prompt (se houver)
-            let systemPrompt = conversationSummary
-                ? `${agent.prompt || 'Você é um assistente virtual prestativo.'}\n\n[Resumo da conversa até agora]: ${conversationSummary}`
-                : (agent.prompt || 'Você é um assistente virtual prestativo.');
-
-            // Sufixo adicional (ex: instruções de roteamento injetadas pelo chat.service)
-            if (systemSuffix) {
-                systemPrompt += `\n\n${systemSuffix}`;
-            }
-
-            // Adiciona instrução de grounding (RAG) se houver contexto
-            if (context) {
-                // Parsear chunks com formatação [SOURCE_N] para melhor prompt do LLM
-                const sourceChunks = context.split('\n---\n').map((chunk, index) => {
-                    // Extrair metadata se presente (干ar line com Similaridade)
-                    const lines = chunk.split('\n').filter(line => line.trim());
-                    const contentStart = lines[0].startsWith('Similaridade') ? 1 : 0;
-                    return {
-                        number: index + 1,
-                        content: lines.slice(contentStart).join('\n').trim(),
-                    };
-                }).filter(c => c.content.length > 50); // Filtrar chunks muito curtos
-
-                const formattedContext = sourceChunks
-                    .map(c => `[SOURCE_${c.number}]\n${c.content}\n[END_SOURCE_${c.number}]`)
-                    .join('\n\n');
-
-                systemPrompt += [
-                    '',
-                    '========================================',
-                    '[BASE DE CONHECIMENTO — FONTE OFICIAL]',
-                    '========================================',
-                    '',
-                    'Os trechos abaixo foram recuperados da base de conhecimento da empresa.',
-                    'Eles representam a VERDADE OFICIAL para este atendimento.',
-                    '',
-                    'REGRAS OBRIGATÓRIAS DE GROUNDING:',
-                    '1. SEMPRE use as informações dos trechos abaixo como fonte PRIMÁRIA e DEFINITIVA.',
-                    '2. NUNCA substitua informações dos documentos pelo seu conhecimento geral.',
-                    '3. Sintetize e integre múltiplos trechos para construir respostas completas e coesas.',
-                    '4. Se a resposta estiver nos documentos (mesmo parcialmente): use-a, integrando com raciocínio lógico quando necessário.',
-                    '5. NUNCA invente dados concretos (números, preços, URLs, datas, nomes) que não estejam nos trechos.',
-                    '6. Só informe que não possui a informação se os trechos realmente não contiverem nada relevante.',
-                    '7. Responda de forma natural e direta — não cite mecanicamente "[SOURCE_N]" no texto.',
-                    '8. Trecho com maior relevância (%) tem maior confiabilidade — priorize-os em caso de conflito.',
-                    '',
-                    'TRECHOS RECUPERADOS:',
-                    formattedContext,
-                    '========================================',
-                ].join('\n');
-                // Limpa o contexto da variável enviada diretamente ao llmService para evitar duplicação
-                context = '';
-            }
-
-            // Circuit breaker protege contra cascata de falhas do provider LLM
-            const response = await this.llmCircuitBreaker.exec(() =>
-                this.llmService.generateResponse(
-                    finalModelId,
-                    systemPrompt,
-                    message,
-                    history.map(h => ({
-                        role: (h.role === 'user' || h.role === 'client' ? 'user' : 'assistant') as 'user' | 'assistant',
-                        content: h.content,
-                    })),
-                    agent.temperature || 0.7,
-                    context,
-                    llmConfig?.apiKey || undefined,
-                    llmConfig?.baseUrl || undefined,
-                )
-            );
-
-            // Sumarização progressiva: dispara assincronamente quando a conversa tem 30+ mensagens
-            if (conversationId && history.length >= 30) {
-                this.triggerProgressiveSummarization(conversationId, companyId, agentId, history, conversationSummary);
-            }
-
-            // Grava RAG Cache
-            if (promptEmbedding.length > 0) {
-                const newCacheKey = `${companyId}:${agentId}:${Date.now()}`;
-                this.semanticCache.set(newCacheKey, { embedding: promptEmbedding, response, timestamp: Date.now() });
-                if (this.semanticCache.size > 2000) {
-                    const firstKey = this.semanticCache.keys().next().value;
-                    if (firstKey) this.semanticCache.delete(firstKey);
-                }
-            }
-
-            try {
-                await this.trackTokenUsage(companyId, finalModelId, agent.prompt || '', context, history, response, 0);
-            } catch (e) {
-                this.logger.warn(`Falha ao registrar uso de tokens: ${e.message}`);
-            }
-
-            return response;
-        } catch (error) {
-            this.logger.error(`Erro no chat: ${error.message}`, error.stack);
-            // Re-lança exceções HTTP do NestJS (BadRequest, Forbidden, NotFound…) sem modificá-las
-            if (error?.status && error?.response) throw error;
-            // Converte erros genéricos (LLM API, Prisma, network) em 503 legível pelo frontend
-            const msg = error?.message || 'Erro interno ao processar mensagem';
-            throw new ServiceUnavailableException(
-                `Falha ao processar resposta da IA: ${msg}. Verifique se a API Key e o modelo estão corretos em Configurações → IA & Modelos.`
-            );
-        }
-    }
-
-    /**
-     * Chat multimodal com suporte a imagens
-     */
-    async chatMultimodal(
-        companyId: string,
-        agentId: string,
-        message: string,
-        imageUrls: string[] = [],
-        history: any[] = []
-    ) {
-        if (!message || message.trim().length === 0) {
-            throw new BadRequestException('Mensagem não pode ser vazia');
-        }
-        if (message.length > 4000) message = message.substring(0, 4000);
-
-        // Fase 3 e 7: Compressor de Contexto
-        history = this.compressContext(history);
-
-        if (imageUrls.length > 5) {
-            throw new BadRequestException('Máximo de 5 imagens por requisição');
-        }
-
-        const agent = await this.findOneAgent(companyId, agentId);
-        if (!agent || !agent.isActive) {
-            throw new NotFoundException('Agente não encontrado ou inativo');
-        }
-
-        await this.checkTokenLimits(companyId, agentId);
-
-        try {
-            // Fase 5: Semantic Cache (Apenas aplicável se não houver imagens na rodada)
-            let promptEmbedding: number[] = [];
-            if (imageUrls.length === 0) {
-                try {
-                    promptEmbedding = await this.vectorStoreService.generateEmbedding(message, 'qwen');
-                    const cacheKeyPrefix = `${companyId}:${agentId}-mm:`;
-                    for (const [key, cached] of this.semanticCache.entries()) {
-                        if (key.startsWith(cacheKeyPrefix)) {
-                            // Evict entradas expiradas
-                            if (Date.now() - cached.timestamp > this.CACHE_TTL_MS) {
-                                this.semanticCache.delete(key);
-                                continue;
-                            }
-                            if (this.vectorStoreService.cosineSimilarity(promptEmbedding, cached.embedding) > 0.95) {
-                                this.logger.log(`[Cache HIT] Semantic similarity > 0.95 (MM) abortando geração para agente ${agent.name}`);
-                                return cached.response;
-                            }
-                        }
-                    }
-                } catch (err) { }
-            }
-
-            // Fase 4 e 6: Token Budget Manager
-            const budget = this.allocateTokenBudget(message);
-            let finalModelId = agent.modelId || 'gpt-4o-mini';
-
-            this.logger.log(`Chat multimodal com agente "${agent.name}" usando modelo: ${finalModelId} | Budget limit: ${budget.chunkLimit}`);
-
-            const companyConfigs = await this.providerConfigService.getDecryptedForCompany(companyId);
-            const llmProviderId = this.detectProviderFromModelId(finalModelId);
-            const llmConfig = companyConfigs.get(llmProviderId);
-
-            const response = await this.llmService.generateMultimodalResponse(
-                finalModelId,
-                agent.prompt || 'Você é um assistente virtual prestativo.',
-                message,
-                imageUrls,
-                history.map(h => ({
-                    role: h.role === 'user' || h.role === 'client' ? 'user' : 'assistant',
-                    content: h.content
-                })),
-                agent.temperature || 0.7,
-                llmConfig?.apiKey || undefined,
-                llmConfig?.baseUrl || undefined,
-            );
-
-            // Grava RAG Cache
-            if (promptEmbedding.length > 0 && imageUrls.length === 0) {
-                const newCacheKey = `${companyId}:${agentId}-mm:${Date.now()}`;
-                this.semanticCache.set(newCacheKey, { embedding: promptEmbedding, response, timestamp: Date.now() });
-                if (this.semanticCache.size > 2000) {
-                    const firstKey = this.semanticCache.keys().next().value;
-                    if (firstKey) this.semanticCache.delete(firstKey);
-                }
-            }
-
-            // Registrar uso de tokens (estimativa maior para multimodal)
-            try {
-                await this.trackTokenUsage(companyId, finalModelId, agent.prompt || '', '', history, response, imageUrls.length);
-            } catch (e) {
-                this.logger.warn(`Falha ao registrar uso de tokens: ${e.message}`);
-            }
-
-            return response;
-        } catch (error) {
-            this.logger.error(`Erro no chat multimodal: ${error.message}`, error.stack);
-            if (error?.status && error?.response) throw error;
-            const msg = error?.message || 'Erro interno ao processar mensagem';
-            throw new ServiceUnavailableException(
-                `Falha ao processar resposta multimodal: ${msg}. Verifique se o modelo suporta imagens e a API Key está correta.`
-            );
-        }
-    }
-
-    /**
-     * Consulta a base de conhecimento e gera resposta usando contexto recuperado
-     */
-    async queryKnowledgeBase(
-        companyId: string,
-        agentId: string,
-        query: string,
-        knowledgeBaseId: string,
-        options?: {
-            maxChunks?: number;
-            minScore?: number;
-            temperature?: number;
-        }
-    ): Promise<{ response: string; sources: any[]; usage?: any }> {
-        const agent = await this.prisma.aIAgent.findFirst({
-            where: { id: agentId, companyId }
-        });
-
-        if (!agent) {
-            throw new NotFoundException('Agente não encontrado');
-        }
-
-        // Buscar chunks relevantes na base de conhecimento
-        // Usar o provider da KB (não do agente), pois os chunks foram indexados com o provider da KB.
-        const kb = await this.prisma.knowledgeBase.findUnique({
-            where: { id: knowledgeBaseId },
-            select: { language: true, embeddingProvider: true, embeddingModel: true },
-        });
-        const kbEmbeddingProvider = kb?.embeddingProvider || agent.embeddingProvider || 'native';
-        const kbEmbeddingModel = kb?.embeddingModel || agent.embeddingModel || 'all-MiniLM-L6-v2';
-
-        const relevantChunks = await this.vectorStoreService.searchSimilarity(
-            this.prisma,
-            companyId,
-            query,
-            knowledgeBaseId,
-            options?.maxChunks || 5,
-            kbEmbeddingProvider,
-            kbEmbeddingModel,
-            undefined, // apiKey será buscada automaticamente
-            undefined, // baseUrl será buscado automaticamente
-            kb?.language || 'portuguese'
-        );
-
-        // Filtrar chunks por score mínimo se especificado
-        const filteredChunks = options?.minScore
-            ? relevantChunks.filter(chunk => chunk.score >= (options.minScore || 0.3))
-            : relevantChunks;
-
-        if (filteredChunks.length === 0) {
-            // Caso não encontre conteúdo relevante, responder com informação padrão
-            return {
-                response: "Não encontrei informações relevantes na base de conhecimento para responder a essa pergunta.",
-                sources: [],
-                usage: { inputTokens: query.length, outputTokens: 0 }
-            };
-        }
-
-        // Construir contexto a partir dos chunks recuperados
-        const context = filteredChunks.map((chunk, index) =>
-            `Fonte ${index + 1} (Similaridade: ${(chunk.score * 100).toFixed(1)}%):\n${chunk.content}`
-        ).join('\n\n---\n\n');
-
-        // Criar prompt otimizado para uso do contexto
-        const enhancedPrompt = `Você é um assistente especializado que responde perguntas com base na base de conhecimento fornecida.
-
-Instruções:
-- Use APENAS as informações contidas no contexto abaixo para responder
-- Se a resposta não estiver no contexto, diga que não encontrou informações suficientes
-- Cite as fontes quando possível
-- Seja conciso e direto, mas forneça detalhes relevantes
-
-Contexto da base de conhecimento:
-${context}
-
-Pergunta: ${query}
-
-Resposta:`;
-
-        try {
-            const response = await this.chat(
-                companyId,
-                agentId,
-                enhancedPrompt,
-                [], // sem histórico — query direta à base de conhecimento
-            );
-
-            return {
-                response,
-                sources: filteredChunks,
-                usage: {
-                    inputTokens: enhancedPrompt.length,
-                    outputTokens: response.length,
-                    contextChunks: filteredChunks.length
-                }
-            };
-        } catch (error) {
-            this.logger.error(`Erro ao consultar base de conhecimento: ${error.message}`);
-            throw error;
-        }
-    }
-
-    /**
-     * Registra uso de tokens na tabela AIUsage.
-     * Estima tokens de entrada (prompt + contexto RAG + histórico) e saída (~4 chars/token).
-     * Calcula custo estimado em USD com base nas tabelas de preço de cada provider.
-     */
-    private async trackTokenUsage(
-        companyId: string,
-        modelId: string,
-        systemPrompt: string,
-        context: string,
-        history: any[],
-        response: string,
-        imageCount: number = 0,
-    ) {
-        const historyChars = history.reduce((sum, h) => sum + (h.content?.length || 0), 0);
-        const inputTokens = Math.ceil((systemPrompt.length + context.length + historyChars) / 4);
-        const outputTokens = Math.ceil(response.length / 4);
-        // ~500 tokens por imagem (estimativa conservadora para visão gpt-4o/claude)
-        const imageTokens = imageCount * 500;
-        const estimatedTokens = inputTokens + outputTokens + imageTokens;
-
-        // Custo estimado: usa o modelId sem prefixo de provider (ex: 'groq:llama-3.1-8b' → 'llama-3.1-8b')
-        const baseModelId = modelId.includes(':') ? modelId.split(':').slice(1).join(':') : modelId;
-        const costIn = (this.COST_INPUT[baseModelId] ?? this.COST_INPUT[modelId] ?? 0) * inputTokens / 1000;
-        const costOut = (this.COST_OUTPUT[baseModelId] ?? this.COST_OUTPUT[modelId] ?? 0) * outputTokens / 1000;
-        const estimatedCost = parseFloat((costIn + costOut).toFixed(8));
-
-        await this.prisma.aIUsage.create({
-            data: {
-                companyId,
-                tokens: estimatedTokens,
-                cost: estimatedCost,
-            }
-        });
-
-        // Alerta de custo diário (fire-and-forget)
-        this.checkCostAlert(companyId, estimatedCost).catch(() => { });
-    }
-
-    async transcribeAudio(mediaUrl: string, companyId?: string) {
-        try {
-            // Resolve provider: prioridade company DB config → env vars
-            let whisperBaseUrl: string | null = null;
-            let openAiKey: string | null = process.env.OPENAI_API_KEY || null;
-
-            if (companyId) {
-                const companyConfigs = await this.providerConfigService.getDecryptedForCompany(companyId);
-                // 1. faster-whisper-server por empresa
-                const localConfig = companyConfigs.get('whisper-local');
-                if (localConfig?.baseUrl) whisperBaseUrl = localConfig.baseUrl;
-                // 2. OpenAI por empresa
-                const openaiConfig = companyConfigs.get('openai');
-                if (openaiConfig?.apiKey) openAiKey = openaiConfig.apiKey;
-            }
-
-            // Fallback para env vars globais
-            if (!whisperBaseUrl) whisperBaseUrl = process.env.WHISPER_BASE_URL || null;
-
-            if (!whisperBaseUrl && !openAiKey) {
-                this.logger.warn('Transcrição indisponível: configure WHISPER_BASE_URL (local) ou OPENAI_API_KEY nas configurações.');
-                return "[Serviço de transcrição indisponível — configure um provider de transcrição]";
-            }
-
-            this.logger.log(`Transcrevendo áudio via Whisper (${whisperBaseUrl ? 'LOCAL: ' + whisperBaseUrl : 'OpenAI API'}): ${mediaUrl}`);
-
-            // Baixar o arquivo de áudio
-            const audioResponse = await axios.get(mediaUrl, { responseType: 'arraybuffer' });
-            const audioBuffer = Buffer.from(audioResponse.data);
-
-            const openai = new OpenAI({
-                apiKey: openAiKey || 'local-no-key-required',
-                ...(whisperBaseUrl ? { baseURL: whisperBaseUrl } : {}),
-            });
-
-            // faster-whisper aceita todos os formatos (ffmpeg); OpenAI API só aceita os nativos
-            const ext = mediaUrl.split('.').pop()?.toLowerCase() || 'ogg';
-            const nativeExts = ['mp3', 'mp4', 'mpeg', 'mpga', 'm4a', 'wav', 'webm', 'ogg'];
-            const localExts = [...nativeExts, 'opus', 'oga', 'aac', 'amr', '3gp', '3gpp', 'flac'];
-            const supportedExts = whisperBaseUrl ? localExts : nativeExts;
-            const finalExt = supportedExts.includes(ext) ? ext : 'ogg';
-
-            const file = await toFile(audioBuffer, `audio.${finalExt}`);
-            const model = process.env.WHISPER_MODEL || (whisperBaseUrl ? 'medium' : 'whisper-1');
-
-            const transcription = await openai.audio.transcriptions.create({
-                file,
-                model,
-                language: 'pt',
-                response_format: 'text',
-            });
-
-            const text = typeof transcription === 'string' ? transcription : (transcription as any).text;
-            return text || null;
-        } catch (error) {
-            this.logger.error(`Erro na transcrição de áudio: ${error.message}`);
-            return "[Erro na transcrição automática do áudio]";
-        }
-    }
+    // ── Analytics ─────────────────────────────────────────────────────────────
 
     async summarize(companyId: string, agentId: string, messages: any[]) {
         const agent = await this.findOneAgent(companyId, agentId);
@@ -910,14 +106,12 @@ Resposta:`;
 
         try {
             const companyConfigs = await this.providerConfigService.getDecryptedForCompany(companyId);
-            const llmConfig = companyConfigs.get(this.detectProviderFromModelId(modelId));
+            const llmConfig = companyConfigs.get(this.chatService.detectProviderFromModelId(modelId));
             return await this.llmService.generateResponse(
                 modelId,
                 'Você é um assistente encarregado de resumir conversas de suporte técnico.',
                 `Resuma a seguinte conversa de forma concisa em no máximo 3 frases:\n\n${conversation}`,
-                [],
-                0.3,
-                undefined,
+                [], 0.3, undefined,
                 llmConfig?.apiKey || undefined,
                 llmConfig?.baseUrl || undefined,
             );
@@ -936,62 +130,43 @@ Resposta:`;
 
         try {
             const companyConfigs = await this.providerConfigService.getDecryptedForCompany(companyId);
-            const llmConfig = companyConfigs.get(this.detectProviderFromModelId(modelId));
+            const llmConfig = companyConfigs.get(this.chatService.detectProviderFromModelId(modelId));
             const aiResponse = await this.llmService.generateResponse(
                 modelId,
                 'Você é um analista de sentimentos especialista em CX.',
-                prompt,
-                [],
-                0,
-                undefined,
+                prompt, [], 0, undefined,
                 llmConfig?.apiKey || undefined,
                 llmConfig?.baseUrl || undefined,
             );
 
             const jsonMatch = aiResponse.match(/\{.*\}/s);
-            if (jsonMatch) {
-                return JSON.parse(jsonMatch[0]);
-            }
-
-            return {
-                sentiment: 'NEUTRAL',
-                score: 5.0,
-                justification: aiResponse
-            };
+            if (jsonMatch) return JSON.parse(jsonMatch[0]);
+            return { sentiment: 'NEUTRAL', score: 5.0, justification: aiResponse };
         } catch (error) {
             this.logger.error(`Erro na análise sentimental: ${error.message}`);
             return null;
         }
     }
 
-    /**
-     * Copilot: gera sugestões de resposta para o atendente baseado no contexto da conversa.
-     */
+    /** Copilot: gera sugestões de resposta para o atendente. */
     async copilotSuggest(companyId: string, context: string, agentName: string, contactName: string): Promise<string[]> {
-        // Tenta usar o primeiro agente ativo da empresa para herdar as configs de LLM
-        const agent = await this.prisma.aIAgent.findFirst({
-            where: { companyId, isActive: true },
-        });
+        const agent = await this.prisma.aIAgent.findFirst({ where: { companyId, isActive: true } });
 
         const modelId = agent?.modelId || 'gpt-4o-mini';
         const companyConfigs = await this.providerConfigService.getDecryptedForCompany(companyId);
         const providerId = modelId.includes(':') ? modelId.split(':')[0] : modelId.split('-')[0];
         const providerConfig = companyConfigs.get(providerId) || companyConfigs.get('openai');
-        const apiKey = providerConfig?.apiKey;
 
         const systemPrompt = `Você é um assistente de atendimento ao cliente. Sua tarefa é sugerir respostas profissionais e empáticas para o atendente "${agentName}" responder ao cliente "${contactName}". Baseie-se no histórico da conversa fornecido. Responda APENAS com um JSON array de 2-3 strings curtas (máx 200 chars cada), sem explicações extras. Exemplo: ["Sugestão 1", "Sugestão 2"]`;
-
         const userMessage = `Histórico da conversa:\n${context}\n\nGere 2-3 sugestões de resposta para o atendente enviar agora.`;
 
         try {
-            const raw = await this.llmService.generateResponse(modelId, systemPrompt, userMessage, [], 0.7, '', apiKey);
-            // Extrai JSON do response
+            const raw = await this.llmService.generateResponse(modelId, systemPrompt, userMessage, [], 0.7, '', providerConfig?.apiKey);
             const match = raw.match(/\[[\s\S]*?\]/);
             if (match) {
                 const parsed = JSON.parse(match[0]);
                 if (Array.isArray(parsed)) return parsed.slice(0, 3).map(String);
             }
-            // Fallback: retorna linhas não vazias
             return raw.split('\n').filter(l => l.trim().length > 5).slice(0, 3);
         } catch (err) {
             this.logger.error(`[Copilot] Erro ao gerar sugestões: ${err.message}`);
@@ -999,459 +174,60 @@ Resposta:`;
         }
     }
 
-    /**
-     * Retorna o uso acumulado de tokens/IA da empresa.
-     */
-    async getUsage(companyId: string) {
-        const totalTokens = await this.prisma.aIUsage.aggregate({
-            where: { companyId },
-            _sum: { tokens: true, cost: true },
-            _count: true,
-        });
+    // ── RAG direto ────────────────────────────────────────────────────────────
 
-        return {
-            totalTokens: totalTokens._sum.tokens || 0,
-            totalCost: totalTokens._sum.cost || 0,
-            totalCalls: totalTokens._count || 0,
-        };
-    }
-
-    /**
-     * Retorna métricas detalhadas de uso da IA com proteção contra lentidão no DB.
-     */
-    async getDetailedMetrics(companyId: string) {
-        try {
-            // Métricas gerais
-            const usage = await this.getUsage(companyId);
-
-            // Uso por dia (últimos 30 dias) - Tempo limite implícito via Promise.race ou apenas try-catch para evitar crash
-            const dailyUsagePromise = this.prisma.$queryRaw`
-                SELECT 
-                    DATE("createdAt") as date,
-                    SUM(tokens) as tokens,
-                    COUNT(*) as calls
-                FROM "ai_usage"
-                WHERE "companyId" = ${companyId}
-                AND "createdAt" >= CURRENT_DATE - INTERVAL '30 days'
-                GROUP BY DATE("createdAt")
-                ORDER BY date ASC
-            `;
-
-            // Uso por agente
-            const agentUsagePromise = this.prisma.$queryRaw`
-                SELECT 
-                    a.name as "agentName",
-                    a."modelId" as model,
-                    a."isActive" as active
-                FROM "ai_agents" a
-                WHERE a."companyId" = ${companyId}
-                ORDER BY a.name ASC
-            `;
-
-            // Uso por modelo
-            const modelUsagePromise = this.prisma.$queryRaw`
-                SELECT 
-                    a."modelId" as model,
-                    COUNT(a.id) as "agentCount"
-                FROM "ai_agents" a
-                WHERE a."companyId" = ${companyId}
-                AND a."modelId" IS NOT NULL
-                GROUP BY a."modelId"
-                ORDER BY "agentCount" DESC
-            `;
-
-            const [dailyUsage, agentUsage, modelUsage] = await Promise.all([
-                dailyUsagePromise.catch(() => []),
-                agentUsagePromise.catch(() => []),
-                modelUsagePromise.catch(() => []),
-            ]);
-
-            return {
-                usage,
-                dailyUsage: Array.isArray(dailyUsage) ? dailyUsage : [],
-                agentUsage: Array.isArray(agentUsage) ? agentUsage : [],
-                modelUsage: Array.isArray(modelUsage) ? modelUsage : []
-            };
-        } catch (error) {
-            this.logger.error(`Erro ao buscar métricas detalhadas de AI para empresa ${companyId}: ${error.message}`);
-            return {
-                usage: { totalTokens: 0, totalCost: 0, totalCalls: 0 },
-                dailyUsage: [],
-                agentUsage: [],
-                modelUsage: []
-            };
-        }
-    }
-
-    /**
-     * Detecta o providerId a partir do modelId (espelha lógica do LLMProviderFactory.detectProvider).
-     */
-    private detectProviderFromModelId(modelId: string): string {
-        const prefixMap: Record<string, string> = {
-            'groq:': 'groq', 'openrouter:': 'openrouter', 'ollama:': 'ollama',
-            'azure:': 'azure', 'together:': 'together', 'lmstudio:': 'lmstudio',
-            'perplexity:': 'perplexity', 'xai:': 'xai', 'cohere:': 'cohere',
-            'huggingface:': 'huggingface', 'deepseek:': 'deepseek',
-        };
-        for (const [prefix, providerId] of Object.entries(prefixMap)) {
-            if (modelId.startsWith(prefix)) return providerId;
-        }
-        if (modelId.startsWith('claude')) return 'anthropic';
-        if (modelId.startsWith('gemini')) return 'gemini';
-        if (modelId.startsWith('deepseek')) return 'deepseek';
-        if (modelId.startsWith('mistral') || modelId.startsWith('codestral')) return 'mistral';
-        return 'openai';
-    }
-
-    /**
-     * Streaming real de respostas via SSE — emite tokens individuais conforme o LLM os gera.
-     * Inclui pipeline completo: cache semântico, RAG, overflow guard e rastreamento de tokens.
-     */
-    streamChat(companyId: string, agentId: string, message: string, history: any[] = []): Observable<any> {
-        if (!message || message.trim().length === 0) throw new BadRequestException('Mensagem não pode ser vazia');
-        if (message.length > 4000) message = message.substring(0, 4000);
-        history = this.compressContext(history);
-
-        return new Observable<{ data: { type: string; content: string } }>(observer => {
-            observer.next({ data: { type: 'start', content: '' } });
-
-            (async () => {
-                const agent = await this.findOneAgent(companyId, agentId);
-                if (!agent || !agent.isActive) throw new NotFoundException('Agente não encontrado ou inativo');
-
-                await this.checkTokenLimits(companyId);
-
-                // Semantic Cache — em cache hit retorna resposta inteira (não há como "stream" do cache)
-                let promptEmbedding: number[] = [];
-                try {
-                    promptEmbedding = await this.vectorStoreService.generateEmbedding(message, 'qwen');
-                    const cacheKeyPrefix = `${companyId}:${agentId}:`;
-                    for (const [key, cached] of this.semanticCache.entries()) {
-                        if (key.startsWith(cacheKeyPrefix)) {
-                            if (Date.now() - cached.timestamp > this.CACHE_TTL_MS) { this.semanticCache.delete(key); continue; }
-                            if (this.vectorStoreService.cosineSimilarity(promptEmbedding, cached.embedding) > 0.95) {
-                                this.logger.log(`[Cache HIT/Stream] Similarity > 0.95 para agente ${agent.name}`);
-                                observer.next({ data: { type: 'chunk', content: cached.response } });
-                                observer.next({ data: { type: 'end', content: '' } });
-                                observer.complete();
-                                return;
-                            }
-                        }
-                    }
-                } catch { /* falha silenciosa: avança sem cache */ }
-
-                const budget = this.allocateTokenBudget(message);
-                let finalModelId = agent.modelId || 'gpt-4o-mini';
-
-                // Model routing: downgrade para modelo econômico em queries simples
-                if (agent.allowModelDowngrade && budget.chunkLimit <= 10 && this.MODEL_DOWNGRADE[finalModelId]) {
-                    finalModelId = this.MODEL_DOWNGRADE[finalModelId];
-                }
-
-                const companyConfigs = await this.providerConfigService.getDecryptedForCompany(companyId);
-                const providerId = this.detectProviderFromModelId(finalModelId);
-                const llmConfig = companyConfigs.get(providerId);
-
-                if (!llmConfig && providerId !== 'ollama' && providerId !== 'lmstudio') {
-                    throw new BadRequestException(`Provider '${providerId}' não configurado.`);
-                }
-
-                let context = '';
-                if (agent.knowledgeBaseId) {
-                    const kb = await this.prisma.knowledgeBase.findUnique({
-                        where: { id: agent.knowledgeBaseId },
-                        select: { language: true, embeddingProvider: true, embeddingModel: true },
-                    });
-                    // RAG: usa o embeddingProvider da knowledge base (não do agente),
-                    // pois os chunks foram indexados com o provider da KB.
-                    const kbEmbeddingProvider = kb?.embeddingProvider || agent.embeddingProvider || 'native';
-                    const kbEmbeddingModel = kb?.embeddingModel || agent.embeddingModel || 'all-MiniLM-L6-v2';
-                    const kbEmbeddingConfig = companyConfigs.get(kbEmbeddingProvider);
-
-                    this.logger.debug(`[RAG/Stream] Buscando base ${agent.knowledgeBaseId} com provider="${kbEmbeddingProvider}" model="${kbEmbeddingModel}"`);
-
-                    const chunks = await this.vectorStoreService.searchSimilarity(
-                        this.prisma, companyId, message, agent.knowledgeBaseId,
-                        budget.chunkLimit, kbEmbeddingProvider,
-                        kbEmbeddingModel, kbEmbeddingConfig?.apiKey || undefined,
-                        kbEmbeddingConfig?.baseUrl || undefined,
-                        kb?.language || 'portuguese',
-                    );
-                    context = chunks.map((c: any, i: number) => {
-                        const docName = c.metadata?.documentName || c.metadata?.source || c.metadata?.filename || '';
-                        const page = c.pageNumber ? ` (pág. ${c.pageNumber})` : '';
-                        const prefix = docName ? `[Fonte ${i + 1}: ${docName}${page}]\n` : '';
-                        return `${prefix}${c.content}`;
-                    }).join('\n---\n');
-                    this.logger.log(`[RAG/Stream] ${chunks.length} chunks retornados para contexto na KB ${agent.knowledgeBaseId}.`);
-                }
-
-                context = this.guardContextOverflow(agent.prompt || '', context, history, message, finalModelId);
-
-                let streamSystemPrompt = agent.prompt || 'Você é um assistente virtual prestativo.';
-
-                // Monta sistema RAG idêntico ao path não-streaming
-                if (context) {
-                    const sourceChunks = context.split('\n---\n').map((chunk, index) => {
-                        const lines = chunk.split('\n').filter(line => line.trim());
-                        const contentStart = lines[0]?.startsWith('Similaridade') ? 1 : 0;
-                        return { number: index + 1, content: lines.slice(contentStart).join('\n').trim() };
-                    }).filter(c => c.content.length > 50);
-
-                    const formattedStreamContext = sourceChunks
-                        .map(c => `[SOURCE_${c.number}]\n${c.content}\n[END_SOURCE_${c.number}]`)
-                        .join('\n\n');
-
-                    streamSystemPrompt += [
-                        '',
-                        '========================================',
-                        '[BASE DE CONHECIMENTO]',
-                        '========================================',
-                        '',
-                        'Você tem acesso a trechos relevantes da base de conhecimento abaixo. Use estas informações como fonte principal.',
-                        '',
-                        'DIRETRIZES:',
-                        '1. Priorize as informações das fontes abaixo em relação ao seu conhecimento geral.',
-                        '2. Sintetize e integre informações de múltiplas fontes para construir respostas completas e coesas.',
-                        '3. Se a informação estiver disponível nas fontes (mesmo parcialmente), use-a e complemente com raciocínio lógico.',
-                        '4. Só diga que não encontrou a informação se as fontes realmente não contiverem nada relevante sobre o tema.',
-                        '5. Não invente dados concretos (números, preços, URLs, datas, nomes específicos) que não estejam nas fontes.',
-                        '6. Responda de forma clara, direta e natural — sem citar mecanicamente "SOURCE_N" no texto.',
-                        '',
-                        'FONTES RECUPERADAS:',
-                        formattedStreamContext,
-                        '========================================',
-                    ].join('\n');
-                    context = ''; // evita duplicação no llmService
-                }
-
-                const formattedHistory = history.map(h => ({
-                    role: (h.role === 'user' || h.role === 'client' ? 'user' : 'assistant') as 'user' | 'assistant',
-                    content: h.content,
-                }));
-
-                // Streaming real: emite token a token via LangChain .stream()
-                let fullResponse = '';
-                for await (const token of this.llmService.streamResponse(
-                    finalModelId,
-                    streamSystemPrompt,
-                    message,
-                    formattedHistory,
-                    agent.temperature || 0.7,
-                    context,
-                    llmConfig?.apiKey || undefined,
-                    llmConfig?.baseUrl || undefined,
-                )) {
-                    fullResponse += token;
-                    observer.next({ data: { type: 'chunk', content: token } });
-                }
-
-                // Armazena resposta completa no cache semântico
-                if (promptEmbedding.length > 0 && fullResponse) {
-                    const cacheKey = `${companyId}:${agentId}:${Date.now()}`;
-                    this.semanticCache.set(cacheKey, { embedding: promptEmbedding, response: fullResponse, timestamp: Date.now() });
-                    if (this.semanticCache.size > 2000) {
-                        const firstKey = this.semanticCache.keys().next().value;
-                        if (firstKey) this.semanticCache.delete(firstKey);
-                    }
-                }
-
-                try {
-                    await this.trackTokenUsage(companyId, finalModelId, agent.prompt || '', context, history, fullResponse, 0);
-                } catch (e) {
-                    this.logger.warn(`Falha ao registrar uso de tokens: ${e.message}`);
-                }
-
-                observer.next({ data: { type: 'end', content: '' } });
-                observer.complete();
-            })().catch(error => {
-                this.logger.error(`Erro no streamChat: ${error.message}`);
-                observer.next({ data: { type: 'error', content: error.message } });
-                observer.complete();
-            });
-        });
-    }
-
-    // ── Extração de texto de arquivo anexado ──────────────────────────────────
-
-    private async extractTextFromFile(buffer: Buffer, filename: string): Promise<string> {
-        const ext = (filename.split('.').pop() ?? '').toLowerCase();
-        const MAX = 15000;
-        let text = '';
-
-        try {
-            if (ext === 'pdf') {
-                const pdfParse = require('pdf-parse');
-                const data = await pdfParse(buffer);
-                text = data.text ?? '';
-            } else if (ext === 'docx') {
-                const mammoth = require('mammoth');
-                const result = await mammoth.extractRawText({ buffer });
-                text = result.value ?? '';
-            } else if (ext === 'xlsx' || ext === 'xls') {
-                const XLSX = require('xlsx');
-                const wb = XLSX.read(buffer, { type: 'buffer' });
-                const parts: string[] = [];
-                for (const name of wb.SheetNames) {
-                    const rows: any[][] = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: '' });
-                    if (!rows.length) continue;
-                    const [header, ...data] = rows;
-                    parts.push(`=== ${name} ===`);
-                    parts.push(...data.map((r: any[]) =>
-                        (header as any[]).map((h, i) => `${h || 'Col' + (i + 1)}: ${r[i] ?? ''}`).join(' | ')
-                    ));
-                }
-                text = parts.join('\n');
-            } else if (ext === 'xml' || ext === 'xsd') {
-                // Extração semântica: converte para pares "path/campo: valor" legíveis pelo LLM
-                text = this.xmlToReadableText(buffer.toString('utf-8'), ext === 'xsd');
-            } else {
-                // TXT, CSV, JSON, etc.
-                text = buffer.toString('utf-8');
-            }
-        } catch (e: any) {
-            throw new HttpException(
-                `Não foi possível ler o arquivo: ${e.message}`,
-                HttpStatus.UNPROCESSABLE_ENTITY,
-            );
-        }
-
-        text = text.replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
-        if (text.length > MAX) {
-            text = text.substring(0, MAX) + '\n[... texto truncado — arquivo muito grande ...]';
-        }
-        return text;
-    }
-
-    /**
-     * Converte XML/XSD para texto legível pelo LLM usando path-prefix nos campos.
-     * Ex: `emit/CNPJ: 12345678000190` em vez de `<emit><CNPJ>12345678000190</CNPJ></emit>`
-     * Distingue claramente emit vs dest, campos de itens repetidos, etc.
-     */
-    private xmlToReadableText(xml: string, isSchema = false): string {
-        let src = xml
-            .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
-            .replace(/<\?xml[^>]*\?>/g, '')
-            .replace(/<!--[\s\S]*?-->/g, '');
-
-        const getLocal = (tag: string) => tag.includes(':') ? tag.split(':').pop()! : tag;
-        const decode = (s: string) => s
-            .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
-            .replace(/&quot;/g, '"').replace(/&apos;/g, "'");
-
-        if (isSchema) {
-            // Para XSD: extrair elementos e documentação
-            const pairs: string[] = ['=== Schema XSD ==='];
-            const nameRe = /<xsd?:element\s[^>]*\bname="([^"]+)"/gi;
-            const annotRe = /<xsd?:annotation>([\s\S]*?)<\/xsd?:annotation>/gi;
-            const found = new Set<string>();
-            let m: RegExpExecArray | null;
-            while ((m = nameRe.exec(src)) !== null) {
-                const name = m[1].trim();
-                if (!found.has(name)) { found.add(name); pairs.push(name); }
-            }
-            while ((m = annotRe.exec(src)) !== null) {
-                const docMatch = m[1].match(/<xsd?:documentation[^>]*>([\s\S]*?)<\/xsd?:documentation>/i);
-                if (!docMatch) continue;
-                const doc = decode(docMatch[1].replace(/\s+/g, ' ').trim());
-                const before = src.substring(Math.max(0, m.index - 400), m.index);
-                const prev = [...before.matchAll(/<xsd?:element\s[^>]*\bname="([^"]+)"/gi)].pop();
-                if (prev && doc) pairs.push(`${prev[1]}: ${doc}`);
-            }
-            return pairs.join('\n');
-        }
-
-        // Para XML de dados: parser de pilha com path-prefix até 2 níveis
-        const SECTION_DEPTHS = new Set([2, 3]);
-        const stack: string[] = [];
-        const sibCount = new Map<string, number>();
-        const sections: Array<{ label: string; lines: string[]; depth: number }> = [];
-        const activeSectionAtDepth = new Map<number, number>();
-        let curSectionIdx = -1;
-
-        const re2 = /<(\/?)(?:[A-Za-z_][\w.]*:)?([A-Za-z_][\w.]*)([^>]*)>|([^<]+)/g;
-        let m: RegExpExecArray | null;
-
-        while ((m = re2.exec(src)) !== null) {
-            if (m[4] !== undefined) {
-                const text = m[4].replace(/\s+/g, ' ').trim();
-                if (!text || curSectionIdx < 0) continue;
-                const val = decode(text);
-                const curSec = sections[curSectionIdx];
-                const pathAfterRoot = stack.slice(1);
-                const leaf = pathAfterRoot[pathAfterRoot.length - 1];
-                const ancestorsAfterSection = pathAfterRoot.slice(curSec.depth - 1, -1);
-                const prefix = ancestorsAfterSection.slice(-2).join('/');
-                curSec.lines.push(`${prefix ? prefix + '/' : ''}${leaf}: ${val}`);
-            } else {
-                const isClose = m[1] === '/';
-                const name = getLocal(m[2]);
-                const selfClose = m[3].trim().endsWith('/');
-                if (!isClose) {
-                    const depth = stack.length + 1;
-                    const parentTag = stack[stack.length - 1] ?? '_';
-                    const sk = `${parentTag}:${name}`;
-                    const idx = (sibCount.get(sk) || 0) + 1;
-                    sibCount.set(sk, idx);
-                    if (SECTION_DEPTHS.has(depth)) {
-                        const label = idx > 1 ? `${name} ${idx}` : name;
-                        curSectionIdx = sections.length;
-                        sections.push({ label, lines: [], depth });
-                        activeSectionAtDepth.set(depth, curSectionIdx);
-                    }
-                    if (!selfClose) stack.push(name);
-                } else {
-                    stack.pop();
-                    const parentDepth = stack.length;
-                    let found = -1;
-                    for (let d = parentDepth; d >= 1; d--) {
-                        const si = activeSectionAtDepth.get(d);
-                        if (si !== undefined) { found = si; break; }
-                    }
-                    curSectionIdx = found;
-                }
-            }
-        }
-
-        const outputLines: string[] = [];
-        for (const sec of sections) {
-            if (!sec.lines.length) continue;
-            outputLines.push(`\n[${sec.label}]`);
-            const deduped: string[] = [];
-            for (const l of sec.lines) {
-                if (deduped[deduped.length - 1] !== l) deduped.push(l);
-            }
-            outputLines.push(...deduped);
-        }
-        return outputLines.join('\n').trim()
-            || src.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-    }
-
-    /** Chat com arquivo anexado — sem persistência de arquivo, processado em memória. */
-    async chatWithAttachment(
+    async queryKnowledgeBase(
         companyId: string,
         agentId: string,
-        message: string,
-        file: Express.Multer.File,
-        history: any[] = [],
-    ): Promise<string> {
-        const IMAGES = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp']);
-        const ext = (file.originalname.split('.').pop() ?? '').toLowerCase();
+        query: string,
+        knowledgeBaseId: string,
+        options?: { maxChunks?: number; minScore?: number; temperature?: number }
+    ): Promise<{ response: string; sources: any[]; usage?: any }> {
+        const agent = await this.prisma.aIAgent.findFirst({ where: { id: agentId, companyId } });
+        if (!agent) throw new NotFoundException('Agente não encontrado');
 
-        if (IMAGES.has(ext)) {
-            const mime = file.mimetype || `image/${ext}`;
-            const dataUri = `data:${mime};base64,${file.buffer.toString('base64')}`;
-            return this.chatMultimodal(
-                companyId, agentId,
-                message || 'Analise esta imagem.',
-                [dataUri],
-                history,
-            );
+        const kb = await this.prisma.knowledgeBase.findUnique({
+            where: { id: knowledgeBaseId },
+            select: { language: true, embeddingProvider: true, embeddingModel: true },
+        });
+        const kbEmbeddingProvider = kb?.embeddingProvider || agent.embeddingProvider || 'native';
+        const kbEmbeddingModel = kb?.embeddingModel || agent.embeddingModel || 'all-MiniLM-L6-v2';
+
+        const relevantChunks = await this.vectorStoreService.searchSimilarity(
+            this.prisma, companyId, query, knowledgeBaseId,
+            options?.maxChunks || 5, kbEmbeddingProvider, kbEmbeddingModel,
+            undefined, undefined, kb?.language || 'portuguese'
+        );
+
+        const filteredChunks = options?.minScore
+            ? relevantChunks.filter(chunk => chunk.score >= (options.minScore || 0.3))
+            : relevantChunks;
+
+        if (filteredChunks.length === 0) {
+            return {
+                response: "Não encontrei informações relevantes na base de conhecimento para responder a essa pergunta.",
+                sources: [],
+                usage: { inputTokens: query.length, outputTokens: 0 }
+            };
         }
 
-        const text = await this.extractTextFromFile(file.buffer, file.originalname);
-        const augmented = `[ARQUIVO ANEXADO: ${file.originalname}]\n${text}\n\n${message || 'Analise o arquivo acima.'}`;
-        return this.chat(companyId, agentId, augmented, history);
+        const context = filteredChunks.map((chunk, index) =>
+            `Fonte ${index + 1} (Similaridade: ${(chunk.score * 100).toFixed(1)}%):\n${chunk.content}`
+        ).join('\n\n---\n\n');
+
+        const enhancedPrompt = `Você é um assistente especializado que responde perguntas com base na base de conhecimento fornecida.\n\nInstruções:\n- Use APENAS as informações contidas no contexto abaixo para responder\n- Se a resposta não estiver no contexto, diga que não encontrou informações suficientes\n- Cite as fontes quando possível\n- Seja conciso e direto, mas forneça detalhes relevantes\n\nContexto da base de conhecimento:\n${context}\n\nPergunta: ${query}\n\nResposta:`;
+
+        try {
+            const response = await this.chat(companyId, agentId, enhancedPrompt, []);
+            return {
+                response,
+                sources: filteredChunks,
+                usage: { inputTokens: enhancedPrompt.length, outputTokens: response.length, contextChunks: filteredChunks.length }
+            };
+        } catch (error) {
+            this.logger.error(`Erro ao consultar base de conhecimento: ${error.message}`);
+            throw error;
+        }
     }
 
     async searchKnowledge(companyId: string, agentId: string, query: string, topK = 8) {

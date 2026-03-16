@@ -515,21 +515,30 @@ export default function WorkflowsPage() {
                                 {executions.map((exec: any) => (
                                     <div
                                         key={exec.id}
-                                        className="p-4 border rounded-lg cursor-pointer"
-                                        onClick={() =>
-                                            setSelectedExecution(exec)
-                                        }
+                                        className="p-4 border border-slate-200 dark:border-white/5 rounded-xl cursor-pointer hover:bg-slate-50 dark:hover:bg-white/5 transition-colors"
+                                        onClick={() => setSelectedExecution(exec)}
                                     >
-                                        <div className="flex justify-between">
-                                            <span className="font-bold">
-                                                {exec.workflowRule.name}
-                                            </span>
-
-                                            <span className={`font-bold ${exec.status === 'success'
-                                                ? 'text-green-600'
-                                                : 'text-red-600'
-                                                }`}>
-                                                {exec.status}
+                                        <div className="flex items-center justify-between gap-3">
+                                            <div className="min-w-0">
+                                                <span className="font-bold text-slate-900 dark:text-white truncate block">
+                                                    {exec.workflowRule.name}
+                                                </span>
+                                                <span className="text-xs text-slate-400 font-mono">
+                                                    {exec.entityId?.slice(0, 8)}…
+                                                    {exec.currentNodeId && (
+                                                        <> · <span className="text-amber-500">nó: {exec.currentNodeId}</span></>
+                                                    )}
+                                                </span>
+                                            </div>
+                                            <span className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                                                exec.status === 'success' ? 'bg-emerald-100 text-emerald-700' :
+                                                exec.status === 'running' ? 'bg-blue-100 text-blue-700' :
+                                                exec.status === 'waiting_event' ? 'bg-amber-100 text-amber-700' :
+                                                exec.status === 'delayed' ? 'bg-sky-100 text-sky-700' :
+                                                exec.status === 'partial' ? 'bg-orange-100 text-orange-700' :
+                                                'bg-red-100 text-red-700'
+                                            }`}>
+                                                {exec.status === 'waiting_event' ? 'aguardando' : exec.status}
                                             </span>
                                         </div>
                                     </div>

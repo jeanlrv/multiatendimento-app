@@ -12,7 +12,10 @@ export class BroadcastService {
         @InjectQueue('broadcast') private broadcastQueue: Queue,
     ) { }
 
-    async create(companyId: string, data: { name: string; message: string; connectionId?: string; contactIds: string[] }) {
+    async create(companyId: string, data: { name: string; message: string; connectionId?: string; contactIds: string[]; scheduledAt?: string }) {
+        const scheduledAt = data.scheduledAt ? new Date(data.scheduledAt) : undefined;
+        const isScheduled = scheduledAt && scheduledAt > new Date();
+
         const broadcast = await this.prisma.broadcast.create({
             data: {
                 name: data.name,
@@ -20,12 +23,26 @@ export class BroadcastService {
                 companyId,
                 connectionId: data.connectionId,
                 totalContacts: data.contactIds.length,
+                scheduledAt: scheduledAt ?? null,
+                status: isScheduled ? 'SCHEDULED' : 'DRAFT',
                 recipients: {
                     create: data.contactIds.map(contactId => ({ contactId })),
                 },
             },
             include: { recipients: { select: { id: true, contactId: true, status: true } } },
         });
+
+        // Se agendado para o futuro, enfileira job com delay para disparar start() automaticamente
+        if (isScheduled) {
+            const delayMs = scheduledAt.getTime() - Date.now();
+            await this.broadcastQueue.add(
+                'start-scheduled-broadcast',
+                { broadcastId: broadcast.id, companyId },
+                { delay: delayMs, jobId: `scheduled-${broadcast.id}` },
+            );
+            this.logger.log(`Broadcast ${broadcast.id} agendado para ${scheduledAt.toISOString()} (delay: ${Math.round(delayMs / 1000)}s)`);
+        }
+
         return broadcast;
     }
 
@@ -37,7 +54,20 @@ export class BroadcastService {
 
         const recipients = await this.prisma.broadcastRecipient.findMany({
             where: { broadcastId: id, status: 'PENDING' },
-            include: { contact: { select: { phoneNumber: true, name: true } } },
+            include: {
+                contact: {
+                    select: {
+                        phoneNumber: true,
+                        name: true,
+                        customer: { select: { name: true } },
+                        tickets: {
+                            orderBy: { createdAt: 'desc' },
+                            take: 1,
+                            select: { id: true },
+                        },
+                    },
+                },
+            },
         });
 
         // Enqueue jobs with rate limiting (one per recipient, delayed for rate limit 3/s)
@@ -51,6 +81,9 @@ export class BroadcastService {
                     contactId: r.contactId,
                     phoneNumber: r.contact.phoneNumber,
                     contactName: r.contact.name || '',
+                    contactPhone: r.contact.phoneNumber || '',
+                    contactCompany: (r.contact as any).customer?.name || '',
+                    lastTicketId: (r.contact as any).tickets?.[0]?.id || '',
                     message: broadcast.message,
                     connectionId: broadcast.connectionId,
                     companyId,

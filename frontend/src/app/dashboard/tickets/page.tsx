@@ -27,6 +27,10 @@ import { BulkActionBar } from '@/components/tickets/BulkActionBar';
 import { ticketsService } from '@/services/tickets';
 import { usersService } from '@/services/users';
 import CustomerProfilePanel from '@/components/customers/CustomerProfilePanel';
+import { TicketCard } from '@/components/tickets/TicketCard';
+import { ShortcutsModal } from '@/components/tickets/ShortcutsModal';
+import { ScheduleMessageModal } from '@/components/tickets/ScheduleMessageModal';
+import { MergeTicketModal } from '@/components/tickets/MergeTicketModal';
 
 interface Message {
     id: string;
@@ -1015,120 +1019,14 @@ export default function TicketsPage() {
     const humanTickets = filter === 'IN_PROGRESS' ? displayedTickets.filter((t: any) => t.mode === 'HUMANO') : [];
 
     const renderTicketCard = (ticket: any) => (
-        <motion.button
+        <TicketCard
             key={ticket.id}
-            onClick={() => handleSelectTicket(ticket)}
-            className={`w-full text-left p-2.5 rounded-2xl transition-all border relative group/card ${selectedTicket?.id === ticket.id
-                ? 'bg-primary/10 border-primary shadow-md shadow-primary/5'
-                : 'bg-white/60 dark:bg-transparent border-transparent hover:border-white/40 dark:hover:border-white/10'
-                } ${selectedTicketIds.includes(ticket.id) ? 'ring-2 ring-primary ring-offset-2 dark:ring-offset-slate-900 border-primary bg-primary/5' : ''}`}
-            whileHover={{ x: 5 }}
-            whileTap={{ scale: 0.98 }}
-        >
-            {/* Checkbox para seleção em lote */}
-            <div
-                onClick={(e) => handleToggleSelection(ticket.id, e)}
-                className={`absolute left-2 top-1/2 -translate-y-1/2 h-6 w-6 rounded-lg border-2 flex items-center justify-center transition-all z-20 ${selectedTicketIds.includes(ticket.id)
-                    ? 'bg-primary border-primary text-white'
-                    : 'border-slate-200 dark:border-white/10 bg-white dark:bg-slate-800 opacity-0 group-hover/card:opacity-100'
-                    }`}
-            >
-                {selectedTicketIds.includes(ticket.id) && <CheckCheck size={12} />}
-            </div>
-            <div className={`flex items-start justify-between mb-2 transition-all duration-150 ${selectedTicketIds.length > 0 || selectedTicketIds.includes(ticket.id) ? 'pl-6' : 'group-hover/card:pl-6'}`}>
-                <div className="flex items-center gap-3">
-                    <div className="relative">
-                        <div
-                            className={`h-10 w-10 rounded-xl flex items-center justify-center font-black text-base transition-all duration-500 ${selectedTicket?.id === ticket.id
-                                ? 'text-white shadow-lg'
-                                : 'bg-slate-200 dark:bg-white/5 text-slate-600 dark:text-gray-400'
-                                }`}
-                            style={{
-                                backgroundColor: selectedTicket?.id === ticket.id
-                                    ? (ticket.department.color || '#2563eb')
-                                    : undefined,
-                                boxShadow: selectedTicket?.id === ticket.id
-                                    ? `0 10px 20px ${(ticket.department.color || '#2563eb')}40`
-                                    : undefined
-                            }}
-                        >
-                            {ticket.department.emoji || ticket.contact.name.charAt(0)}
-                        </div>
-                        {ticket.priority !== 'MEDIUM' && (
-                            <div className={`absolute -top-1 -right-1 h-4 w-4 rounded-full border-2 border-white dark:border-slate-900 ${ticket.priority === 'CRITICAL' ? 'bg-rose-500' :
-                                ticket.priority === 'HIGH' ? 'bg-amber-500' : 'bg-slate-400'
-                                }`} />
-                        )}
-                    </div>
-                    <div className="flex-1 min-w-0 transition-transform flex flex-col gap-2">
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                                <h3 className={`text-[13px] font-black tracking-tight leading-none truncate flex-1 min-w-0 ${selectedTicket?.id === ticket.id ? 'text-primary' : 'text-slate-800 dark:text-white'}`} title={ticket.contact.name}>
-                                    {ticket.contact.name || 'Contato'}
-                                </h3>
-                                <span className="text-[9px] font-mono text-slate-400 bg-slate-100 dark:bg-white/5 px-1 py-0.5 rounded-md shrink-0">
-                                    #{ticket.id.substring(ticket.id.length - 4).toUpperCase()}
-                                </span>
-                                {ticket.unreadMessages > 0 && (
-                                    <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 bg-primary text-white text-[10px] font-black rounded-full shrink-0 shadow-sm shadow-primary/40 leading-none">
-                                        {ticket.unreadMessages > 99 ? '99+' : ticket.unreadMessages}
-                                    </span>
-                                )}
-                            </div>
-                            <div className="flex flex-col items-end gap-0.5 shrink-0">
-                                {ticket.assignedUser && (
-                                    <div className="flex items-center gap-1 bg-blue-50 dark:bg-blue-500/10 px-1 py-0.5 rounded-md border border-blue-100 dark:border-blue-500/20">
-                                        <User size={8} className="text-blue-600 dark:text-blue-400" />
-                                        <span className="text-[7.5px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-tighter">
-                                            {ticket.assignedUser.name.split(' ')[0]}
-                                        </span>
-                                    </div>
-                                )}
-                                <span className={`px-1.5 py-0.5 rounded-md text-[7.5px] font-black uppercase tracking-tighter ${selectedTicket?.id === ticket.id ? 'bg-primary/20 text-primary border border-primary/20' : 'bg-slate-100 dark:bg-white/5 text-slate-500'}`}>
-                                    {translateStatus(ticket.status)}
-                                </span>
-                            </div>
-                        </div>
-                        {ticket.subject && (
-                            <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 line-clamp-1 italic">
-                                {ticket.subject}
-                            </p>
-                        )}
-                        <div className="flex flex-nowrap gap-1">
-                            {ticket.tags?.slice(0, 2).map((t: any) => (
-                                <span
-                                    key={t.tag.id}
-                                    className="px-1.5 py-0.5 rounded-lg text-[7px] font-black uppercase tracking-widest border border-white/20 truncate max-w-[80px]"
-                                    style={{ backgroundColor: `${t.tag.color}20`, color: t.tag.color }}
-                                >
-                                    {t.tag.name}
-                                </span>
-                            ))}
-                            {(ticket.tags?.length || 0) > 2 && (
-                                <span className="text-[7px] font-black text-slate-400 self-center">
-                                    +{(ticket.tags?.length || 0) - 2}
-                                </span>
-                            )}
-                        </div>
-                        <div className="flex flex-col mt-auto gap-0.5">
-                            <div className="flex items-center gap-1 min-w-0">
-                                <p
-                                    className="text-[10px] font-black uppercase tracking-widest italic truncate"
-                                    style={{ color: ticket.department.color || undefined, opacity: selectedTicket?.id === ticket.id ? 1 : 0.6 }}
-                                >
-                                    {ticket.department.name}
-                                </p>
-                                <div className="h-1 w-1 shrink-0 bg-slate-300 rounded-full" />
-                                <p className="text-[10px] font-bold opacity-40 shrink-0">
-                                    {new Date(ticket.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                </p>
-                            </div>
-                            <SlaIndicator ticket={ticket as any} />
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </motion.button>
+            ticket={ticket}
+            selectedTicket={selectedTicket}
+            selectedTicketIds={selectedTicketIds}
+            onSelect={handleSelectTicket}
+            onToggleSelection={handleToggleSelection}
+        />
     );
 
     return (
@@ -2887,225 +2785,33 @@ export default function TicketsPage() {
                     }}
                 />
 
-                {/* Shortcuts Modal */}
-                <AnimatePresence>
-                    {showShortcutsModal && (
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-                            onClick={() => setShowShortcutsModal(false)}
-                        >
-                            <motion.div
-                                initial={{ scale: 0.95, opacity: 0 }}
-                                animate={{ scale: 1, opacity: 1 }}
-                                exit={{ scale: 0.95, opacity: 0 }}
-                                onClick={(e) => e.stopPropagation()}
-                                className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-white/10 w-full max-w-md overflow-hidden"
-                            >
-                                <div className="p-5 border-b border-slate-100 dark:border-white/10 flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <Keyboard size={16} className="text-primary" />
-                                        <h2 className="text-sm font-black uppercase tracking-widest text-slate-800 dark:text-white">Atalhos de Teclado</h2>
-                                    </div>
-                                    <button
-                                        onClick={() => setShowShortcutsModal(false)}
-                                        className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/10 text-slate-400 transition-colors"
-                                    >
-                                        <X size={14} />
-                                    </button>
-                                </div>
-                                <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
-                                    {[
-                                        { group: 'Navegação', items: [
-                                            { keys: ['Ctrl', 'K'], desc: 'Busca global de atendimentos' },
-                                            { keys: ['Esc'], desc: 'Fechar painel / cancelar ação' },
-                                            { keys: ['↑', '↓'], desc: 'Navegar entre atendimentos' },
-                                        ]},
-                                        { group: 'Mensagens', items: [
-                                            { keys: ['Enter'], desc: 'Enviar mensagem' },
-                                            { keys: ['Shift', 'Enter'], desc: 'Nova linha na mensagem' },
-                                            { keys: ['Ctrl', 'C'], desc: 'Copiar mensagem selecionada' },
-                                        ]},
-                                        { group: 'Chat', items: [
-                                            { keys: ['Ctrl', 'W'], desc: 'Ativar Copilot IA' },
-                                            { keys: ['Ctrl', 'E'], desc: 'Abrir seletor de emoji' },
-                                            { keys: ['Ctrl', 'R'], desc: 'Iniciar gravação de áudio' },
-                                            { keys: ['Ctrl', 'F'], desc: 'Finalizar atendimento' },
-                                        ]},
-                                    ].map(({ group, items }) => (
-                                        <div key={group}>
-                                            <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">{group}</p>
-                                            <div className="space-y-1.5">
-                                                {items.map(({ keys, desc }) => (
-                                                    <div key={desc} className="flex items-center justify-between">
-                                                        <span className="text-xs text-slate-600 dark:text-slate-300">{desc}</span>
-                                                        <div className="flex items-center gap-1">
-                                                            {keys.map((k) => (
-                                                                <kbd key={k} className="px-1.5 py-0.5 bg-slate-100 dark:bg-white/10 border border-slate-200 dark:border-white/20 rounded text-[9px] font-black text-slate-600 dark:text-slate-300">{k}</kbd>
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </motion.div>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
+                <ShortcutsModal
+                    open={showShortcutsModal}
+                    onClose={() => setShowShortcutsModal(false)}
+                />
 
-                {/* Modal: Agendar Mensagem */}
-                <AnimatePresence>
-                    {showScheduleMsgModal && (
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[200] flex items-center justify-center p-4"
-                            onClick={() => setShowScheduleMsgModal(false)}
-                        >
-                            <motion.div
-                                initial={{ scale: 0.95, opacity: 0, y: -10 }}
-                                animate={{ scale: 1, opacity: 1, y: 0 }}
-                                exit={{ scale: 0.95, opacity: 0, y: -10 }}
-                                transition={{ type: 'spring', damping: 25, stiffness: 350 }}
-                                onClick={(e) => e.stopPropagation()}
-                                className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-white/10 w-full max-w-sm overflow-hidden"
-                            >
-                                <div className="p-5 border-b border-slate-100 dark:border-white/10 flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <CalendarClock size={16} className="text-violet-500" />
-                                        <h2 className="text-sm font-black uppercase tracking-widest text-slate-800 dark:text-white">Agendar Mensagem</h2>
-                                    </div>
-                                    <button onClick={() => setShowScheduleMsgModal(false)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/10 text-slate-400">
-                                        <X size={14} />
-                                    </button>
-                                </div>
-                                <div className="p-5 space-y-4">
-                                    <div>
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Mensagem</p>
-                                        <div className="p-3 rounded-xl bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-800 text-sm text-slate-700 dark:text-slate-300 line-clamp-3">
-                                            {newMessage}
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Enviar em</p>
-                                        <input
-                                            type="datetime-local"
-                                            value={scheduleMsgDateTime}
-                                            onChange={(e) => setScheduleMsgDateTime(e.target.value)}
-                                            min={new Date(Date.now() + 60000).toISOString().slice(0, 16)}
-                                            className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-800 text-sm font-medium text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/30"
-                                        />
-                                    </div>
-                                    {scheduleMsgDateTime && (
-                                        <p className="text-[11px] text-slate-500 flex items-center gap-1">
-                                            <Clock size={11} />
-                                            Será enviada em {new Date(scheduleMsgDateTime).toLocaleString('pt-BR')}
-                                        </p>
-                                    )}
-                                </div>
-                                <div className="px-5 pb-5 flex gap-2">
-                                    <button onClick={() => setShowScheduleMsgModal(false)} className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-white/10 text-sm font-bold text-slate-500 hover:bg-slate-50 dark:hover:bg-white/5 transition-all">
-                                        Cancelar
-                                    </button>
-                                    <button
-                                        onClick={handleScheduleMessage}
-                                        disabled={!scheduleMsgDateTime || schedulingMsg}
-                                        className="flex-1 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-sm font-black transition-all shadow-lg shadow-violet-500/20 disabled:opacity-50 flex items-center justify-center gap-2"
-                                    >
-                                        {schedulingMsg ? <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <><CalendarClock size={14} /> Agendar</>}
-                                    </button>
-                                </div>
+                <ScheduleMessageModal
+                    open={showScheduleMsgModal}
+                    onClose={() => setShowScheduleMsgModal(false)}
+                    message={newMessage}
+                    dateTime={scheduleMsgDateTime}
+                    onDateTimeChange={setScheduleMsgDateTime}
+                    onSchedule={handleScheduleMessage}
+                    scheduling={schedulingMsg}
+                    scheduledMessages={scheduledMessages}
+                    onCancelScheduled={handleCancelScheduledMessage}
+                />
 
-                                {/* Mensagens agendadas pendentes */}
-                                {scheduledMessages.length > 0 && (
-                                    <div className="px-5 pb-5 border-t border-slate-100 dark:border-white/10 pt-4">
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Agendadas ({scheduledMessages.length})</p>
-                                        <div className="space-y-2 max-h-32 overflow-y-auto">
-                                            {scheduledMessages.map(m => (
-                                                <div key={m.id} className="flex items-start gap-2 p-2 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/10">
-                                                    <Clock size={12} className="text-violet-500 mt-0.5 shrink-0" />
-                                                    <div className="flex-1 min-w-0">
-                                                        <p className="text-[11px] font-bold text-slate-700 dark:text-slate-300 truncate">{m.content}</p>
-                                                        <p className="text-[10px] text-slate-400">{new Date(m.scheduledAt).toLocaleString('pt-BR')}</p>
-                                                    </div>
-                                                    <button onClick={() => handleCancelScheduledMessage(m.id)} className="p-1 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/30 text-slate-300 hover:text-rose-500 transition-colors shrink-0">
-                                                        <X size={12} />
-                                                    </button>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-                            </motion.div>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
-
-                {/* Modal: Mesclar Ticket */}
-                <AnimatePresence>
-                    {showMergeModal && selectedTicket && (
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[200] flex items-center justify-center p-4"
-                            onClick={() => setShowMergeModal(false)}
-                        >
-                            <motion.div
-                                initial={{ scale: 0.95, opacity: 0, y: -10 }}
-                                animate={{ scale: 1, opacity: 1, y: 0 }}
-                                exit={{ scale: 0.95, opacity: 0, y: -10 }}
-                                transition={{ type: 'spring', damping: 25, stiffness: 350 }}
-                                onClick={e => e.stopPropagation()}
-                                className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-white/10 w-full max-w-md overflow-hidden"
-                            >
-                                <div className="p-5 border-b border-slate-100 dark:border-white/10 flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <ArrowRightLeft size={16} className="text-violet-500" />
-                                        <h2 className="text-sm font-black uppercase tracking-widest text-slate-800 dark:text-white">Mesclar Ticket</h2>
-                                    </div>
-                                    <button onClick={() => setShowMergeModal(false)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/10 text-slate-400"><X size={14} /></button>
-                                </div>
-                                <div className="p-5 space-y-4">
-                                    <div className="p-3 rounded-xl bg-violet-50 dark:bg-violet-950/30 border border-violet-100 dark:border-violet-800 text-xs text-violet-700 dark:text-violet-300">
-                                        As mensagens e tags do ticket <strong>#{selectedTicket.id.slice(-6)}</strong> serão transferidas para o ticket de destino. O ticket de origem será fechado.
-                                    </div>
-                                    <input
-                                        value={mergeSearch}
-                                        onChange={e => { setMergeSearch(e.target.value); searchMergeTickets(e.target.value); }}
-                                        placeholder="Buscar ticket de destino..."
-                                        className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/30"
-                                    />
-                                    <div className="max-h-52 overflow-y-auto space-y-2">
-                                        {mergeResults.length === 0 && mergeSearch.length >= 2 && (
-                                            <p className="text-xs text-center text-slate-400 py-4">Nenhum ticket encontrado</p>
-                                        )}
-                                        {mergeResults.map(t => (
-                                            <button
-                                                key={t.id}
-                                                onClick={() => handleMerge(t.id)}
-                                                disabled={merging}
-                                                className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-violet-50 dark:hover:bg-violet-950/20 text-left transition-all border border-transparent hover:border-violet-200 dark:hover:border-violet-800 disabled:opacity-50"
-                                            >
-                                                <div className="h-8 w-8 rounded-xl bg-violet-100 dark:bg-violet-950/40 flex items-center justify-center text-sm">{(t as any).department?.emoji || '💬'}</div>
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{(t as any).contact?.name || 'Sem contato'}</p>
-                                                    <p className="text-[10px] text-slate-400 truncate">{t.subject || 'Sem assunto'} · {(t as any).department?.name}</p>
-                                                </div>
-                                                <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-slate-100 dark:bg-white/10 text-slate-500 shrink-0">#{t.id.slice(-6)}</span>
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                            </motion.div>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
+                <MergeTicketModal
+                    open={showMergeModal}
+                    onClose={() => setShowMergeModal(false)}
+                    selectedTicket={selectedTicket}
+                    mergeSearch={mergeSearch}
+                    onSearchChange={(q) => { setMergeSearch(q); searchMergeTickets(q); }}
+                    mergeResults={mergeResults}
+                    onMerge={handleMerge}
+                    merging={merging}
+                />
             </div >
             );
 }

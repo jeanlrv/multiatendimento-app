@@ -52,8 +52,17 @@ export class DashboardService implements OnModuleInit, OnModuleDestroy {
         }
     }
 
+    /** Normaliza a chave de cache para evitar explosão de entradas no Redis com combinações ilimitadas de filtros */
+    private normalizeFilterKey(filters: Record<string, any>): string {
+        return Object.keys(filters)
+            .sort()
+            .filter(k => filters[k] !== undefined && filters[k] !== null && filters[k] !== 'ALL' && filters[k] !== '')
+            .map(k => `${k}=${filters[k]}`)
+            .join('|');
+    }
+
     async getStats(companyId: string, filters: { startDate?: string, endDate?: string, departmentId?: string, assignedUserId?: string, customerId?: string }) {
-        const cacheKey = `dash:stats:${companyId}:${JSON.stringify(filters)}`;
+        const cacheKey = `dash:stats:${companyId}:${this.normalizeFilterKey(filters)}`;
         const cached = await this.getCached<object>(cacheKey);
         if (cached) return cached;
 

@@ -22,7 +22,7 @@ export class BroadcastController {
     @Post()
     @RequirePermission(Permission.TICKETS_CREATE)
     @ApiOperation({ summary: 'Criar nova campanha de broadcast' })
-    create(@Req() req: any, @Body() body: { name: string; message: string; connectionId?: string; contactIds: string[] }) {
+    create(@Req() req: any, @Body() body: { name: string; message: string; connectionId?: string; contactIds: string[]; scheduledAt?: string }) {
         return this.broadcastService.create(req.user.companyId, body);
     }
 

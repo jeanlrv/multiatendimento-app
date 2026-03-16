@@ -1,9 +1,10 @@
 import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
-import { Logger } from '@nestjs/common';
+import { forwardRef, Inject, Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { PrismaService } from '../../database/prisma.service';
 import { WhatsAppService } from '../whatsapp/whatsapp.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { BroadcastService } from './broadcast.service';
 
 @Processor('broadcast')
 export class BroadcastProcessor extends WorkerHost {
@@ -13,6 +14,8 @@ export class BroadcastProcessor extends WorkerHost {
         private readonly prisma: PrismaService,
         private readonly whatsappService: WhatsAppService,
         private readonly eventEmitter: EventEmitter2,
+        @Inject(forwardRef(() => BroadcastService))
+        private readonly broadcastService: BroadcastService,
     ) {
         super();
     }
@@ -20,6 +23,11 @@ export class BroadcastProcessor extends WorkerHost {
     async process(job: Job): Promise<any> {
         if (job.name === 'send-broadcast-message') {
             return this.handleSendBroadcastMessage(job.data);
+        }
+        if (job.name === 'start-scheduled-broadcast') {
+            const { broadcastId, companyId } = job.data;
+            this.logger.log(`Disparando broadcast agendado ${broadcastId}`);
+            return this.broadcastService.start(companyId, broadcastId);
         }
     }
 
@@ -42,6 +50,9 @@ export class BroadcastProcessor extends WorkerHost {
         contactId: string;
         phoneNumber: string;
         contactName: string;
+        contactPhone?: string;
+        contactCompany?: string;
+        lastTicketId?: string;
         message: string;
         connectionId?: string;
         companyId: string;
@@ -53,7 +64,17 @@ export class BroadcastProcessor extends WorkerHost {
             return;
         }
 
-        const personalizedMessage = data.message.replace(/\{\{nome\}\}/gi, data.contactName || 'Cliente');
+        const protocol = data.lastTicketId ? data.lastTicketId.slice(-6).toUpperCase() : '';
+        const vars: Record<string, string> = {
+            nome: data.contactName || 'Cliente',
+            telefone: data.contactPhone || data.phoneNumber || '',
+            empresa: data.contactCompany || '',
+            protocolo: protocol,
+        };
+        const personalizedMessage = data.message.replace(
+            /\{\{(\w+)\}\}/g,
+            (_, key) => vars[key.toLowerCase()] ?? `{{${key}}}`,
+        );
 
         let success = false;
         let errorMsg = '';

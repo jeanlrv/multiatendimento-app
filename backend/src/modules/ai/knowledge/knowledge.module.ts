@@ -3,6 +3,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { KnowledgeController } from './knowledge.controller';
 import { KnowledgeService } from './knowledge.service';
 import { KnowledgeProcessor } from './processors/knowledge.processor';
+import { KnowledgeTextExtractorService } from './processors/knowledge-text-extractor.service';
 import { AIEngineModule } from '../engine/ai-engine.module';
 import { DatabaseModule } from '../../../database/database.module';
 import { SettingsModule } from '../../settings/settings.module';
@@ -25,7 +26,7 @@ import { memoryStorage } from 'multer';
         }),
     ],
     controllers: [KnowledgeController],
-    providers: [KnowledgeService, KnowledgeProcessor],
+    providers: [KnowledgeService, KnowledgeProcessor, KnowledgeTextExtractorService],
     exports: [KnowledgeService, BullModule],
 })
 export class KnowledgeModule { }
