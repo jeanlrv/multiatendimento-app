@@ -33,7 +33,7 @@ export class EmbedService implements OnModuleDestroy {
         const cutoff = new Date(Date.now() - SESSION_TTL_DAYS * 24 * 60 * 60 * 1000);
         try {
             const result = await this.prisma.embedChatSession.deleteMany({
-                where: { lastMessageAt: { lt: cutoff } },
+                where: { updatedAt: { lt: cutoff } },
             });
             if (result.count > 0) {
                 this.logger.log(`EmbedSession cleanup: ${result.count} sessões inativas removidas (TTL ${SESSION_TTL_DAYS}d)`);
