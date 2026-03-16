@@ -34,9 +34,27 @@ const nextConfig = {
         workerThreads: false,
     },
 
-    // Nota: remoção de headers para /embed/* é feita pelo middleware (src/middleware.ts),
-    // que deleta X-Frame-Options e Content-Security-Policy para permitir iframe em qualquer origem.
-    // Não definir headers aqui para /embed/* evita conflito com o middleware.
+    // Security headers aplicados em todas as rotas exceto /embed/* (que permite iframe)
+    // O middleware (src/middleware.ts) remove X-Frame-Options e CSP para /embed/*
+    async headers() {
+        return [
+            {
+                // Aplica headers de segurança em todas as páginas exceto embed
+                source: '/((?!embed).*)',
+                headers: [
+                    { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+                    { key: 'X-Content-Type-Options', value: 'nosniff' },
+                    { key: 'X-DNS-Prefetch-Control', value: 'on' },
+                    { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+                    { key: 'Permissions-Policy', value: 'camera=(), microphone=(self), geolocation=(), payment=()' },
+                    {
+                        key: 'Strict-Transport-Security',
+                        value: 'max-age=63072000; includeSubDomains; preload',
+                    },
+                ],
+            },
+        ];
+    },
 
     async rewrites() {
         // Railway: comunicação interna é HTTP. BACKEND_INTERNAL_URL tem prioridade.

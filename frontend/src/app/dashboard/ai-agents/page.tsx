@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { Skeleton } from '@/components/ui/skeleton';
 import { AIAgentsService, AIAgent, AIProviderModels } from '@/services/ai-agents';
 import { AIKnowledgeService, KnowledgeBase } from '@/services/ai-knowledge';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -34,12 +35,12 @@ export default function AIAgentsPage() {
         chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [chatHistory, chatLoading]);
 
-    const fetchData = async () => {
+    const fetchData = async (signal?: AbortSignal) => {
         try {
             setLoading(true);
             const [agentsData, kbData, modelsData, embProviders] = await Promise.all([
-                AIAgentsService.findAll(),
-                AIKnowledgeService.findAllBases(),
+                AIAgentsService.findAll(signal),
+                AIKnowledgeService.findAllBases(signal),
                 AIAgentsService.getModels().catch((e) => {
                     console.error('Falha crítica ao buscar Modelos LLMs:', e);
                     toast.error('Erro ao listar opções de modelos de IA.');
@@ -56,7 +57,8 @@ export default function AIAgentsPage() {
             setKnowledgeBases(kbData);
             setAvailableModels(modelsData);
             setEmbeddingProviders(embProviders);
-        } catch (error) {
+        } catch (error: any) {
+            if (error?.name === 'CanceledError' || error?.name === 'AbortError') return;
             console.error('Erro ao buscar dados:', error);
             toast.error('Erro ao carregar dados');
         } finally {
@@ -65,7 +67,9 @@ export default function AIAgentsPage() {
     };
 
     useEffect(() => {
-        fetchData();
+        const controller = new AbortController();
+        fetchData(controller.signal);
+        return () => controller.abort();
     }, []);
 
     const openModal = (agent: Partial<AIAgent>) => {
@@ -317,7 +321,25 @@ export default function AIAgentsPage() {
             {loading ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 relative z-10 px-4">
                     {[1, 2, 3].map(i => (
-                        <div key={i} className="h-64 glass-heavy rounded-[2.5rem] animate-pulse" />
+                        <div key={i} className="glass-heavy rounded-[2.5rem] p-6 space-y-4">
+                            <div className="flex items-center gap-4">
+                                <Skeleton className="h-14 w-14 rounded-2xl shrink-0" />
+                                <div className="flex-1 space-y-2">
+                                    <Skeleton className="h-5 w-32" />
+                                    <Skeleton className="h-3.5 w-20" />
+                                </div>
+                            </div>
+                            <Skeleton className="h-3 w-full" />
+                            <Skeleton className="h-3 w-4/5" />
+                            <div className="flex gap-2 pt-2">
+                                <Skeleton className="h-6 w-16 rounded-full" />
+                                <Skeleton className="h-6 w-20 rounded-full" />
+                            </div>
+                            <div className="flex gap-2 pt-1">
+                                <Skeleton className="h-9 flex-1 rounded-xl" />
+                                <Skeleton className="h-9 w-9 rounded-xl" />
+                            </div>
+                        </div>
                     ))}
                 </div>
             ) : agents.length === 0 ? (

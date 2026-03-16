@@ -18,8 +18,9 @@ export class ReportsController {
         @Company() companyId: string,
         @Query('startDate') startDate?: string,
         @Query('endDate') endDate?: string,
+        @Query('customerId') customerId?: string,
     ) {
-        return this.reportsService.getDashboardStats(companyId, startDate, endDate);
+        return this.reportsService.getDashboardStats(companyId, startDate, endDate, customerId);
     }
 
     @Get('performance')
@@ -29,8 +30,9 @@ export class ReportsController {
         @Company() companyId: string,
         @Query('startDate') startDate?: string,
         @Query('endDate') endDate?: string,
+        @Query('customerId') customerId?: string,
     ) {
-        return this.reportsService.getAgentPerformance(companyId, startDate, endDate);
+        return this.reportsService.getAgentPerformance(companyId, startDate, endDate, customerId);
     }
 
     @Get('satisfaction-trend')
@@ -50,8 +52,9 @@ export class ReportsController {
         @Company() companyId: string,
         @Query('startDate') startDate?: string,
         @Query('endDate') endDate?: string,
+        @Query('customerId') customerId?: string,
     ) {
-        return this.reportsService.getSlaCompliance(companyId, startDate, endDate);
+        return this.reportsService.getSlaCompliance(companyId, startDate, endDate, customerId);
     }
 
     @Get('resolution-time')
@@ -61,8 +64,9 @@ export class ReportsController {
         @Company() companyId: string,
         @Query('startDate') startDate?: string,
         @Query('endDate') endDate?: string,
+        @Query('customerId') customerId?: string,
     ) {
-        return this.reportsService.getResolutionTime(companyId, startDate, endDate);
+        return this.reportsService.getResolutionTime(companyId, startDate, endDate, customerId);
     }
 
     @Get('audit/internal-chat')

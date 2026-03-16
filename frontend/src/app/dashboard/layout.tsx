@@ -95,7 +95,7 @@ const SidebarContent = React.memo(({
             </div>
 
             {/* Nav */}
-            <nav className={`flex-1 ${sidebarCollapsed ? 'px-2' : 'px-3'} overflow-y-auto custom-scrollbar pb-4 transition-all duration-300`}>
+            <nav aria-label="Menu principal" className={`flex-1 ${sidebarCollapsed ? 'px-2' : 'px-3'} overflow-y-auto custom-scrollbar pb-4 transition-all duration-300`}>
                 {grouped.map((group, gIdx) => (
                     <div key={group.key} className={gIdx > 0 ? 'mt-4' : 'mt-1'}>
                         {/* Section label / divider */}
@@ -115,6 +115,8 @@ const SidebarContent = React.memo(({
                                     <Link
                                         key={item.label}
                                         href={item.path}
+                                        aria-current={isActive ? 'page' : undefined}
+                                        aria-label={sidebarCollapsed ? item.label : undefined}
                                         className={`group relative flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'} p-3 xl:p-3.5 transition-all duration-150 ${
                                             isActive
                                                 ? sidebarCollapsed
@@ -317,8 +319,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
     if (loading) {
         return (
-            <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900">
+            <div role="status" aria-label="Carregando painel" className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900">
                 <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600" />
+                <span className="sr-only">Carregando...</span>
             </div>
         );
     }
@@ -391,6 +394,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     </div>
                     <button
                         onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                        aria-label={sidebarCollapsed ? 'Expandir menu' : 'Recolher menu'}
+                        aria-expanded={!sidebarCollapsed}
                         className="absolute -right-3 top-20 bg-white dark:bg-slate-800 border border-slate-200 dark:border-white/10 rounded-full p-1.5 shadow-lg hover:scale-110 transition-transform z-50 flex items-center justify-center h-6 w-6 pointer-events-auto"
                         title={sidebarCollapsed ? 'Expandir menu' : 'Recolher menu'}
                     >
@@ -422,9 +427,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                             >
                                 <button
                                     onClick={() => setMobileMenuOpen(false)}
+                                    aria-label="Fechar menu"
                                     className="absolute right-4 top-5 p-2 rounded-2xl hover:bg-white/20 text-slate-500 transition-all z-50"
                                 >
-                                    <X size={20} />
+                                    <X size={20} aria-hidden="true" />
                                 </button>
                                 <SidebarContent
                                     sidebarCollapsed={false}
@@ -491,8 +497,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                             </div>
 
                             {/* Presença */}
-                            <button onClick={() => setPresenceSidebarOpen(!presenceSidebarOpen)} className={`w-9 h-9 flex items-center justify-center rounded-full border transition-all active:scale-95 ${presenceSidebarOpen ? 'bg-primary text-white border-primary shadow-lg shadow-primary/20' : 'liquid-glass border-slate-200 dark:border-white/10 text-slate-400 hover:text-primary'}`} title="Hub de Colaboradores">
-                                <Users size={16} />
+                            <button
+                                onClick={() => setPresenceSidebarOpen(!presenceSidebarOpen)}
+                                aria-label="Hub de Colaboradores"
+                                aria-expanded={presenceSidebarOpen}
+                                className={`w-9 h-9 flex items-center justify-center rounded-full border transition-all active:scale-95 ${presenceSidebarOpen ? 'bg-primary text-white border-primary shadow-lg shadow-primary/20' : 'liquid-glass border-slate-200 dark:border-white/10 text-slate-400 hover:text-primary'}`}
+                                title="Hub de Colaboradores"
+                            >
+                                <Users size={16} aria-hidden="true" />
                             </button>
 
                             <NotificationBell />
@@ -543,6 +555,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                                     <Link
                                         key={item.path}
                                         href={item.path}
+                                        aria-current={isActive ? 'page' : undefined}
+                                        aria-label={item.label}
                                         className={`relative flex flex-col items-center justify-center gap-0.5 flex-1 py-2 px-1 rounded-xl transition-all active:scale-90 ${isActive ? 'text-primary' : 'text-slate-400'}`}
                                     >
                                         {isActive && (

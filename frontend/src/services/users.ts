@@ -52,8 +52,8 @@ export interface UpdateUserPayload {
 }
 
 export const usersService = {
-    findAll: async (): Promise<User[]> => {
-        const response = await api.get<User[]>('/users');
+    findAll: async (signal?: AbortSignal): Promise<User[]> => {
+        const response = await api.get<User[]>('/users', { signal });
         return response.data;
     },
 

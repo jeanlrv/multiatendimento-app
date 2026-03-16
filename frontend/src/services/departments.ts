@@ -11,6 +11,8 @@ export interface Department {
     slaFirstResponseMin?: number;
     slaResolutionMin?: number;
     outOfHoursMessage?: string;
+    greetingMessage?: string;
+    closingMessage?: string | null;
     aiAgentId?: string | null;
     workflowId?: string | null;
     defaultMode?: 'AI' | 'HUMANO' | 'HIBRIDO';
@@ -21,8 +23,8 @@ export interface Department {
 }
 
 export const DepartmentsService = {
-    findAll: async () => {
-        const response = await api.get<Department[]>('/departments');
+    findAll: async (signal?: AbortSignal) => {
+        const response = await api.get<Department[]>('/departments', { signal });
         return response.data;
     },
 

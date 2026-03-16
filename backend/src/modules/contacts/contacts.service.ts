@@ -58,6 +58,7 @@ export class ContactsService {
                 skip,
                 take: limit,
                 orderBy: { createdAt: 'desc' },
+                include: { customer: { select: { id: true, name: true, type: true } } },
             }),
             this.prisma.contact.count({ where: filteredWhere }),
             this.prisma.contact.count({ where: { companyId } }),
@@ -93,16 +94,25 @@ export class ContactsService {
     async findOne(companyId: string, id: string) {
         const contact = await this.prisma.contact.findFirst({
             where: { id, companyId },
+            include: { customer: { select: { id: true, name: true, type: true } } },
         });
         if (!contact) throw new NotFoundException('Contato não encontrado ou acesso negado');
         return contact;
     }
 
     async update(companyId: string, id: string, data: UpdateContactDto) {
-        await this.findOne(companyId, id);
+        await this.prisma.contact.findFirst({ where: { id, companyId } })
+            .then(c => { if (!c) throw new NotFoundException('Contato não encontrado ou acesso negado'); });
+
+        if (data.customerId !== undefined && data.customerId !== null) {
+            const customer = await this.prisma.customer.findFirst({ where: { id: data.customerId, companyId } });
+            if (!customer) throw new NotFoundException('Cliente não encontrado ou acesso negado');
+        }
+
         return this.prisma.contact.update({
             where: { id },
             data,
+            include: { customer: { select: { id: true, name: true, type: true } } },
         });
     }
 

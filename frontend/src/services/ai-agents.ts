@@ -41,8 +41,8 @@ export interface AIProviderModels {
 }
 
 export const AIAgentsService = {
-    findAll: async () => {
-        const response = await api.get<AIAgent[]>('/ai/agents');
+    findAll: async (signal?: AbortSignal) => {
+        const response = await api.get<AIAgent[]>('/ai/agents', { signal });
         return response.data;
     },
 

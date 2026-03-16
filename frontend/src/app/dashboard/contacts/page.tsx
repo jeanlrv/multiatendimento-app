@@ -24,6 +24,9 @@ import {
     CheckCircle,
     AlertCircle,
     GitMerge,
+    Building2,
+    Link2,
+    Unlink,
 } from "lucide-react";
 import { toast } from "sonner";
 import { ContactsService, Contact } from "@/services/contacts";
@@ -53,15 +56,16 @@ export default function ContactsPage() {
         setPage(1);
     }, [search]);
 
-    const fetchContacts = async () => {
+    const fetchContacts = async (signal?: AbortSignal) => {
         try {
             setLoading(true);
-            const res = await ContactsService.findAll(search, page);
+            const res = await ContactsService.findAll(search, page, signal);
             setContacts(res.data);
             setTotal(res.total);
             setLastPage(res.lastPage);
             setMetrics(res.metrics);
-        } catch {
+        } catch (err: any) {
+            if (err?.name === 'CanceledError' || err?.name === 'AbortError') return;
             toast.error("Erro ao carregar contatos");
         } finally {
             setLoading(false);
@@ -69,7 +73,9 @@ export default function ContactsPage() {
     };
 
     useEffect(() => {
-        fetchContacts();
+        const controller = new AbortController();
+        fetchContacts(controller.signal);
+        return () => controller.abort();
     }, [search, page]);
 
     const handleDelete = async (id: string) => {
@@ -265,6 +271,14 @@ export default function ContactsPage() {
                                         <td className="p-5 md:p-6">
                                             <div className="font-black text-slate-900 dark:text-white md:text-base text-sm leading-tight">{c.name}</div>
                                             <div className="text-[11px] font-bold text-slate-500 mt-1">{c.email || "Sem e-mail arquivado"}</div>
+                                            {c.customer ? (
+                                                <div className="flex items-center gap-1 mt-1.5">
+                                                    <Building2 size={10} className="text-primary flex-shrink-0" />
+                                                    <span className="text-[10px] font-black text-primary truncate max-w-[160px]">{c.customer.name}</span>
+                                                </div>
+                                            ) : (
+                                                <div className="text-[10px] font-bold text-slate-400 mt-1.5">Sem cliente</div>
+                                            )}
                                         </td>
                                         <td className="p-5 md:p-6 font-bold text-slate-700 dark:text-slate-300 md:text-sm text-xs">
                                             {c.phoneNumber}
@@ -351,6 +365,10 @@ export default function ContactsPage() {
                         setSelected(null);
                         setEditingContact(c);
                         setIsModalOpen(true);
+                    }}
+                    onContactUpdate={(c: Contact) => {
+                        setSelected(c);
+                        fetchContacts();
                     }}
                 />
             )}
@@ -561,12 +579,49 @@ function ContactDrawer({
     contact,
     onClose,
     onEdit,
+    onContactUpdate,
 }: {
     contact: Contact;
     onClose: () => void;
     onEdit: (c: Contact) => void;
+    onContactUpdate?: (c: Contact) => void;
 }) {
     const router = useRouter();
+    const [showCustomerModal, setShowCustomerModal] = useState(false);
+    const [customerSearch, setCustomerSearch] = useState('');
+    const [customerResults, setCustomerResults] = useState<any[]>([]);
+    const [savingCustomer, setSavingCustomer] = useState(false);
+
+    const searchCustomers = async (q: string) => {
+        if (q.length < 2) { setCustomerResults([]); return; }
+        try {
+            const res = await api.get('/customers', { params: { search: q, limit: 10 } });
+            setCustomerResults(res.data?.data || []);
+        } catch { setCustomerResults([]); }
+    };
+
+    const handleLinkCustomer = async (customerId: string) => {
+        setSavingCustomer(true);
+        try {
+            const updated = await ContactsService.update(contact.id, { customerId });
+            onContactUpdate?.(updated);
+            setShowCustomerModal(false);
+            setCustomerSearch('');
+            setCustomerResults([]);
+            toast.success('Cliente vinculado com sucesso!');
+        } catch { toast.error('Erro ao vincular cliente'); }
+        finally { setSavingCustomer(false); }
+    };
+
+    const handleUnlinkCustomer = async () => {
+        setSavingCustomer(true);
+        try {
+            const updated = await ContactsService.update(contact.id, { customerId: null });
+            onContactUpdate?.(updated);
+            toast.success('Cliente desvinculado');
+        } catch { toast.error('Erro ao desvincular cliente'); }
+        finally { setSavingCustomer(false); }
+    };
 
     return (
         <div className="fixed inset-0 flex justify-end z-[100]">
@@ -582,7 +637,7 @@ function ContactDrawer({
                 animate={{ x: 0 }}
                 exit={{ x: "100%" }}
                 transition={{ type: "spring", damping: 25, stiffness: 200 }}
-                className="w-full max-w-[420px] h-full bg-white dark:bg-[#0a0a0a] p-8 shadow-2xl relative z-10 border-l border-white/10"
+                className="w-full max-w-[420px] h-full bg-white dark:bg-[#0a0a0a] p-8 shadow-2xl relative z-10 border-l border-white/10 flex flex-col"
             >
                 <div className="flex justify-between items-start mb-8">
                     <div>
@@ -603,7 +658,43 @@ function ContactDrawer({
                     </div>
                 </div>
 
-                <div className="space-y-6 overflow-y-auto max-h-none md:max-h-[calc(100vh-250px)] pr-2 custom-scrollbar">
+                <div className="flex-1 space-y-6 overflow-y-auto pr-2 custom-scrollbar">
+                    {/* Cliente Vinculado */}
+                    <Section label="Cliente Vinculado">
+                        {contact.customer ? (
+                            <div className="flex items-center gap-3 p-3 rounded-2xl bg-primary/5 border border-primary/10">
+                                <div className="h-9 w-9 rounded-xl bg-primary/15 flex items-center justify-center text-primary font-black text-sm flex-shrink-0">
+                                    {contact.customer.name.charAt(0)}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-black text-slate-900 dark:text-white truncate">{contact.customer.name}</p>
+                                    <p className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">
+                                        {contact.customer.type === 'PERSON' ? 'Pessoa' : 'Empresa'}
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={handleUnlinkCustomer}
+                                    disabled={savingCustomer}
+                                    className="p-2 bg-rose-50 dark:bg-rose-500/10 text-rose-500 hover:bg-rose-100 dark:hover:bg-rose-500/20 rounded-xl transition-all disabled:opacity-50"
+                                    title="Desvincular cliente"
+                                >
+                                    <Unlink className="w-4 h-4" />
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="flex items-center gap-3 p-3 rounded-2xl bg-slate-50 dark:bg-white/5 border border-dashed border-slate-200 dark:border-white/10">
+                                <Building2 className="w-5 h-5 text-slate-300 dark:text-slate-600" />
+                                <p className="text-sm font-bold text-slate-400 flex-1">Nenhum cliente vinculado</p>
+                                <button
+                                    onClick={() => { setShowCustomerModal(true); setCustomerSearch(''); setCustomerResults([]); }}
+                                    className="px-3 py-1.5 bg-primary/10 text-primary hover:bg-primary/20 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5"
+                                >
+                                    <Link2 className="w-3 h-3" /> Vincular
+                                </button>
+                            </div>
+                        )}
+                    </Section>
+
                     <Section label="Informações de Contato">
                         <InfoItem label="Telefone" value={contact.phoneNumber} icon={MessageSquare} />
                         <InfoItem label="E-mail" value={contact.email || "—"} icon={Mail} />
@@ -648,7 +739,7 @@ function ContactDrawer({
                     </Section>
                 </div>
 
-                <div className="absolute bottom-8 left-8 right-8">
+                <div className="pt-6 border-t border-white/10 mt-4">
                     <button
                         onClick={() => router.push(`/dashboard/tickets?search=${contact.phoneNumber}`)}
                         className="w-full bg-primary text-white p-4 rounded-2xl font-bold hover:opacity-90 transition-opacity"
@@ -657,6 +748,59 @@ function ContactDrawer({
                     </button>
                 </div>
             </motion.div>
+
+            {/* Modal: Vincular Cliente */}
+            {showCustomerModal && (
+                <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[200] flex items-center justify-center p-4" onClick={() => setShowCustomerModal(false)}>
+                    <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-white/10 w-full max-w-md overflow-hidden" onClick={e => e.stopPropagation()}>
+                        <div className="p-5 border-b border-slate-100 dark:border-white/10 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <Building2 size={16} className="text-primary" />
+                                <h2 className="text-sm font-black uppercase tracking-widest text-slate-800 dark:text-white">Vincular Cliente</h2>
+                            </div>
+                            <button onClick={() => setShowCustomerModal(false)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/10 text-slate-400"><X size={14} /></button>
+                        </div>
+                        <div className="p-5 space-y-4">
+                            <p className="text-xs text-slate-500 font-bold">
+                                Associe <strong className="text-slate-700 dark:text-slate-300">{contact.name}</strong> a um cliente existente.
+                            </p>
+                            <input
+                                value={customerSearch}
+                                onChange={e => { setCustomerSearch(e.target.value); searchCustomers(e.target.value); }}
+                                placeholder="Buscar cliente por nome..."
+                                autoFocus
+                                className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                            />
+                            <div className="max-h-52 overflow-y-auto space-y-1.5">
+                                {customerResults.length === 0 && customerSearch.length >= 2 && (
+                                    <p className="text-xs text-center text-slate-400 py-4">Nenhum cliente encontrado</p>
+                                )}
+                                {customerSearch.length < 2 && (
+                                    <p className="text-xs text-center text-slate-400 py-4">Digite ao menos 2 caracteres</p>
+                                )}
+                                {customerResults.map(c => (
+                                    <button
+                                        key={c.id}
+                                        onClick={() => handleLinkCustomer(c.id)}
+                                        disabled={savingCustomer}
+                                        className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-primary/5 dark:hover:bg-primary/10 text-left transition-all border border-transparent hover:border-primary/20 disabled:opacity-50"
+                                    >
+                                        <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-black text-sm flex-shrink-0">
+                                            {c.name?.charAt(0) || '#'}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{c.name}</p>
+                                            <p className="text-[11px] text-slate-400">
+                                                {c.type === 'PERSON' ? 'Pessoa' : 'Empresa'} · {c.status === 'ACTIVE' ? 'Ativo' : c.status === 'LEAD' ? 'Lead' : 'Inativo'}
+                                            </p>
+                                        </div>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

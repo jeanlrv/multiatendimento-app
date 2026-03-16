@@ -7,8 +7,8 @@ export interface BulkActionParams {
 }
 
 export const ticketsService = {
-    findAll: async (params: any) => {
-        const response = await api.get('/tickets', { params });
+    findAll: async (params: any, signal?: AbortSignal) => {
+        const response = await api.get('/tickets', { params, signal });
         return response.data;
     },
 

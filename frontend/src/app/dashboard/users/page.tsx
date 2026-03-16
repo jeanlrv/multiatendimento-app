@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { Skeleton } from '@/components/ui/skeleton';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Users, UserPlus, Mail, Shield, Building2, Edit2, Trash2, Key,
@@ -37,18 +38,24 @@ export default function UsersPage() {
     const [togglingId, setTogglingId] = useState<string | null>(null);
     const [deletingId, setDeletingId] = useState<string | null>(null);
 
-    useEffect(() => { fetchData(); }, []);
+    useEffect(() => {
+        const controller = new AbortController();
+        fetchData(controller.signal);
+        return () => controller.abort();
+    }, []);
 
-    const fetchData = async () => {
+    const fetchData = async (signal?: AbortSignal) => {
         setLoading(true);
         const [usersResult, rolesResult, deptsResult] = await Promise.allSettled([
-            usersService.findAll(),
-            api.get('/roles'),
-            api.get('/departments'),
+            usersService.findAll(signal),
+            api.get('/roles', { signal }),
+            api.get('/departments', { signal }),
         ]);
 
+        if (signal?.aborted) return;
+
         if (usersResult.status === 'fulfilled') setUsers(usersResult.value);
-        else toast.error('Erro ao carregar usuários');
+        else if ((usersResult.reason as any)?.name !== 'CanceledError') toast.error('Erro ao carregar usuários');
 
         if (rolesResult.status === 'fulfilled') setRoles(rolesResult.value.data);
         if (deptsResult.status === 'fulfilled') setDepartments(deptsResult.value.data);
@@ -214,7 +221,25 @@ export default function UsersPage() {
             {loading ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 px-4">
                     {[1, 2, 3, 4, 5, 6].map(i => (
-                        <div key={i} className="h-64 liquid-glass rounded-[2.5rem] animate-pulse" />
+                        <div key={i} className="liquid-glass rounded-[2.5rem] p-6 space-y-4">
+                            <div className="flex items-center gap-4">
+                                <Skeleton className="h-14 w-14 rounded-full shrink-0" />
+                                <div className="flex-1 space-y-2">
+                                    <Skeleton className="h-4 w-32" />
+                                    <Skeleton className="h-3.5 w-40" />
+                                </div>
+                            </div>
+                            <div className="space-y-2">
+                                <Skeleton className="h-3.5 w-24 rounded-full" />
+                                <Skeleton className="h-3.5 w-20 rounded-full" />
+                            </div>
+                            <Skeleton className="h-px w-full" />
+                            <div className="flex gap-2">
+                                <Skeleton className="h-9 flex-1 rounded-2xl" />
+                                <Skeleton className="h-9 w-9 rounded-2xl" />
+                                <Skeleton className="h-9 w-9 rounded-2xl" />
+                            </div>
+                        </div>
                     ))}
                 </div>
             ) : filteredUsers.length === 0 ? (

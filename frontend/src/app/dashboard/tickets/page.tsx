@@ -262,7 +262,7 @@ export default function TicketsPage() {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     };
 
-    const fetchTickets = async () => {
+    const fetchTickets = async (signal?: AbortSignal) => {
         try {
             setLoading(true);
             const response = await ticketsService.findAll({
@@ -275,10 +275,11 @@ export default function TicketsPage() {
                 endDate: advancedFilters.endDate,
                 assignedUserId: advancedFilters.assignedUserId,
                 departmentId: advancedFilters.departments.join(',')
-            });
+            }, signal);
             // Backend retorna paginado: { data: Ticket[], meta: {...} }
             setTickets(Array.isArray(response) ? response : (response?.data ?? []));
-        } catch (error) {
+        } catch (error: any) {
+            if (error?.name === 'CanceledError' || error?.name === 'AbortError') return;
             console.error('Erro ao buscar tickets:', error);
             toast.error('Não foi possível carregar os atendimentos.');
         } finally {
@@ -680,7 +681,9 @@ export default function TicketsPage() {
     }, [showOptionsMenu]);
 
     useEffect(() => {
-        fetchTickets();
+        const controller = new AbortController();
+        fetchTickets(controller.signal);
+        return () => controller.abort();
     }, [filter, debouncedSearch, advancedFilters]);
 
     useEffect(() => {

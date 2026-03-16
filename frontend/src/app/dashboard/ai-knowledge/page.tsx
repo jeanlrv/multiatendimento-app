@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { Skeleton } from '@/components/ui/skeleton';
 import { AIKnowledgeService, KnowledgeBase, AIDocument, KBSyncLog } from '@/services/ai-knowledge';
 import { AIAgentsService } from '@/services/ai-agents';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -107,11 +108,11 @@ export default function AIKnowledgePage() {
 
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const fetchBases = async () => {
+    const fetchBases = async (signal?: AbortSignal) => {
         try {
             setLoading(true);
             const [data, embProviders] = await Promise.all([
-                AIKnowledgeService.findAllBases(),
+                AIKnowledgeService.findAllBases(signal),
                 AIAgentsService.getEmbeddingProviders().catch((e) => {
                     console.error('Falha ao buscar Embedding Providers na Knowledge Page:', e);
                     // Fallback de segurança para garantir que o "Nativo" esteja sempre disponível no UI
@@ -128,7 +129,8 @@ export default function AIKnowledgePage() {
             ]);
             setBases(data);
             setEmbeddingProviders(embProviders);
-        } catch (error) {
+        } catch (error: any) {
+            if (error?.name === 'CanceledError' || error?.name === 'AbortError') return;
             console.error('Erro ao buscar bases:', error);
             toast.error('Erro ao carregar bases de conhecimento');
         } finally {
@@ -150,9 +152,11 @@ export default function AIKnowledgePage() {
     };
 
     useEffect(() => {
-        fetchBases();
+        const controller = new AbortController();
+        fetchBases(controller.signal);
         // Busca URL pública do backend para montar snippet de integração
         fetch('/api/public-config').then(r => r.json()).then(d => setBackendPublicUrl(d.backendUrl || '')).catch(() => {});
+        return () => controller.abort();
     }, []);
 
     // Sincroniza estado do webhook ao selecionar uma base
@@ -785,8 +789,19 @@ export default function AIKnowledgePage() {
                         </h3>
 
                         {loading ? (
-                            <div className="space-y-4 animate-pulse">
-                                {[1, 2, 3].map(i => <div key={i} className="h-16 bg-slate-200 dark:bg-white/5 rounded-2xl" />)}
+                            <div className="space-y-3">
+                                {[1, 2, 3].map(i => (
+                                    <div key={i} className="p-5 rounded-2xl bg-slate-50 dark:bg-white/5 flex items-center justify-between gap-4">
+                                        <div className="flex items-center gap-4 flex-1 min-w-0">
+                                            <Skeleton className="h-5 w-5 rounded shrink-0" />
+                                            <div className="flex-1 space-y-1.5">
+                                                <Skeleton className="h-4 w-32" />
+                                                <Skeleton className="h-3 w-16" />
+                                            </div>
+                                        </div>
+                                        <Skeleton className="h-4 w-4 rounded shrink-0" />
+                                    </div>
+                                ))}
                             </div>
                         ) : bases.length === 0 ? (
                             <p className="text-center text-xs font-bold text-slate-400 py-8 uppercase tracking-widest">Vazio</p>

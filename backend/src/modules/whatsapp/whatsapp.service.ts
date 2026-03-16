@@ -7,11 +7,18 @@ import { UpdateWhatsAppDto } from './dto/update-whatsapp.dto';
 import { IntegrationsService } from '../settings/integrations.service';
 import { CryptoService } from '../../common/services/crypto.service';
 import { OnEvent } from '@nestjs/event-emitter';
+import { getCircuitBreaker } from '../../common/utils/circuit-breaker';
 
 @Injectable()
 export class WhatsAppService {
     private readonly logger = new Logger(WhatsAppService.name);
     private readonly zapiBaseUrl: string;
+    /** Circuit breaker isolado por empresa: 5 falhas → circuito OPEN por 30s */
+    private readonly zapiCircuitBreaker = getCircuitBreaker('zapi', {
+        failureThreshold: 5,
+        cooldownMs: 30_000,
+        timeoutMs: 15_000,
+    });
 
     constructor(
         private prisma: PrismaService,
@@ -121,6 +128,19 @@ export class WhatsAppService {
             headers['Client-Token'] = clientToken;
         }
         return headers;
+    }
+
+    /**
+     * Wrapper para chamadas POST à Z-API com circuit breaker + timeout integrados.
+     * Todas as chamadas de envio devem usar este método em vez de axios.post diretamente.
+     */
+    private async zapiPost(url: string, data: unknown, clientToken?: string): Promise<any> {
+        return this.zapiCircuitBreaker.exec(() =>
+            axios.post(url, data, {
+                headers: this.buildHeaders(clientToken),
+                timeout: 15_000,
+            }).then(r => r.data)
+        );
     }
 
     async create(createWhatsAppDto: CreateWhatsAppDto, companyId: string) {
@@ -284,17 +304,11 @@ export class WhatsAppService {
     async sendMessage(connectionId: string, phoneNumber: string, message: string, companyId: string) {
         const connection = await this.getInternal(connectionId, companyId);
         const { instanceId, token, clientToken } = await this.resolveCredentials(connection, companyId);
-
         const url = `${this.zapiBaseUrl}/instances/${instanceId}/token/${token}/send-text`;
-
         try {
-            const response = await axios.post(
-                url,
-                { phone: phoneNumber, message },
-                { headers: this.buildHeaders(clientToken) },
-            );
+            const data = await this.zapiPost(url, { phone: phoneNumber, message }, clientToken);
             this.logger.log(`Mensagem enviada para ${phoneNumber} via ${instanceId}`);
-            return response.data;
+            return data;
         } catch (error) {
             this.logger.error(`Erro ao enviar mensagem via Z-API: ${error.message}`);
             throw error;
@@ -304,16 +318,9 @@ export class WhatsAppService {
     async sendImage(connectionId: string, phoneNumber: string, imageUrl: string, companyId: string, caption?: string) {
         const connection = await this.getInternal(connectionId, companyId);
         const { instanceId, token, clientToken } = await this.resolveCredentials(connection, companyId);
-
         const url = `${this.zapiBaseUrl}/instances/${instanceId}/token/${token}/send-image`;
-
         try {
-            const response = await axios.post(
-                url,
-                { phone: phoneNumber, image: imageUrl, caption },
-                { headers: this.buildHeaders(clientToken) },
-            );
-            return response.data;
+            return await this.zapiPost(url, { phone: phoneNumber, image: imageUrl, caption }, clientToken);
         } catch (error) {
             this.logger.error(`Erro ao enviar imagem via Z-API: ${error.message}`);
             throw error;
@@ -323,16 +330,9 @@ export class WhatsAppService {
     async sendAudio(connectionId: string, phoneNumber: string, audioUrl: string, companyId: string) {
         const connection = await this.getInternal(connectionId, companyId);
         const { instanceId, token, clientToken } = await this.resolveCredentials(connection, companyId);
-
         const url = `${this.zapiBaseUrl}/instances/${instanceId}/token/${token}/send-audio`;
-
         try {
-            const response = await axios.post(
-                url,
-                { phone: phoneNumber, audio: audioUrl },
-                { headers: this.buildHeaders(clientToken) },
-            );
-            return response.data;
+            return await this.zapiPost(url, { phone: phoneNumber, audio: audioUrl }, clientToken);
         } catch (error) {
             this.logger.error(`Erro ao enviar áudio via Z-API: ${error.message}`);
             throw error;
@@ -342,16 +342,9 @@ export class WhatsAppService {
     async sendPttAudio(connectionId: string, phoneNumber: string, audioUrl: string, companyId: string) {
         const connection = await this.getInternal(connectionId, companyId);
         const { instanceId, token, clientToken } = await this.resolveCredentials(connection, companyId);
-
         const url = `${this.zapiBaseUrl}/instances/${instanceId}/token/${token}/send-ptt-audio`;
-
         try {
-            const response = await axios.post(
-                url,
-                { phone: phoneNumber, audio: audioUrl },
-                { headers: this.buildHeaders(clientToken) },
-            );
-            return response.data;
+            return await this.zapiPost(url, { phone: phoneNumber, audio: audioUrl }, clientToken);
         } catch (error) {
             this.logger.error(`Erro ao enviar PTT áudio via Z-API: ${error.message}`);
             throw error;
@@ -361,16 +354,9 @@ export class WhatsAppService {
     async sendDocument(connectionId: string, phoneNumber: string, documentUrl: string, fileName: string, extension: string, companyId: string) {
         const connection = await this.getInternal(connectionId, companyId);
         const { instanceId, token, clientToken } = await this.resolveCredentials(connection, companyId);
-
         const url = `${this.zapiBaseUrl}/instances/${instanceId}/token/${token}/send-document/${extension}`;
-
         try {
-            const response = await axios.post(
-                url,
-                { phone: phoneNumber, document: documentUrl, fileName },
-                { headers: this.buildHeaders(clientToken) },
-            );
-            return response.data;
+            return await this.zapiPost(url, { phone: phoneNumber, document: documentUrl, fileName }, clientToken);
         } catch (error) {
             this.logger.error(`Erro ao enviar documento via Z-API: ${error.message}`);
             throw error;
@@ -380,16 +366,9 @@ export class WhatsAppService {
     async sendVideo(connectionId: string, phoneNumber: string, videoUrl: string, companyId: string, caption?: string) {
         const connection = await this.getInternal(connectionId, companyId);
         const { instanceId, token, clientToken } = await this.resolveCredentials(connection, companyId);
-
         const url = `${this.zapiBaseUrl}/instances/${instanceId}/token/${token}/send-video`;
-
         try {
-            const response = await axios.post(
-                url,
-                { phone: phoneNumber, video: videoUrl, caption },
-                { headers: this.buildHeaders(clientToken) },
-            );
-            return response.data;
+            return await this.zapiPost(url, { phone: phoneNumber, video: videoUrl, caption }, clientToken);
         } catch (error) {
             this.logger.error(`Erro ao enviar vídeo via Z-API: ${error.message}`);
             throw error;

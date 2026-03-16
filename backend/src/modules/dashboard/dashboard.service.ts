@@ -52,13 +52,24 @@ export class DashboardService implements OnModuleInit, OnModuleDestroy {
         }
     }
 
-    async getStats(companyId: string, filters: { startDate?: string, endDate?: string, departmentId?: string, assignedUserId?: string }) {
+    async getStats(companyId: string, filters: { startDate?: string, endDate?: string, departmentId?: string, assignedUserId?: string, customerId?: string }) {
         const cacheKey = `dash:stats:${companyId}:${JSON.stringify(filters)}`;
         const cached = await this.getCached<object>(cacheKey);
         if (cached) return cached;
 
         const where: any = { companyId };
         const evalWhere: any = { ticket: { companyId } };
+
+        // Pre-fetch contact IDs for customer filter (required for groupBy compatibility)
+        if (filters.customerId) {
+            const customerContacts = await this.prisma.contact.findMany({
+                where: { customerId: filters.customerId, companyId },
+                select: { id: true },
+            });
+            const contactIds = customerContacts.map(c => c.id);
+            where.contactId = { in: contactIds };
+            evalWhere.ticket = { ...evalWhere.ticket, contactId: { in: contactIds } };
+        }
 
         if (filters.departmentId && filters.departmentId !== 'ALL') {
             where.departmentId = filters.departmentId;
@@ -145,8 +156,8 @@ export class DashboardService implements OnModuleInit, OnModuleDestroy {
             messages: totalMessages,
             satisfaction: `${satisfactionRating}%`,
             sentimentDistribution: sentimentMap,
-            recentActivity: await this.getRecentActivity(companyId, filters.departmentId, filters.assignedUserId),
-            history: await this.getHistory(companyId, historyDays, filters.startDate, filters.departmentId, filters.assignedUserId),
+            recentActivity: await this.getRecentActivity(companyId, filters.departmentId, filters.assignedUserId, filters.customerId),
+            history: await this.getHistory(companyId, historyDays, filters.startDate, filters.departmentId, filters.assignedUserId, filters.customerId),
             ticketsByDepartment: await this.getTicketsByDepartment(where),
             ticketsByStatus: await this.getTicketsByStatus(where),
             ticketsByPriority: await this.getTicketsByPriority(where),
@@ -202,8 +213,9 @@ export class DashboardService implements OnModuleInit, OnModuleDestroy {
         filterStartDate?: string,
         departmentId?: string,
         assignedUserId?: string,
+        customerId?: string,
     ) {
-        const cacheKey = `dash:history:${companyId}:${days}:${filterStartDate ?? ''}:${departmentId ?? ''}:${assignedUserId ?? ''}`;
+        const cacheKey = `dash:history:${companyId}:${days}:${filterStartDate ?? ''}:${departmentId ?? ''}:${assignedUserId ?? ''}:${customerId ?? ''}`;
         const cached = await this.getCached<object[]>(cacheKey);
         if (cached) return cached;
 
@@ -229,6 +241,12 @@ export class DashboardService implements OnModuleInit, OnModuleDestroy {
         const ticketUserFilter = assignedUserId && assignedUserId !== 'ALL'
             ? Prisma.sql`AND t."assignedUserId" = ${assignedUserId}`
             : Prisma.empty;
+        const customerFilter = customerId
+            ? Prisma.sql`AND "contactId" IN (SELECT id FROM contacts WHERE "customerId" = ${customerId})`
+            : Prisma.empty;
+        const ticketCustomerFilter = customerId
+            ? Prisma.sql`AND t."contactId" IN (SELECT id FROM contacts WHERE "customerId" = ${customerId})`
+            : Prisma.empty;
 
         const [ticketRows, evalRows] = await Promise.all([
             this.prisma.$queryRaw<Array<{ date: string; opened: bigint; resolved: bigint }>>`
@@ -241,6 +259,7 @@ export class DashboardService implements OnModuleInit, OnModuleDestroy {
                     AND "createdAt" >= ${startDate}
                     ${deptFilter}
                     ${userFilter}
+                    ${customerFilter}
                 GROUP BY 1
                 ORDER BY 1
             `,
@@ -254,6 +273,7 @@ export class DashboardService implements OnModuleInit, OnModuleDestroy {
                     AND e."createdAt" >= ${startDate}
                     ${ticketDeptFilter}
                     ${ticketUserFilter}
+                    ${ticketCustomerFilter}
                 GROUP BY 1
                 ORDER BY 1
             `,
@@ -283,10 +303,11 @@ export class DashboardService implements OnModuleInit, OnModuleDestroy {
         return result;
     }
 
-    private async getRecentActivity(companyId: string, departmentId?: string, assignedUserId?: string) {
+    private async getRecentActivity(companyId: string, departmentId?: string, assignedUserId?: string, customerId?: string) {
         const where: any = { companyId };
         if (departmentId && departmentId !== 'ALL') where.departmentId = departmentId;
         if (assignedUserId && assignedUserId !== 'ALL') where.assignedUserId = assignedUserId;
+        if (customerId) where.contact = { customerId };
 
         const recentTickets = await this.prisma.ticket.findMany({
             where,
@@ -309,8 +330,8 @@ export class DashboardService implements OnModuleInit, OnModuleDestroy {
 
     // ─── Ranking de agentes ──────────────────────────────────────────────────
 
-    async getAgentRanking(companyId: string, filters: { startDate?: string; departmentId?: string }) {
-        const cacheKey = `dash:ranking:${companyId}:${filters.startDate ?? ''}:${filters.departmentId ?? ''}`;
+    async getAgentRanking(companyId: string, filters: { startDate?: string; departmentId?: string; customerId?: string }) {
+        const cacheKey = `dash:ranking:${companyId}:${filters.startDate ?? ''}:${filters.departmentId ?? ''}:${filters.customerId ?? ''}`;
         const cached = await this.getCached<object[]>(cacheKey);
         if (cached) return cached;
 
@@ -320,6 +341,13 @@ export class DashboardService implements OnModuleInit, OnModuleDestroy {
             const d = new Date(filters.startDate);
             d.setHours(0, 0, 0, 0);
             where.updatedAt = { gte: d };
+        }
+        if (filters.customerId) {
+            const customerContacts = await this.prisma.contact.findMany({
+                where: { customerId: filters.customerId, companyId },
+                select: { id: true },
+            });
+            where.contactId = { in: customerContacts.map(c => c.id) };
         }
 
         const grouped = await this.prisma.ticket.groupBy({
@@ -350,8 +378,8 @@ export class DashboardService implements OnModuleInit, OnModuleDestroy {
 
     // ─── Heatmap de volume por hora/dia da semana ─────────────────────────────
 
-    async getHeatmap(companyId: string, filters: { startDate?: string; departmentId?: string }) {
-        const cacheKey = `dash:heatmap:${companyId}:${filters.startDate ?? ''}:${filters.departmentId ?? ''}`;
+    async getHeatmap(companyId: string, filters: { startDate?: string; departmentId?: string; customerId?: string }) {
+        const cacheKey = `dash:heatmap:${companyId}:${filters.startDate ?? ''}:${filters.departmentId ?? ''}:${filters.customerId ?? ''}`;
         const cached = await this.getCached<object[]>(cacheKey);
         if (cached) return cached;
 
@@ -363,6 +391,9 @@ export class DashboardService implements OnModuleInit, OnModuleDestroy {
         const deptFilter = filters.departmentId && filters.departmentId !== 'ALL'
             ? Prisma.sql`AND "departmentId" = ${filters.departmentId}`
             : Prisma.empty;
+        const customerFilter = filters.customerId
+            ? Prisma.sql`AND "contactId" IN (SELECT id FROM contacts WHERE "customerId" = ${filters.customerId})`
+            : Prisma.empty;
 
         const rows = await this.prisma.$queryRaw<Array<{ day: number; hour: number; count: bigint }>>`
             SELECT
@@ -373,6 +404,7 @@ export class DashboardService implements OnModuleInit, OnModuleDestroy {
             WHERE "companyId" = ${companyId}
                 AND "createdAt" >= ${startDate}
                 ${deptFilter}
+                ${customerFilter}
             GROUP BY 1, 2
             ORDER BY 1, 2
         `;

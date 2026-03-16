@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Radio, Send, Users, Plus, X, Play, Pause, Trash2, CheckCircle2, XCircle, Clock, ChevronRight, MessageSquare, Loader2 } from 'lucide-react';
+import { Radio, Send, Users, Plus, X, Play, Pause, Trash2, CheckCircle2, XCircle, Clock, ChevronRight, MessageSquare } from 'lucide-react';
 import { EmptyState } from '@/components/EmptyState';
+import { Skeleton } from '@/components/ui/skeleton';
 import { api } from '@/services/api';
 import { toast } from 'sonner';
 import { getSocket } from '@/lib/socket';
@@ -181,7 +182,21 @@ export default function BroadcastPage() {
                 {/* List */}
                 <div className="lg:col-span-1 space-y-3">
                     {loading ? (
-                        <div className="flex items-center justify-center py-16"><Loader2 size={24} className="animate-spin text-primary" /></div>
+                        <div className="space-y-3">
+                            {[1, 2, 3].map(i => (
+                                <div key={i} className="p-4 rounded-2xl border border-slate-200 dark:border-white/10 space-y-2">
+                                    <div className="flex items-start justify-between gap-2">
+                                        <Skeleton className="h-4 w-36" />
+                                        <Skeleton className="h-4 w-16 rounded-full" />
+                                    </div>
+                                    <Skeleton className="h-3 w-full" />
+                                    <div className="flex items-center gap-2">
+                                        <Skeleton className="h-3 w-20" />
+                                        <Skeleton className="h-1.5 flex-1 rounded-full" />
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
                     ) : broadcasts.length === 0 ? (
                         <EmptyState
                             icon={Radio}

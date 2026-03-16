@@ -45,8 +45,8 @@ export interface AIDocument {
 }
 
 export const AIKnowledgeService = {
-    findAllBases: async () => {
-        const response = await api.get<KnowledgeBase[]>('/ai/knowledge/bases');
+    findAllBases: async (signal?: AbortSignal) => {
+        const response = await api.get<KnowledgeBase[]>('/ai/knowledge/bases', { signal });
         return response.data;
     },
 

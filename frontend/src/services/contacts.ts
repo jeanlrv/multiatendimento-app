@@ -10,6 +10,8 @@ export interface Contact {
     information: string | null;
     riskScore: number;
     companyId: string;
+    customerId: string | null;
+    customer?: { id: string; name: string; type: string } | null;
     createdAt: string;
     updatedAt: string;
 }
@@ -31,12 +33,14 @@ export interface ContactPayload {
     email?: string;
     notes?: string;
     information?: string;
+    customerId?: string | null;
 }
 
 export const ContactsService = {
-    findAll: async (search?: string, page = 1, limit = 10): Promise<ContactsResponse> => {
+    findAll: async (search?: string, page = 1, signal?: AbortSignal, limit = 10): Promise<ContactsResponse> => {
         const response = await api.get<ContactsResponse>('/contacts', {
             params: { search: search || undefined, page, limit },
+            signal,
         });
         return response.data;
     },

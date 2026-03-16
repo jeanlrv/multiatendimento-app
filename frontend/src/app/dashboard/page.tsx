@@ -23,6 +23,7 @@ import {
     Trophy,
     Flame
 } from 'lucide-react';
+import { CustomerSelect, CustomerOption } from '@/components/CustomerSelect';
 import { exportToCSV } from '@/lib/export';
 import {
     STATUS_TRANSLATIONS,
@@ -44,6 +45,7 @@ import {
     Cell,
     Legend
 } from 'recharts';
+import { DashboardStatsSkeleton, Skeleton } from '@/components/ui/skeleton';
 
 
 interface DashboardStats {
@@ -100,6 +102,7 @@ export default function DashboardPage() {
     const [departments, setDepartments] = useState<{ id: string, name: string }[]>([]);
     const [agents, setAgents] = useState<{ id: string, name: string }[]>([]);
     const [loading, setLoading] = useState(true);
+    const [selectedCustomer, setSelectedCustomer] = useState<CustomerOption | null>(null);
     const [filters, setFilters] = useState({
         period: '30',
         departmentId: 'ALL',
@@ -108,11 +111,12 @@ export default function DashboardPage() {
         endDate: ''
     });
 
-    const fetchStats = async () => {
+    const fetchStats = async (signal?: AbortSignal) => {
         try {
             const params: any = {
                 departmentId: filters.departmentId,
-                assignedUserId: filters.assignedUserId
+                assignedUserId: filters.assignedUserId,
+                ...(selectedCustomer && { customerId: selectedCustomer.id }),
             };
 
             if (filters.period !== 'CUSTOM') {
@@ -125,17 +129,19 @@ export default function DashboardPage() {
             }
 
             const [statsRes, rankingRes, heatmapRes] = await Promise.allSettled([
-                api.get('/dashboard/stats', { params }),
-                api.get('/dashboard/agent-ranking', { params }),
-                api.get('/dashboard/heatmap', { params }),
+                api.get('/dashboard/stats', { params, signal }),
+                api.get('/dashboard/agent-ranking', { params, signal }),
+                api.get('/dashboard/heatmap', { params, signal }),
             ]);
 
             if (statsRes.status === 'fulfilled') setStats(statsRes.value.data);
-            else toast.error('Erro ao carregar estatísticas gerais.');
+            else if (statsRes.status === 'rejected' && statsRes.reason?.name !== 'CanceledError')
+                toast.error('Erro ao carregar estatísticas gerais.');
 
             if (rankingRes.status === 'fulfilled') setAgentRanking(rankingRes.value.data);
             if (heatmapRes.status === 'fulfilled') setHeatmapData(heatmapRes.value.data);
-        } catch (error) {
+        } catch (error: any) {
+            if (error?.name === 'CanceledError' || error?.name === 'AbortError') return;
             console.error('Erro ao buscar estatísticas:', error);
             toast.error('Não foi possível carregar o dashboard. Verifique sua conexão.');
         } finally {
@@ -161,8 +167,10 @@ export default function DashboardPage() {
     }, []);
 
     useEffect(() => {
-        fetchStats();
-    }, [filters]);
+        const controller = new AbortController();
+        fetchStats(controller.signal);
+        return () => controller.abort();
+    }, [filters, selectedCustomer]);
 
     const cards = [
         {
@@ -222,8 +230,39 @@ export default function DashboardPage() {
 
     if (loading) {
         return (
-            <div className="flex items-center justify-center h-full">
-                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600"></div>
+            <div className="liquid-glass aurora min-h-[calc(100dvh-6rem)] md:min-h-[calc(100vh-8rem)] p-4 md:p-8 rounded-[2rem] md:rounded-[3rem] shadow-2xl space-y-8 max-w-7xl mx-auto">
+                {/* Hero skeleton */}
+                <div className="bg-white/40 dark:bg-[#050505]/40 p-6 md:p-10 rounded-[2rem] border border-white/80 dark:border-white/10">
+                    <div className="flex flex-col md:flex-row justify-between gap-6">
+                        <div className="space-y-3">
+                            <Skeleton className="h-9 w-72" />
+                            <Skeleton className="h-4 w-56" />
+                        </div>
+                        <div className="flex gap-4">
+                            <Skeleton className="h-10 w-32 rounded-2xl" />
+                            <Skeleton className="h-10 w-32 rounded-2xl" />
+                        </div>
+                    </div>
+                </div>
+                {/* Filters skeleton */}
+                <div className="liquid-glass p-6 rounded-[2.5rem] border border-white/80 dark:border-white/10">
+                    <div className="flex flex-wrap gap-3">
+                        {Array.from({ length: 4 }).map((_, i) => (
+                            <Skeleton key={i} className="h-8 w-24 rounded-xl" />
+                        ))}
+                    </div>
+                </div>
+                {/* Stats cards skeleton */}
+                <DashboardStatsSkeleton />
+                {/* Charts skeleton */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <Skeleton className="h-64 rounded-[2rem]" />
+                    <Skeleton className="h-64 rounded-[2rem]" />
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <Skeleton className="h-48 rounded-[2rem] lg:col-span-2" />
+                    <Skeleton className="h-48 rounded-[2rem]" />
+                </div>
             </div>
         );
     }
@@ -279,6 +318,13 @@ export default function DashboardPage() {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3 bg-gray-50 dark:bg-black/20 p-2 rounded-[2rem] border border-gray-100 dark:border-white/5 shadow-inner">
+                    <CustomerSelect
+                        value={selectedCustomer}
+                        onChange={setSelectedCustomer}
+                        placeholder="Cliente..."
+                        className="border-r border-gray-200 dark:border-white/10 pr-3"
+                    />
+
                     <select
                         value={filters.departmentId}
                         onChange={(e) => setFilters(prev => ({ ...prev, departmentId: e.target.value }))}

@@ -19,10 +19,22 @@ function buildDateRange(startDate?: string, endDate?: string) {
 export class ReportsService {
     constructor(private prisma: PrismaService) { }
 
-    async getDashboardStats(companyId: string, startDate?: string, endDate?: string) {
+    private async getContactIdsForCustomer(companyId: string, customerId: string): Promise<string[]> {
+        const contacts = await this.prisma.contact.findMany({
+            where: { customerId, companyId },
+            select: { id: true },
+        });
+        return contacts.map(c => c.id);
+    }
+
+    async getDashboardStats(companyId: string, startDate?: string, endDate?: string, customerId?: string) {
         const dateRange = buildDateRange(startDate, endDate);
         const where: any = { companyId };
         if (dateRange) where.createdAt = dateRange;
+        if (customerId) {
+            const contactIds = await this.getContactIdsForCustomer(companyId, customerId);
+            where.contactId = { in: contactIds };
+        }
 
         const [totalTickets, resolvedTickets, openTickets, messagesCount] = await Promise.all([
             this.prisma.ticket.count({ where }),
@@ -30,7 +42,7 @@ export class ReportsService {
             this.prisma.ticket.count({ where: { ...where, status: 'OPEN' } }),
             this.prisma.message.count({
                 where: {
-                    ticket: { companyId },
+                    ticket: { companyId, ...(customerId ? { contactId: where.contactId } : {}) },
                     sentAt: where.createdAt
                 }
             }),
@@ -45,10 +57,14 @@ export class ReportsService {
         };
     }
 
-    async getAgentPerformance(companyId: string, startDate?: string, endDate?: string) {
+    async getAgentPerformance(companyId: string, startDate?: string, endDate?: string, customerId?: string) {
         const dateRange = buildDateRange(startDate, endDate);
-        const where: any = { companyId };
-        if (dateRange) where.createdAt = dateRange;
+        const ticketWhere: any = { status: 'RESOLVED' };
+        if (dateRange) ticketWhere.createdAt = dateRange;
+        if (customerId) {
+            const contactIds = await this.getContactIdsForCustomer(companyId, customerId);
+            ticketWhere.contactId = { in: contactIds };
+        }
 
         const agents = await this.prisma.user.findMany({
             where: { companyId },
@@ -57,7 +73,7 @@ export class ReportsService {
                 name: true,
                 _count: {
                     select: {
-                        assignedTickets: { where: { status: 'RESOLVED', ...where } },
+                        assignedTickets: { where: ticketWhere },
                     }
                 }
             }
@@ -100,10 +116,14 @@ export class ReportsService {
         }));
     }
 
-    async getSlaCompliance(companyId: string, startDate?: string, endDate?: string) {
+    async getSlaCompliance(companyId: string, startDate?: string, endDate?: string, customerId?: string) {
         const dateRange = buildDateRange(startDate, endDate);
         const where: any = { companyId, resolvedAt: { not: null } };
         if (dateRange) where.createdAt = dateRange;
+        if (customerId) {
+            const contactIds = await this.getContactIdsForCustomer(companyId, customerId);
+            where.contactId = { in: contactIds };
+        }
 
         const tickets = await this.prisma.ticket.findMany({
             where,
@@ -126,10 +146,14 @@ export class ReportsService {
             .map(([date, d]) => ({ date, ...d, total: d.compliant + d.breached }));
     }
 
-    async getResolutionTime(companyId: string, startDate?: string, endDate?: string) {
+    async getResolutionTime(companyId: string, startDate?: string, endDate?: string, customerId?: string) {
         const dateRange = buildDateRange(startDate, endDate);
         const where: any = { companyId, status: 'RESOLVED', resolvedAt: { not: null }, assignedUserId: { not: null } };
         if (dateRange) where.resolvedAt = dateRange;
+        if (customerId) {
+            const contactIds = await this.getContactIdsForCustomer(companyId, customerId);
+            where.contactId = { in: contactIds };
+        }
 
         const tickets = await this.prisma.ticket.findMany({
             where,

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { Skeleton } from '@/components/ui/skeleton';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Shield, ShieldCheck, ShieldPlus, Edit2, Trash2, X, Save,
@@ -48,14 +49,19 @@ export default function RolesPage() {
     const canEdit = hasPermission(user, 'roles:update');
     const canDelete = hasPermission(user, 'roles:delete');
 
-    useEffect(() => { fetchRoles(); }, []);
+    useEffect(() => {
+        const controller = new AbortController();
+        fetchRoles(controller.signal);
+        return () => controller.abort();
+    }, []);
 
-    const fetchRoles = async () => {
+    const fetchRoles = async (signal?: AbortSignal) => {
         setLoading(true);
         try {
-            const data = await rolesService.findAll();
+            const data = await rolesService.findAll(signal);
             setRoles(data);
         } catch (err: any) {
+            if (err?.name === 'CanceledError' || err?.name === 'AbortError') return;
             const msg = err.response?.data?.message || 'Erro ao carregar perfis de acesso';
             toast.error(msg);
         } finally {
@@ -169,7 +175,32 @@ export default function RolesPage() {
             {/* Grid de roles */}
             {loading ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 px-4">
-                    {[1, 2, 3].map(i => <div key={i} className="h-64 liquid-glass rounded-[2.5rem] animate-pulse" />)}
+                    {[1, 2, 3].map(i => (
+                            <div key={i} className="liquid-glass rounded-[2.5rem] p-6 space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <Skeleton className="h-10 w-10 rounded-xl shrink-0" />
+                                        <div className="space-y-2">
+                                            <Skeleton className="h-4 w-28" />
+                                            <Skeleton className="h-3 w-20" />
+                                        </div>
+                                    </div>
+                                    <Skeleton className="h-6 w-16 rounded-full" />
+                                </div>
+                                <div className="space-y-2 pt-2">
+                                    {[1, 2, 3, 4].map(j => (
+                                        <div key={j} className="flex items-center gap-2">
+                                            <Skeleton className="h-4 w-4 rounded" />
+                                            <Skeleton className="h-3 w-32" />
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="flex gap-2 pt-2">
+                                    <Skeleton className="h-8 flex-1 rounded-xl" />
+                                    <Skeleton className="h-8 w-8 rounded-xl" />
+                                </div>
+                            </div>
+                        ))}
                 </div>
             ) : filteredRoles.length === 0 ? (
                 <EmptyState

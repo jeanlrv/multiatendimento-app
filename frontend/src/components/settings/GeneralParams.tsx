@@ -44,19 +44,25 @@ const DEFAULT_PARAMS: Record<string, any> = {
     enableTicketMetrics: true,
     csat_enabled: false,
     csat_message: 'Olá! Gostaríamos de saber sua opinião sobre o atendimento que você recebeu.\n\nPor favor, avalie de 1 a 5:\n1️⃣ Péssimo\n2️⃣ Ruim\n3️⃣ Regular\n4️⃣ Bom\n5️⃣ Excelente\n\nResponda apenas com o número da sua nota.',
+    post_evaluation_message: 'Obrigado pela sua avaliação! Seu feedback é muito importante para nós. 😊',
 };
 
 // ============================================
 // Sub-componentes Utilitários
 // ============================================
-function ToggleSwitch({ enabled, onChange, disabled = false }: { enabled: boolean; onChange: (val: boolean) => void; disabled?: boolean }) {
+function ToggleSwitch({ enabled, onChange, disabled = false, label }: { enabled: boolean; onChange: (val: boolean) => void; disabled?: boolean; label?: string }) {
     return (
         <button
             type="button"
+            role="switch"
+            aria-checked={enabled}
+            aria-label={label}
+            aria-disabled={disabled}
             onClick={() => !disabled && onChange(!enabled)}
             className={`relative inline-flex h-8 w-14 items-center rounded-full transition-all duration-500 focus:outline-none focus:ring-4 focus:ring-primary/20 ${disabled ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer hover:shadow-[0_0_15px_rgba(56,189,248,0.3)]'} ${enabled ? 'bg-primary' : 'bg-slate-200 dark:bg-white/10'}`}
         >
             <span className={`inline-block h-6 w-6 transform rounded-full bg-white shadow-xl transition-transform duration-500 ease-in-out ${enabled ? 'translate-x-7 scale-110 shadow-primary/20' : 'translate-x-1'}`} />
+            <span className="sr-only">{enabled ? 'Ativo' : 'Inativo'}</span>
         </button>
     );
 }
@@ -322,6 +328,25 @@ export function GeneralParams() {
                         <p className="text-[10px] text-slate-400 font-bold italic">
                             💡 O cliente deve responder com um número de 1 a 5. A nota é registrada automaticamente.
                         </p>
+
+                        <div className="pt-3 border-t border-slate-200 dark:border-white/10">
+                            <div className="flex items-center gap-3 mb-2">
+                                <div className="p-2 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-slate-100 dark:border-white/5">
+                                    <MessageSquare size={16} className="text-emerald-500" />
+                                </div>
+                                <div>
+                                    <span className="text-sm font-black text-slate-800 dark:text-white italic">Mensagem pós-avaliação</span>
+                                    <span className="text-[10px] text-slate-400 block font-black uppercase tracking-widest opacity-70">Enviada ao cliente após ele responder a pesquisa</span>
+                                </div>
+                            </div>
+                            <textarea
+                                value={params.post_evaluation_message || ''}
+                                onChange={(e) => updateParam('post_evaluation_message', e.target.value)}
+                                rows={3}
+                                className="w-full bg-white dark:bg-gray-900 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-sm focus:ring-4 focus:ring-primary/10 outline-none transition-all resize-none font-medium text-slate-600 dark:text-slate-300"
+                                placeholder="Ex: Obrigado pela sua avaliação! Seu feedback é muito importante para nós. 😊"
+                            />
+                        </div>
                     </div>
                 )}
             </ParamSection>

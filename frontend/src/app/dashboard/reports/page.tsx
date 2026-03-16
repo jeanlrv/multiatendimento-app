@@ -11,6 +11,7 @@ import {
     Filter, Search, ArrowUpRight, MessageSquare,
     CheckCircle, BarChart3, ShieldAlert, TrendingUp, Shield, Clock
 } from 'lucide-react';
+import { CustomerSelect, CustomerOption } from '@/components/CustomerSelect';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { jsPDF } from 'jspdf';
@@ -28,10 +29,11 @@ export default function ReportsPage() {
     const [loading, setLoading] = useState(true);
     const [dateRange, setDateRange] = useState({ startDate: '', endDate: '' });
     const [auditQuery, setAuditQuery] = useState('');
+    const [selectedCustomer, setSelectedCustomer] = useState<CustomerOption | null>(null);
 
     useEffect(() => {
         fetchData();
-    }, [dateRange]);
+    }, [dateRange, selectedCustomer]);
 
     useEffect(() => {
         api.get('/reports/satisfaction-trend', { params: { days: trendDays } })
@@ -41,11 +43,14 @@ export default function ReportsPage() {
 
     const fetchData = async () => {
         setLoading(true);
-        const params = { ...dateRange };
+        const params: any = {
+            ...dateRange,
+            ...(selectedCustomer && { customerId: selectedCustomer.id }),
+        };
         const [statsResult, perfResult, auditResult, slaResult, rtResult, trendResult] = await Promise.allSettled([
             api.get('/reports/stats', { params }),
             api.get('/reports/performance', { params }),
-            api.get('/reports/audit/internal-chat', { params: { ...params, query: auditQuery } }),
+            api.get('/reports/audit/internal-chat', { params: { ...dateRange, query: auditQuery } }),
             api.get('/reports/sla-compliance', { params }),
             api.get('/reports/resolution-time', { params }),
             api.get('/reports/satisfaction-trend', { params: { days: trendDays } }),
@@ -98,7 +103,12 @@ export default function ReportsPage() {
                     <p className="text-slate-500 font-bold uppercase tracking-widest text-[10px] mt-2">Visão geral e auditoria da operação</p>
                 </div>
 
-                <div className="flex items-center gap-3 bg-white/50 dark:bg-white/5 p-2 rounded-[2rem] border border-slate-200 dark:border-white/10 shadow-xl">
+                <div className="flex flex-wrap items-center gap-3 bg-white/50 dark:bg-white/5 p-2 rounded-[2rem] border border-slate-200 dark:border-white/10 shadow-xl">
+                    <CustomerSelect
+                        value={selectedCustomer}
+                        onChange={setSelectedCustomer}
+                        placeholder="Cliente..."
+                    />
                     <div className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-800 rounded-2xl">
                         <Calendar size={14} className="text-primary" />
                         <input

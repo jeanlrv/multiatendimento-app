@@ -3,7 +3,6 @@ import { PrismaService } from '../../database/prisma.service';
 import { ChatGateway } from './chat.gateway';
 import { WhatsAppService } from '../whatsapp/whatsapp.service';
 import { AIService } from '../ai/ai.service';
-import { EvaluationsService } from '../evaluations/evaluations.service';
 import { MessageType } from '@prisma/client';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 
@@ -16,7 +15,6 @@ export class ChatService {
         private chatGateway: ChatGateway,
         @Inject(forwardRef(() => WhatsAppService)) private whatsappService: WhatsAppService,
         private aiService: AIService,
-        @Inject(forwardRef(() => EvaluationsService)) private evaluationsService: EvaluationsService,
         private eventEmitter: EventEmitter2,
     ) { }
 
@@ -38,6 +36,11 @@ export class ChatService {
     async sendMessage(ticketId: string, content: string, fromMe: boolean, type: MessageType = MessageType.TEXT, mediaUrl?: string, companyId?: string, origin: 'AGENT' | 'CLIENT' | 'AI' = 'AGENT', quotedMessageId?: string, externalId?: string) {
         this.logger.log(`Processando mensagem para o ticket: ${ticketId} (${origin})`);
 
+        // Garantir isolamento multi-tenant: companyId deve ser sempre fornecido
+        if (!companyId) {
+            this.logger.warn(`sendMessage chamado sem companyId para ticketId=${ticketId}. Possível multi-tenant breach.`);
+        }
+
         return await this.prisma.$transaction(async (tx) => {
             const message = await tx.message.create({
                 data: {
@@ -54,6 +57,7 @@ export class ChatService {
                 },
             });
 
+            // Sempre filtrar por companyId quando disponível (multi-tenancy isolation)
             const ticket = await tx.ticket.findUnique({
                 where: {
                     id: ticketId,
@@ -62,7 +66,7 @@ export class ChatService {
                 include: { contact: true }
             });
 
-            if (!ticket) throw new Error('Ticket não encontrado');
+            if (!ticket) throw new Error('Ticket não encontrado ou acesso negado');
 
             const updateData: any = {
                 updatedAt: new Date(),
@@ -178,10 +182,6 @@ export class ChatService {
     private handleIncomingClientMessage(ticket: any, content: string) {
         this.handleAIResponse(ticket.id, content).catch(err => {
             this.logger.error(`Erro no fluxo de IA: ${err.message}`);
-        });
-
-        this.evaluationsService.generateAISentimentAnalysis(ticket.companyId, ticket.id).catch(err => {
-            this.logger.error(`Erro ao disparar análise de sentimento: ${err.message}`);
         });
     }
 
@@ -443,6 +443,7 @@ export class ChatService {
                     companyId: ticket.companyId,
                     connectionId: (ticket as any).connectionId,
                     contact: ticket.contact,
+                    departmentId: ticket.departmentId ?? null,
                 });
                 this.logger.log(`IA finalizou ticket ${ticketId}`);
                 return; // Não enviar o texto do comando ao cliente
@@ -574,6 +575,7 @@ export class ChatService {
                     companyId,
                     connectionId: (ticket as any).connectionId,
                     contact: ticket.contact,
+                    departmentId: ticket.departmentId ?? null,
                 });
                 return;
             }

@@ -54,9 +54,16 @@ export class TicketsService {
         const autoDistSetting = await this.prisma.setting.findFirst({
             where: { companyId, key: 'autoDistribution' }, select: { value: true },
         });
-        const autoDistEnabled = !autoDistSetting
-            || autoDistSetting.value === 'true'
-            || autoDistSetting.value === '"true"';
+        // Normaliza o valor independente de ser salvo como string, JSON string ou boolean
+        let autoDistEnabled = !autoDistSetting;
+        if (autoDistSetting?.value !== null && autoDistSetting?.value !== undefined) {
+            try {
+                const parsed = JSON.parse(String(autoDistSetting.value));
+                autoDistEnabled = parsed === true || parsed === 'true';
+            } catch {
+                autoDistEnabled = autoDistSetting.value === 'true';
+            }
+        }
 
         if (autoDistEnabled && createTicketDto.departmentId) {
             const departmentWithUsers = await this.prisma.department.findUnique({
@@ -478,7 +485,7 @@ export class TicketsService {
         });
 
         // Emitir evento dedicado ticket.resolved (para workflows e listeners)
-        // Passa contact e connectionId diretamente (evita query redundante no onTicketResolved)
+        // Passa contact, connectionId e departmentId diretamente (evita queries redundantes)
         this.eventEmitter.emit('ticket.resolved', {
             ticketId: id,
             companyId,
@@ -486,6 +493,7 @@ export class TicketsService {
             summary: aiSummary,
             contact: ticket.contact,
             connectionId: ticket.connectionId ?? null,
+            departmentId: ticket.departmentId ?? null,
         });
 
         // Audit Log
@@ -496,11 +504,6 @@ export class TicketsService {
             entity: 'Ticket',
             entityId: id,
             changes: { summary: aiSummary }
-        });
-
-        // Disparar análise de sentimento em background
-        this.evaluationsService.generateAISentimentAnalysis(companyId, id).catch(err => {
-            this.logger.error(`Falha ao gerar análise de sentimento para ticket ${id}: ${err.message}`);
         });
 
         return resolvedTicket;
@@ -516,13 +519,14 @@ export class TicketsService {
         companyId: string;
         contact?: any;
         connectionId?: string | null;
+        departmentId?: string | null;
     }) {
         try {
-            // Se o evento já trouxe contact e connectionId (caminhos da IA), usar direto
             let contact = data.contact;
             let connectionId = data.connectionId ?? null;
+            let departmentId = data.departmentId ?? null;
 
-            // Fallback: buscar do banco se não veio no evento (resolve() manual)
+            // Fallback: buscar do banco se não veio no evento
             if (!contact || !connectionId) {
                 const ticket = await this.prisma.ticket.findUnique({
                     where: { id: data.ticketId },
@@ -531,9 +535,17 @@ export class TicketsService {
                 if (!ticket) return;
                 contact = ticket.contact;
                 connectionId = (ticket as any).connectionId;
+                departmentId = departmentId ?? (ticket as any).departmentId ?? null;
             }
 
-            await this.sendCsatIfEnabled(data.companyId, data.ticketId, contact, connectionId);
+            const csatSent = await this.sendCsatIfEnabled(data.companyId, data.ticketId, contact, connectionId, departmentId);
+
+            // Se CSAT não foi enviado, dispara sentimento como fallback imediato
+            if (!csatSent) {
+                this.evaluationsService.generateAISentimentAnalysis(data.companyId, data.ticketId).catch(err => {
+                    this.logger.warn(`[onTicketResolved] Falha na análise de sentimento para ticket ${data.ticketId}: ${err.message}`);
+                });
+            }
         } catch (err) {
             this.logger.warn(`[onTicketResolved] Falha ao processar CSAT para ticket ${data.ticketId}: ${err.message}`);
         }
@@ -550,10 +562,28 @@ export class TicketsService {
         return canDelete;
     }
 
-    private async sendCsatIfEnabled(companyId: string, ticketId: string, contact: any, connectionId: string | null) {
-        if (!contact?.phoneNumber || !connectionId) return;
+    private async sendCsatIfEnabled(companyId: string, ticketId: string, contact: any, connectionId: string | null, departmentId?: string | null): Promise<boolean> {
+        if (!contact?.phoneNumber || !connectionId) return false;
 
-        // Ler configuração CSAT — cache em memória 5 min (2 queries → 1, quase-zero após 1ª chamada)
+        // 1. Enviar mensagem de encerramento do departamento (se configurada)
+        if (departmentId) {
+            const dept = await this.prisma.department.findUnique({
+                where: { id: departmentId },
+                select: { closingMessage: true },
+            });
+            if ((dept as any)?.closingMessage) {
+                this.eventEmitter.emit('csat.pending', {
+                    companyId,
+                    ticketId,
+                    connectionId,
+                    phoneNumber: contact.phoneNumber,
+                    message: (dept as any).closingMessage,
+                });
+                this.logger.log(`Mensagem de encerramento do departamento enviada para ${contact.phoneNumber} (ticket ${ticketId})`);
+            }
+        }
+
+        // 2. Ler configuração CSAT — cache em memória 5 min
         const now = Date.now();
         let csatConf = this.csatCache.get(companyId);
         if (!csatConf || csatConf.expiresAt < now) {
@@ -563,7 +593,6 @@ export class TicketsService {
             });
             const byKey = Object.fromEntries(settings.map(s => [s.key, s.value ?? '']));
             const rawMsg = byKey['csat_message'];
-            // JSON.parse restaura a string original com newlines reais (JSON.stringify escapa \n)
             let parsedMsg: string | null = null;
             if (rawMsg) {
                 const rawStr = String(rawMsg);
@@ -582,16 +611,30 @@ export class TicketsService {
 
         if (!csatEnabled || !csatMessage) {
             this.logger.debug(`CSAT desabilitado ou sem mensagem configurada para empresa ${companyId}`);
-            return;
+            return false;
         }
 
-        // Marcar contato como aguardando resposta CSAT
+        // 3. Garantir registro de avaliação no banco (upsert mínimo — evita perda de nota CSAT)
+        await this.prisma.evaluation.upsert({
+            where: { ticketId },
+            update: {},
+            create: {
+                ticketId,
+                companyId,
+                aiSentiment: 'NEUTRAL' as any,
+                aiSentimentScore: 5,
+                aiJustification: 'Aguardando avaliação do cliente',
+                aiSummary: '',
+            },
+        });
+
+        // 4. Marcar contato como aguardando resposta CSAT
         await this.prisma.contact.update({
             where: { id: contact.id },
             data: { csatPending: true, csatTicketId: ticketId },
         });
 
-        // Emitir evento para WhatsApp service enviar a mensagem
+        // 5. Emitir evento para WhatsApp service enviar a mensagem CSAT
         this.eventEmitter.emit('csat.pending', {
             companyId,
             ticketId,
@@ -601,6 +644,7 @@ export class TicketsService {
         });
 
         this.logger.log(`CSAT agendado para contato ${contact.phoneNumber} (ticket ${ticketId})`);
+        return true;
     }
 
     async pause(companyId: string, id: string) {

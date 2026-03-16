@@ -5,7 +5,6 @@ import { ChatController } from './chat.controller';
 import { DatabaseModule } from '../../database/database.module';
 import { WhatsAppModule } from '../whatsapp/whatsapp.module';
 import { AIModule } from '../ai/ai.module';
-import { EvaluationsModule } from '../evaluations/evaluations.module';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 
@@ -14,7 +13,6 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
         DatabaseModule,
         forwardRef(() => WhatsAppModule),
         AIModule,
-        forwardRef(() => EvaluationsModule),
         JwtModule.registerAsync({
             imports: [ConfigModule],
             useFactory: async (configService: ConfigService) => ({

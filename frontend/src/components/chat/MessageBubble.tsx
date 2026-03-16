@@ -56,6 +56,18 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ msg, index, onRepl
         }
     };
 
+    // Abre URL de mídia apenas se for http/https (previne javascript: e outros schemas)
+    const openSafeUrl = (url: string) => {
+        try {
+            const parsed = new URL(url);
+            if (['http:', 'https:'].includes(parsed.protocol)) {
+                window.open(url, '_blank', 'noopener,noreferrer');
+            }
+        } catch {
+            // URL inválida — não abre
+        }
+    };
+
     return (
         <motion.div
             initial={{ opacity: 0, scale: 0.95, y: 16 }}
@@ -97,7 +109,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ msg, index, onRepl
                             src={msg.mediaUrl}
                             alt="Imagem"
                             className="max-w-full h-auto cursor-pointer hover:scale-105 transition-transform"
-                            onClick={() => window.open(msg.mediaUrl, '_blank')}
+                            onClick={() => openSafeUrl(msg.mediaUrl!)}
                             loading="lazy"
                         />
                     </div>
@@ -125,6 +137,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ msg, index, onRepl
                         >
                             <source src={msg.mediaUrl} />
                             <a href={msg.mediaUrl} target="_blank" rel="noopener noreferrer"
+                                onClick={(e) => { e.preventDefault(); openSafeUrl(msg.mediaUrl!); }}
                                 className="flex items-center gap-2 p-3 text-xs text-blue-300 underline">
                                 <Video size={14} /> Ver vídeo
                             </a>
@@ -211,19 +224,20 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ msg, index, onRepl
                         {onReply && (
                             <button
                                 onClick={() => onReply(msg)}
-                                title="Responder"
+                                title="Responder mensagem"
+                                aria-label="Responder mensagem"
                                 className="p-1.5 bg-white dark:bg-gray-800 rounded-lg shadow-xl text-primary hover:scale-110 active:scale-95 transition-all border border-primary/20"
                             >
-                                <Reply size={12} />
+                                <Reply size={12} aria-hidden="true" />
                             </button>
                         )}
                         <button
                             onClick={handleCopyText}
                             title="Copiar texto"
+                            aria-label="Copiar texto da mensagem"
                             className="p-1.5 bg-white dark:bg-gray-800 rounded-lg shadow-xl text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:scale-110 active:scale-95 transition-all border border-white/20"
                         >
-                            <Copy size={12} className="hidden" /> {/* Fallback if Copy is not imported, but it is used in handleCopyText */}
-                            <span className="text-[9px] font-black uppercase tracking-tight px-1">Copiar</span>
+                            <span className="text-[9px] font-black uppercase tracking-tight px-1" aria-hidden="true">Copiar</span>
                         </button>
                     </div>
                 )}

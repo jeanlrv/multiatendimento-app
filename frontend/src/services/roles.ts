@@ -24,8 +24,8 @@ export interface UpdateRolePayload {
 }
 
 export const rolesService = {
-    findAll: async (): Promise<Role[]> => {
-        const r = await api.get<Role[]>('/roles');
+    findAll: async (signal?: AbortSignal): Promise<Role[]> => {
+        const r = await api.get<Role[]>('/roles', { signal });
         return r.data;
     },
 

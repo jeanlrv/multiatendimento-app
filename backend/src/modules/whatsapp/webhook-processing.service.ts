@@ -1,4 +1,5 @@
 import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
+import { timingSafeEqual } from 'crypto';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../../database/prisma.service';
 import { ChatService } from '../chat/chat.service';
@@ -46,7 +47,11 @@ export class WebhookProcessingService {
 
         if (incomingToken && storedToken) {
             const decryptedToken = this.crypto.decrypt(storedToken);
-            if (incomingToken !== decryptedToken) {
+            // Comparação timing-safe previne timing attacks (evita inferir token por tempo de resposta)
+            const a = Buffer.from(incomingToken);
+            const b = Buffer.from(decryptedToken);
+            const equal = a.length === b.length && timingSafeEqual(a, b);
+            if (!equal) {
                 this.logger.warn(`Webhook Z-API rejeitado: clientToken não confere para instanceId=${instanceId}`);
                 return false;
             }
@@ -267,10 +272,44 @@ export class WebhookProcessingService {
                 if (score >= 1 && score <= 5) {
                     const csatTicketId = contact.csatTicketId;
                     if (csatTicketId) {
-                        await this.prisma.evaluation.updateMany({
-                            where: { ticketId: csatTicketId, companyId },
-                            data: { customerRating: score },
+                        // Upsert garante que a nota seja salva mesmo sem registro prévio
+                        await this.prisma.evaluation.upsert({
+                            where: { ticketId: csatTicketId },
+                            update: { customerRating: score },
+                            create: {
+                                ticketId: csatTicketId,
+                                companyId,
+                                customerRating: score,
+                                aiSentiment: 'NEUTRAL' as any,
+                                aiSentimentScore: 5,
+                                aiJustification: 'Aguardando análise de sentimento',
+                                aiSummary: '',
+                            },
                         });
+
+                        // Enviar mensagem pós-avaliação (se configurada)
+                        const resolvedTicket = await this.prisma.ticket.findUnique({
+                            where: { id: csatTicketId },
+                            select: { connectionId: true },
+                        });
+                        const postEvalSetting = await this.prisma.setting.findFirst({
+                            where: { companyId, key: 'post_evaluation_message' },
+                            select: { value: true },
+                        });
+                        if (postEvalSetting?.value && resolvedTicket?.connectionId) {
+                            let postMsg: string | null = null;
+                            const rawVal = String(postEvalSetting.value);
+                            try { postMsg = JSON.parse(rawVal); } catch { postMsg = rawVal.replace(/^"|"$/g, ''); }
+                            if (postMsg) {
+                                this.eventEmitter.emit('csat.pending', {
+                                    companyId,
+                                    ticketId: csatTicketId,
+                                    connectionId: resolvedTicket.connectionId,
+                                    phoneNumber: contact.phoneNumber,
+                                    message: postMsg,
+                                });
+                            }
+                        }
                     }
                     await this.prisma.contact.update({
                         where: { id: contact.id },

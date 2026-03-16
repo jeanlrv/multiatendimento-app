@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { DepartmentsService, Department } from '@/services/departments';
 import { WorkflowsService, WorkflowRule } from '@/services/workflows';
 import { useForm } from 'react-hook-form';
@@ -28,6 +28,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { AIAgentsService, AIAgent } from '@/services/ai-agents';
 import { toast } from 'sonner';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const departmentSchema = z.object({
     name: z.string().min(1, 'Nome é obrigatório'),
@@ -44,6 +45,7 @@ const departmentSchema = z.object({
         .default(1440),
     outOfHoursMessage: z.string().optional(),
     greetingMessage: z.string().optional(),
+    closingMessage: z.string().optional(),
     timezone: z.string().default('America/Sao_Paulo'),
     aiAgentId: z.string().optional().nullable(),
     workflowId: z.string().optional().nullable(),
@@ -91,26 +93,33 @@ export default function DepartmentsPage() {
     const [workflows, setWorkflows] = useState<WorkflowRule[]>([]);
     const [deletingId, setDeletingId] = useState<string | null>(null);
 
-    const fetchData = async () => {
+    const fetchData = async (signal?: AbortSignal) => {
         setLoading(true);
-        const [deptsResult, agentsResult, workflowsResult] = await Promise.allSettled([
-            DepartmentsService.findAll(),
-            AIAgentsService.findAll(),
-            WorkflowsService.findAll(),
-        ]);
+        try {
+            const [deptsResult, agentsResult, workflowsResult] = await Promise.allSettled([
+                DepartmentsService.findAll(signal),
+                AIAgentsService.findAll(),
+                WorkflowsService.findAll(),
+            ]);
 
-        if (deptsResult.status === 'fulfilled') {
-            setDepartments(deptsResult.value);
-        } else {
-            toast.error('Erro ao carregar departamentos');
+            if (deptsResult.status === 'fulfilled') {
+                setDepartments(deptsResult.value);
+            } else if ((deptsResult.reason as any)?.name !== 'CanceledError') {
+                toast.error('Erro ao carregar departamentos');
+            }
+
+            setAgents(agentsResult.status === 'fulfilled' ? agentsResult.value : []);
+            setWorkflows(workflowsResult.status === 'fulfilled' ? workflowsResult.value : []);
+        } finally {
+            setLoading(false);
         }
-
-        setAgents(agentsResult.status === 'fulfilled' ? agentsResult.value : []);
-        setWorkflows(workflowsResult.status === 'fulfilled' ? workflowsResult.value : []);
-        setLoading(false);
     };
 
-    useEffect(() => { fetchData(); }, []);
+    useEffect(() => {
+        const controller = new AbortController();
+        fetchData(controller.signal);
+        return () => controller.abort();
+    }, []);
 
     const handleDelete = async (e: React.MouseEvent, id: string) => {
         e.stopPropagation();
@@ -196,8 +205,23 @@ export default function DepartmentsPage() {
 
             {loading ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 relative z-10 px-4">
-                    {[1, 2, 3].map(i => (
-                        <div key={i} className="h-72 liquid-glass rounded-[3rem] animate-pulse" />
+                    {[1, 2, 3, 4, 5, 6].map(i => (
+                        <div key={i} className="liquid-glass rounded-[3rem] p-6 space-y-4">
+                            <div className="flex items-center gap-3">
+                                <Skeleton className="h-12 w-12 rounded-2xl" />
+                                <div className="flex-1 space-y-2">
+                                    <Skeleton className="h-5 w-36" />
+                                    <Skeleton className="h-3 w-24" />
+                                </div>
+                                <Skeleton className="h-6 w-16 rounded-full" />
+                            </div>
+                            <Skeleton className="h-3 w-full" />
+                            <Skeleton className="h-3 w-4/5" />
+                            <div className="flex gap-2 pt-2">
+                                <Skeleton className="h-8 w-20 rounded-2xl" />
+                                <Skeleton className="h-8 w-20 rounded-2xl" />
+                            </div>
+                        </div>
                     ))}
                 </div>
             ) : filteredDepartments.length === 0 ? (
@@ -357,7 +381,8 @@ function DepartmentFormView({
             slaFirstResponseMin: department.slaFirstResponseMin || 60,
             slaResolutionMin: department.slaResolutionMin || 1440,
             outOfHoursMessage: department.outOfHoursMessage || '',
-            greetingMessage: (department as any).greetingMessage || '',
+            greetingMessage: department.greetingMessage || '',
+            closingMessage: department.closingMessage || '',
             timezone: (department as any).timezone || 'America/Sao_Paulo',
             aiAgentId: department.aiAgentId || '',
             workflowId: department.workflowId || '',
@@ -374,6 +399,7 @@ function DepartmentFormView({
             slaResolutionMin: 1440,
             outOfHoursMessage: '',
             greetingMessage: '',
+            closingMessage: '',
             timezone: 'America/Sao_Paulo',
             aiAgentId: '',
             workflowId: '',
@@ -716,6 +742,16 @@ function DepartmentFormView({
                                     className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 outline-none focus:ring-2 focus:ring-primary/20 text-sm italic h-24 resize-none"
                                     placeholder="Ex: Olá! Nosso atendimento funciona de seg a sex, das 8h às 18h. Retornaremos em breve!"
                                 />
+                            </div>
+
+                            <div className="pt-4 border-t border-slate-100 dark:border-white/5">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 block ml-1 italic">Mensagem de Encerramento</label>
+                                <textarea
+                                    {...register('closingMessage')}
+                                    className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 outline-none focus:ring-2 focus:ring-primary/20 text-sm italic h-20 resize-none"
+                                    placeholder="Ex: Seu atendimento foi encerrado. Obrigado por entrar em contato! Ficamos à disposição."
+                                />
+                                <p className="text-[10px] text-slate-400 mt-1 ml-1">Enviada ao cliente quando o ticket é resolvido, antes da pesquisa de satisfação.</p>
                             </div>
                         </motion.div>
                     )}

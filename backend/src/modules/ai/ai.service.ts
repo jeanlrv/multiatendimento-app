@@ -11,6 +11,7 @@ import { Observable } from 'rxjs';
 import { v4 as uuidv4 } from 'uuid';
 import axios from 'axios';
 import { OpenAI, toFile } from 'openai';
+import { getCircuitBreaker } from '../../common/utils/circuit-breaker';
 
 @Injectable()
 export class AIService {
@@ -30,6 +31,13 @@ export class AIService {
         'deepseek-reasoner': 'deepseek-chat',
         'cohere:command-r-plus': 'cohere:command-r',
     };
+
+    /** Circuit breaker por provider LLM: 3 falhas → OPEN por 60s */
+    private readonly llmCircuitBreaker = getCircuitBreaker('llm', {
+        failureThreshold: 3,
+        cooldownMs: 60_000,
+        timeoutMs: 45_000, // LLMs podem demorar mais que APIs tradicionais
+    });
 
     constructor(
         private prisma: PrismaService,
@@ -537,18 +545,21 @@ export class AIService {
                 context = '';
             }
 
-            const response = await this.llmService.generateResponse(
-                finalModelId,
-                systemPrompt,
-                message,
-                history.map(h => ({
-                    role: (h.role === 'user' || h.role === 'client' ? 'user' : 'assistant') as 'user' | 'assistant',
-                    content: h.content,
-                })),
-                agent.temperature || 0.7,
-                context,
-                llmConfig?.apiKey || undefined,
-                llmConfig?.baseUrl || undefined,
+            // Circuit breaker protege contra cascata de falhas do provider LLM
+            const response = await this.llmCircuitBreaker.exec(() =>
+                this.llmService.generateResponse(
+                    finalModelId,
+                    systemPrompt,
+                    message,
+                    history.map(h => ({
+                        role: (h.role === 'user' || h.role === 'client' ? 'user' : 'assistant') as 'user' | 'assistant',
+                        content: h.content,
+                    })),
+                    agent.temperature || 0.7,
+                    context,
+                    llmConfig?.apiKey || undefined,
+                    llmConfig?.baseUrl || undefined,
+                )
             );
 
             // Sumarização progressiva: dispara assincronamente quando a conversa tem 30+ mensagens

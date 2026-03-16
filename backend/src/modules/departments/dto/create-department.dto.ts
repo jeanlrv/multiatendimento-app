@@ -81,4 +81,9 @@ export class CreateDepartmentDto {
     @IsBoolean()
     @IsOptional()
     isActive?: boolean;
+
+    @ApiProperty({ description: 'Mensagem de encerramento do atendimento (enviada ao resolver o ticket)', required: false })
+    @IsString()
+    @IsOptional()
+    closingMessage?: string;
 }
