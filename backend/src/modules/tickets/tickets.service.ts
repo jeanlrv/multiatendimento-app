@@ -602,6 +602,7 @@ export class TicketsService {
         await this.prisma.scheduledMessage.create({
             data: {
                 ticketId,
+                companyId,
                 content: message,
                 scheduledAt,
                 status: 'PENDING',
