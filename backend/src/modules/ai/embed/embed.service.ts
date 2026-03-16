@@ -29,6 +29,10 @@ export class EmbedService implements OnModuleDestroy {
         clearInterval(this.sessionCleanupInterval);
     }
 
+    /**
+     * Limpa sessões de chat embed inativas há mais de SESSION_TTL_DAYS dias.
+     * Utiliza updatedAt como critério de expiração.
+     */
     private async cleanupOldSessions() {
         const cutoff = new Date(Date.now() - SESSION_TTL_DAYS * 24 * 60 * 60 * 1000);
         try {
