@@ -110,10 +110,11 @@ export class WebhookProcessingService {
 
             const dayConfig = bh[dayOfWeek];
 
-            this.logger.debug(
+            this.logger.log(
                 `[BH Debug] Dept "${department.name}" | TZ: ${timezone} | ` +
                 `Hora local: ${parts.hour}:${parts.minute} | Dia: ${dayOfWeek} | ` +
-                `Config: ${dayConfig ? `${dayConfig.start}-${dayConfig.end}` : 'FECHADO'}`
+                `Config: ${dayConfig ? `${dayConfig.start}-${dayConfig.end}` : 'FECHADO'} | ` +
+                `BH keys: ${Object.keys(bh).join(',')}`
             );
 
             if (!dayConfig || !dayConfig.start || !dayConfig.end) {
@@ -128,11 +129,11 @@ export class WebhookProcessingService {
             const endMinutes = endH * 60 + endM;
 
             if (currentMinutes < startMinutes || currentMinutes >= endMinutes) {
-                this.logger.debug(`[BH Debug] FORA do horário: ${currentMinutes}min < ${startMinutes}min ou >= ${endMinutes}min`);
+                this.logger.log(`[BH Debug] FORA do horário: ${currentMinutes}min < ${startMinutes}min ou >= ${endMinutes}min`);
                 return department.outOfHoursMessage;
             }
 
-            this.logger.debug(`[BH Debug] DENTRO do horário comercial`);
+            this.logger.log(`[BH Debug] DENTRO do horário comercial`);
             return null;
         } catch (err) {
             this.logger.warn(`Erro ao verificar horário comercial: ${err.message}`);

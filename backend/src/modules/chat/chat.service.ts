@@ -88,7 +88,7 @@ export class ChatService {
                     this.logger.error(`Erro no envio assíncrono WhatsApp: ${err.message}`);
                 });
             } else if (!fromMe) {
-                this.handleIncomingClientMessage(ticket, content);
+                this.handleIncomingClientMessage(ticket, content, type, mediaUrl);
             }
 
             // Detecção de menções em notas internas
@@ -176,39 +176,48 @@ export class ChatService {
         }
     }
 
-    private async handleIncomingClientMessage(ticket: any, content: string) {
+    private async handleIncomingClientMessage(ticket: any, content: string, messageType?: MessageType, mediaUrl?: string) {
         try {
-            // Buscar a última mensagem para verificar tipo (áudio/imagem)
-            const lastMsg = await this.prisma.message.findFirst({
-                where: { ticketId: ticket.id },
-                orderBy: { sentAt: 'desc' },
-                select: { messageType: true, mediaUrl: true, id: true, content: true },
-            });
-
             let processedContent = content;
 
-            // Transcrição automática de áudio
-            if (lastMsg?.messageType === 'AUDIO' && lastMsg?.mediaUrl) {
+            // Transcrição automática de áudio — usa tipo recebido diretamente (sem query ao banco)
+            if (messageType === 'AUDIO' && mediaUrl) {
                 this.logger.log(`[AutoTranscribe] Transcrevendo áudio para ticket ${ticket.id}`);
-                const transcription = await this.aiService.transcribeAudio(lastMsg.mediaUrl, ticket.companyId);
-                if (transcription && !transcription.startsWith('[')) {
-                    // Atualizar mensagem no banco com a transcrição
-                    await this.prisma.message.update({
-                        where: { id: lastMsg.id },
-                        data: { transcription },
-                    });
-                    processedContent = transcription;
-                    this.logger.log(`[AutoTranscribe] Transcrição: "${transcription.substring(0, 100)}"`);
-                } else {
-                    processedContent = transcription || '[Áudio não transcrito]';
+                try {
+                    const transcription = await this.aiService.transcribeAudio(mediaUrl, ticket.companyId);
+                    if (transcription && transcription.trim().length > 0 && !transcription.startsWith('[')) {
+                        processedContent = transcription;
+                        this.logger.log(`[AutoTranscribe] Transcrição: "${transcription.substring(0, 100)}"`);
+                        // Atualizar a mensagem com a transcrição (pode falhar se a transação não commitou ainda, mas não é crítico)
+                        const lastMsg = await this.prisma.message.findFirst({
+                            where: { ticketId: ticket.id, messageType: 'AUDIO' },
+                            orderBy: { sentAt: 'desc' },
+                        });
+                        if (lastMsg) {
+                            await this.prisma.message.update({
+                                where: { id: lastMsg.id },
+                                data: { transcription },
+                            }).catch(e => this.logger.debug(`[AutoTranscribe] Não atualizou mensagem: ${e.message}`));
+                        }
+                    } else {
+                        processedContent = transcription || 'O cliente enviou um áudio. Infelizmente não foi possível transcrevê-lo.';
+                    }
+                } catch (transcribeErr) {
+                    this.logger.error(`[AutoTranscribe] Falha na transcrição: ${transcribeErr.message}`);
+                    processedContent = 'O cliente enviou um áudio. Infelizmente não foi possível transcrevê-lo no momento.';
                 }
             }
 
-            // Análise multimodal de imagem
-            if (lastMsg?.messageType === 'IMAGE' && lastMsg?.mediaUrl) {
+            // Análise multimodal de imagem — usa tipo recebido diretamente
+            if (messageType === 'IMAGE' && mediaUrl) {
                 this.logger.log(`[AutoVision] Processando imagem para ticket ${ticket.id}`);
-                await this.handleAIResponseMultimodal(ticket.id, processedContent, lastMsg.mediaUrl);
-                return;
+                try {
+                    await this.handleAIResponseMultimodal(ticket.id, processedContent, mediaUrl);
+                    return;
+                } catch (visionErr) {
+                    this.logger.error(`[AutoVision] Falha: ${visionErr.message}. Processando como texto.`);
+                    // Fallback: processar como texto normal
+                }
             }
 
             await this.handleAIResponse(ticket.id, processedContent);
@@ -681,6 +690,18 @@ export class ChatService {
             }
 
             if (finalizeMatchPost) {
+                // Enviar despedida antes de resolver (alinhado com handleAIResponse)
+                const dept = ticket.department;
+                const closingMsg = (dept as any)?.closingMessage;
+                if (closingMsg) {
+                    await this.sendMessage(ticketId, closingMsg, true, MessageType.TEXT, undefined, companyId, 'AI');
+                } else {
+                    await this.sendMessage(
+                        ticketId,
+                        'Foi um prazer atendê-lo! Se precisar de algo mais, estamos à disposição. 😊',
+                        true, MessageType.TEXT, undefined, companyId, 'AI'
+                    );
+                }
                 await this.prisma.ticket.update({
                     where: { id: ticketId },
                     data: { status: 'RESOLVED', resolvedAt: new Date(), closedAt: new Date() },
@@ -692,6 +713,7 @@ export class ChatService {
                     contact: ticket.contact,
                     departmentId: ticket.departmentId ?? null,
                 });
+                this.logger.log(`IA finalizou ticket ${ticketId} pós-transferência (despedida enviada)`);
                 return;
             }
 
@@ -713,12 +735,36 @@ export class ChatService {
      */
     private getDeptLocalDateTime(timezone: string | undefined): { deptTimezone: string; dateStr: string; timeStr: string } {
         const deptTimezone = timezone || 'America/Sao_Paulo';
-        const nowLocal = new Date(new Date().toLocaleString('en-US', { timeZone: deptTimezone }));
-        return {
-            deptTimezone,
-            dateStr: nowLocal.toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
-            timeStr: nowLocal.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-        };
+        try {
+            const formatter = new Intl.DateTimeFormat('pt-BR', {
+                timeZone: deptTimezone,
+                weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+                hour: '2-digit', minute: '2-digit',
+            });
+            const formatted = formatter.format(new Date());
+            // Formato: "segunda-feira, 16 de março de 2026 15:47"
+            const dateTimeParts = formatted.split(/,\s*| \u00e0s /); // Pode variar por implementação
+            const timeFormatter = new Intl.DateTimeFormat('pt-BR', {
+                timeZone: deptTimezone,
+                hour: '2-digit', minute: '2-digit',
+            });
+            const dateFormatter = new Intl.DateTimeFormat('pt-BR', {
+                timeZone: deptTimezone,
+                weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+            });
+            return {
+                deptTimezone,
+                dateStr: dateFormatter.format(new Date()),
+                timeStr: timeFormatter.format(new Date()),
+            };
+        } catch {
+            const nowLocal = new Date(new Date().toLocaleString('en-US', { timeZone: deptTimezone }));
+            return {
+                deptTimezone,
+                dateStr: nowLocal.toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
+                timeStr: nowLocal.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+            };
+        }
     }
 
     /** Retorna true se o departamento estiver fora do horário comercial */
@@ -748,10 +794,11 @@ export class ChatService {
 
             const dayConfig = bh[dayOfWeek];
 
-            this.logger.debug(
-                `[BH-AI Debug] Dept "${department.name}" | TZ: ${timezone} | ` +
+            this.logger.log(
+                `[BH-AI] Dept "${department.name}" | TZ: ${timezone} | ` +
                 `Hora: ${parts.hour}:${parts.minute} | Dia: ${dayOfWeek} | ` +
-                `Config: ${dayConfig ? `${dayConfig.start}-${dayConfig.end}` : 'FECHADO'}`
+                `Config: ${dayConfig ? `${dayConfig.start}-${dayConfig.end}` : 'FECHADO'} | ` +
+                `BH keys: ${Object.keys(bh).join(',')}`
             );
 
             if (!dayConfig?.start || !dayConfig?.end) return true; // dia fechado
@@ -761,7 +808,9 @@ export class ChatService {
             const outside = cur < sh * 60 + sm || cur >= eh * 60 + em;
 
             if (outside) {
-                this.logger.debug(`[BH-AI Debug] FORA do horário: ${cur}min não está entre ${sh * 60 + sm}-${eh * 60 + em}`);
+                this.logger.log(`[BH-AI] FORA do horário: ${cur}min não está entre ${sh * 60 + sm}-${eh * 60 + em}`);
+            } else {
+                this.logger.log(`[BH-AI] DENTRO do horário comercial`);
             }
             return outside;
         } catch (e) {
