@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Radio, Send, Users, Plus, X, Play, Pause, Trash2, CheckCircle2, XCircle, Clock, ChevronRight, MessageSquare } from 'lucide-react';
+import { Radio, Send, Users, Plus, X, Play, Pause, Trash2, CheckCircle2, XCircle, Clock, ChevronRight, MessageSquare, Loader2 } from 'lucide-react';
 import { EmptyState } from '@/components/EmptyState';
 import { Skeleton } from '@/components/ui/skeleton';
 import { api } from '@/services/api';
