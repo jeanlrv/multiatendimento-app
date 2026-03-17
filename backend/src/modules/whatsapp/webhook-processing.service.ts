@@ -281,8 +281,10 @@ export class WebhookProcessingService {
                         phoneNumber,
                         name: contactName,
                         profilePicture: payload.senderPhoto || null,
-                        company: { connect: { id: companyId } },
-                        ...({ customerId } as any),
+
+
+                        companyId,
+                        customerId: customerId,
                     },
                 });
             } else {
@@ -292,7 +294,7 @@ export class WebhookProcessingService {
                     );
                     await this.prisma.contact.update({
                         where: { id: contact.id },
-                        data: { ...({ customerId } as any) },
+                        data: { customerId: customerId },
                     });
                 }
                 if (payload.senderPhoto && contact.profilePicture !== payload.senderPhoto) {
