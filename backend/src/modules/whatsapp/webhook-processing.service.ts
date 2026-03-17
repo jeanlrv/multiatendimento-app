@@ -420,7 +420,7 @@ export class WebhookProcessingService {
 
                 if (outOfHoursMsg) {
                     await this.chatService.sendMessage(ticket.id, outOfHoursMsg, true, 'TEXT', undefined, companyId, 'AGENT');
-                } else {
+                } else if (ticket.mode !== 'AI') {
                     const greeting = department.greetingMessage
                         || `Olá! Seu atendimento foi iniciado no setor ${department.name}. Aguarde, em breve alguém irá te ajudar.`;
                     await this.chatService.sendMessage(ticket.id, greeting, true, MessageType.TEXT, undefined, companyId, 'AGENT');

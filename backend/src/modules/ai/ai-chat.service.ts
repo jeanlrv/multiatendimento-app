@@ -780,4 +780,38 @@ export class AIChatService {
             return "[Erro na transcrição automática do áudio]";
         }
     }
+
+    /**
+     * Gera uma transcrição (descrição em texto) para uma imagem usando o LLM Multimodal.
+     * Útil para injetar no histórico (RAG) e dar contexto visual às conversas.
+     */
+    async describeImage(companyId: string, agentId: string, base64Image: string): Promise<string> {
+        try {
+            const agent = await this.prisma.aIAgent.findFirst({ where: { id: agentId, companyId } });
+            if (!agent || !agent.isActive) return '[Imagem sem descrição]';
+
+            const modelId = agent.modelId || 'gpt-4o-mini';
+            const companyConfigs = await this.providerConfigService.getDecryptedForCompany(companyId);
+            const llmProviderId = this.detectProviderFromModelId(modelId);
+            const llmConfig = companyConfigs.get(llmProviderId);
+
+            const prompt = "Descreva de forma detalhada o que tem nesta imagem enviada pelo cliente. Sua resposta será salva no histórico da conversa como memória visual para te ajudar. Evite enrolação, descreva o conteúdo objetivamente.";
+            
+            const response = await this.llmService.generateMultimodalResponse(
+                modelId,
+                'Você é um assistente especialista em visão computacional.',
+                prompt,
+                [base64Image],
+                [],
+                0.3,
+                llmConfig?.apiKey || undefined,
+                llmConfig?.baseUrl || undefined,
+            );
+
+            return response || '[Imagem analisada, mas sem descrição detalhada gerada]';
+        } catch (error) {
+            this.logger.error(`Erro ao descrever imagem: ${error.message}`);
+            return '[Erro ao analisar o conteúdo da imagem]';
+        }
+    }
 }

@@ -88,7 +88,7 @@ export class ChatService {
                     this.logger.error(`Erro no envio assíncrono WhatsApp: ${err.message}`);
                 });
             } else if (!fromMe) {
-                this.handleIncomingClientMessage(ticket, content, type, mediaUrl);
+                this.handleIncomingClientMessage(ticket, content, type, mediaUrl, message.id);
             }
 
             // Detecção de menções em notas internas
@@ -176,7 +176,7 @@ export class ChatService {
         }
     }
 
-    private async handleIncomingClientMessage(ticket: any, content: string, messageType?: MessageType, mediaUrl?: string) {
+    private async handleIncomingClientMessage(ticket: any, content: string, messageType?: MessageType, mediaUrl?: string, messageId?: string) {
         try {
             let processedContent = content;
 
@@ -212,7 +212,32 @@ export class ChatService {
             if (messageType === 'IMAGE' && mediaUrl) {
                 this.logger.log(`[AutoVision] Processando imagem para ticket ${ticket.id}`);
                 try {
-                    await this.handleAIResponseMultimodal(ticket.id, processedContent, mediaUrl);
+                    const ticketFull = await this.prisma.ticket.findUnique({
+                        where: { id: ticket.id },
+                        include: { department: true }
+                    });
+                    const agentId = ticketFull?.department?.aiAgentId;
+                    
+                    const axios = require('axios');
+                    const response = await axios.get(mediaUrl, { responseType: 'arraybuffer' });
+                    const buffer = Buffer.from(response.data);
+                    const ext = mediaUrl.split('.').pop()?.toLowerCase() || 'jpeg';
+                    const dataUri = `data:image/${ext};base64,${buffer.toString('base64')}`;
+
+                    if (agentId) {
+                        const transcription = await this.aiService.describeImage(ticket.companyId, agentId, dataUri);
+                        processedContent = `[Imagem do cliente: ${transcription}]`;
+                        
+                        // Atualizar a mensagem no banco
+                        if (messageId) {
+                             await this.prisma.message.update({
+                                  where: { id: messageId },
+                                  data: { transcription: processedContent }
+                             }).catch(e => this.logger.debug(`[AutoVision] Não atualizou mensagem: ${e.message}`));
+                        }
+                    }
+
+                    await this.handleAIResponseMultimodal(ticket.id, processedContent, dataUri);
                     return;
                 } catch (visionErr) {
                     this.logger.error(`[AutoVision] Falha: ${visionErr.message}. Processando como texto.`);
@@ -281,11 +306,11 @@ export class ChatService {
                 .filter(m => m.content !== content)
                 // Remove mensagens de sistema de transferência do histórico enviado à IA
                 // para evitar que a nova IA adote a identidade do agente anterior
-                .filter(m => !isTransferSystemMsg(m.content))
+                .filter(m => !isTransferSystemMsg(m.content || ''))
                 .reverse()
                 .map(m => ({
                     role: m.fromMe ? 'assistant' : 'user',
-                    content: m.content
+                    content: m.transcription || m.content || ''
                 }));
 
             // Buscar departamentos disponíveis para injetar instruções de roteamento
@@ -585,7 +610,7 @@ export class ChatService {
                 .reverse()
                 .map(m => ({
                     role: m.fromMe ? 'assistant' : 'user',
-                    content: m.content,
+                    content: m.transcription || m.content || '',
                 }));
 
             const prompt = content && content !== '[Imagem]'
@@ -653,9 +678,9 @@ export class ChatService {
             });
 
             const history = messages
-                .filter(m => !m.content.startsWith('Um momento, estou direcionando') && !m.content.startsWith('Você foi encaminhado'))
+                .filter(m => !(m.content || '').startsWith('Um momento, estou direcionando') && !(m.content || '').startsWith('Você foi encaminhado'))
                 .reverse()
-                .map(m => ({ role: m.fromMe ? 'assistant' : 'user', content: m.content }));
+                .map(m => ({ role: m.fromMe ? 'assistant' : 'user', content: m.transcription || m.content || '' }));
 
             // Contexto de transferência injetado no sufixo do sistema (não exibido ao cliente)
             const { deptTimezone, dateStr, timeStr } = this.getDeptLocalDateTime((ticket.department as any)?.timezone);

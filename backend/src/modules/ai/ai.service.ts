@@ -85,6 +85,10 @@ export class AIService {
         return this.chatService.transcribeAudio(mediaUrl, companyId);
     }
 
+    describeImage(companyId: string, agentId: string, base64Image: string) {
+        return this.chatService.describeImage(companyId, agentId, base64Image);
+    }
+
     // ── Usage delegation ──────────────────────────────────────────────────────
 
     getUsage(companyId: string) {

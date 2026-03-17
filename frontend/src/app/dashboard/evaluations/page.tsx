@@ -36,6 +36,7 @@ interface Evaluation {
 interface Message {
     id: string;
     content: string;
+    transcription?: string;
     fromMe: boolean;
     sentAt: string;
     type: string;
@@ -263,7 +264,7 @@ function DiagnosticModal({ ev, onClose }: { ev: Evaluation; onClose: () => void 
                                                                 ? 'bg-primary text-white rounded-br-sm'
                                                                 : 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-bl-sm'
                                                         }`}>
-                                                            <p className="leading-relaxed">{msg.content}</p>
+                                                            <p className="leading-relaxed whitespace-pre-line">{msg.transcription || msg.content}</p>
                                                             <p className={`text-[9px] mt-1 ${msg.fromMe ? 'text-white/60' : 'text-gray-400'}`}>
                                                                 {new Date(msg.sentAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                                                             </p>

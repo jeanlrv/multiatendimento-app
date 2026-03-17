@@ -29,10 +29,10 @@ export class EvaluationsService {
         });
     }
 
-    async generateAISentimentAnalysis(companyId: string, ticketId: string) {
+    async generateAISentimentAnalysis(companyId: string, ticketId: string, force: boolean = false) {
         // Evitar chamadas duplicadas à IA: reutilizar análise gerada nos últimos 2 minutos
         const recent = await this.prisma.evaluation.findUnique({ where: { ticketId } });
-        if (recent?.aiSentiment && recent.createdAt > new Date(Date.now() - 2 * 60 * 1000)) {
+        if (!force && recent?.aiSentiment && recent.createdAt > new Date(Date.now() - 2 * 60 * 1000)) {
             this.logger.debug(`Análise recente reutilizada para ticket ${ticketId}`);
             return recent;
         }
@@ -190,13 +190,7 @@ export class EvaluationsService {
         if (!payload.ticketId || !payload.companyId) return;
         this.logger.log(`Re-analisando sentimento após CSAT (nota ${payload.customerRating}/5) para ticket ${payload.ticketId}`);
 
-        // Forçar re-análise (ignorar cache de 2min): zeramos o aiSentiment temporariamente
-        await this.prisma.evaluation.updateMany({
-            where: { ticketId: payload.ticketId, companyId: payload.companyId },
-            data: { aiSentiment: null as any },
-        });
-
-        this.generateAISentimentAnalysis(payload.companyId, payload.ticketId).catch(err => {
+        this.generateAISentimentAnalysis(payload.companyId, payload.ticketId, true).catch(err => {
             this.logger.error(`Falha na re-análise pós-CSAT para ticket ${payload.ticketId}: ${err.message}`);
         });
     }
