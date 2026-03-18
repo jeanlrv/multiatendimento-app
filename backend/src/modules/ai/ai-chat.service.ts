@@ -20,10 +20,16 @@ export class AIChatService {
 
     /** Model routing: downgrade para modelo econômico em queries simples */
     private readonly MODEL_DOWNGRADE: Record<string, string> = {
+        'gpt-5.4': 'gpt-5.4-mini',
+        'gpt-5.4-mini': 'gpt-5.4-nano',
         'gpt-4o': 'gpt-4o-mini',
         'gpt-4.1': 'gpt-4.1-mini',
-        'claude-sonnet-4-20250514': 'claude-3-5-haiku-20241022',
+        'claude-opus-4-6': 'claude-haiku-4-5',
+        'claude-sonnet-4-6': 'claude-haiku-4-5',
+        'claude-sonnet-4-20250514': 'claude-haiku-4-5',
         'claude-3-5-sonnet-20241022': 'claude-3-5-haiku-20241022',
+        'gemini-2.5-pro': 'gemini-2.5-flash',
+        'gemini-2.5-flash': 'gemini-2.5-flash-lite',
         'gemini-1.5-pro': 'gemini-2.0-flash',
         'mistral-large-latest': 'mistral-small-latest',
         'deepseek-reasoner': 'deepseek-chat',
@@ -43,8 +49,12 @@ export class AIChatService {
 
     /** Tamanho máximo de contexto por modelo (em chars ≈ tokens × 3.5) */
     private readonly MODEL_CONTEXT_CHARS: Record<string, number> = {
-        'gpt-4o-mini': 128000 * 3, 'gpt-4o': 128000 * 3,
+        'gpt-5.4': 1047576 * 3, 'gpt-5.4-mini': 1047576 * 3, 'gpt-5.4-nano': 1047576 * 3,
+        'gpt-5.3-instant': 1047576 * 3, 'o4-mini': 200000 * 3,
+        'gpt-4o-mini': 128000 * 3, 'gpt-4o': 128000 * 3, 'o3-mini': 200000 * 3,
+        'claude-opus-4-6': 1000000 * 3, 'claude-sonnet-4-6': 1000000 * 3, 'claude-haiku-4-5': 200000 * 3,
         'claude-3-5-sonnet-20241022': 200000 * 3, 'claude-3-5-haiku-20241022': 200000 * 3,
+        'gemini-2.5-pro': 1048576 * 3, 'gemini-2.5-flash': 1048576 * 3, 'gemini-2.5-flash-lite': 1048576 * 3,
         'gemini-2.0-flash': 1000000 * 3, 'gemini-1.5-pro': 1000000 * 3,
         'deepseek-chat': 64000 * 3, 'deepseek-reasoner': 64000 * 3,
     };
@@ -784,16 +794,28 @@ export class AIChatService {
     /**
      * Gera uma transcrição (descrição em texto) para uma imagem usando o LLM Multimodal.
      * Útil para injetar no histórico (RAG) e dar contexto visual às conversas.
+     * Caso o modelo principal do agente não suporte visão (ex: DeepSeek), busca
+     * automaticamente qualquer outro provider vision disponível na empresa (OpenAI/Gemini).
      */
     async describeImage(companyId: string, agentId: string, base64Image: string): Promise<string> {
+        const { isMultimodalModel } = await import('./engine/llm-provider.factory');
+        
         try {
             const agent = await this.prisma.aIAgent.findFirst({ where: { id: agentId, companyId } });
             if (!agent || !agent.isActive) return '[Imagem sem descrição]';
 
-            const modelId = agent.modelId || 'gpt-4o-mini';
+            const originalModelId = agent.modelId || 'gpt-4o-mini';
+            let modelId = originalModelId;
             const companyConfigs = await this.providerConfigService.getDecryptedForCompany(companyId);
-            const llmProviderId = this.detectProviderFromModelId(modelId);
-            const llmConfig = companyConfigs.get(llmProviderId);
+
+            // 1. Verifica se o modelo atual suporta visão
+            let llmProviderId = this.detectProviderFromModelId(modelId);
+            let llmConfig = companyConfigs.get(llmProviderId);
+
+            if (!isMultimodalModel(modelId)) {
+                this.logger.warn(`Modelo ${modelId} não é multimodal. Imagem ignorada pela IA na empresa ${companyId}.`);
+                return '[O modelo de IA atual não possui suporte a visão. Imagem ignorada.]';
+            }
 
             const prompt = "Descreva de forma detalhada o que tem nesta imagem enviada pelo cliente. Sua resposta será salva no histórico da conversa como memória visual para te ajudar. Evite enrolação, descreva o conteúdo objetivamente.";
             

@@ -8,9 +8,14 @@ export class AIMetricsService {
 
     /** Custo estimado por 1.000 tokens de entrada (USD) */
     private readonly COST_INPUT: Record<string, number> = {
-        'gpt-4o-mini': 0.00015, 'gpt-4o': 0.005,
+        'gpt-5.4': 0.01, 'gpt-5.4-mini': 0.00015, 'gpt-5.4-nano': 0.00008,
+        'gpt-5.3-instant': 0.00012, 'o4-mini': 0.0011,
+        'gpt-4o-mini': 0.00015, 'gpt-4o': 0.005, 'o3-mini': 0.0011,
+        'claude-opus-4-6': 0.015, 'claude-sonnet-4-6': 0.003, 'claude-haiku-4-5': 0.0008,
         'claude-3-5-sonnet-20241022': 0.003, 'claude-3-5-haiku-20241022': 0.0008,
         'claude-3-opus-20240229': 0.015,
+        'gemini-3.1-pro': 0.00125, 'gemini-3.1-flash-lite': 0.0001, 'gemini-3.0-flash': 0.00015,
+        'gemini-2.5-pro': 0.00125, 'gemini-2.5-flash': 0.00015, 'gemini-2.5-flash-lite': 0.0001,
         'gemini-2.0-flash': 0.0001, 'gemini-1.5-pro': 0.00125,
         'deepseek-chat': 0.00027, 'deepseek-reasoner': 0.00055,
         'llama-3.1-8b-instant': 0.00005, 'llama-3.1-70b-versatile': 0.00059,
@@ -19,9 +24,14 @@ export class AIMetricsService {
 
     /** Custo estimado por 1.000 tokens de saída (USD) */
     private readonly COST_OUTPUT: Record<string, number> = {
-        'gpt-4o-mini': 0.0006, 'gpt-4o': 0.015,
+        'gpt-5.4': 0.03, 'gpt-5.4-mini': 0.0006, 'gpt-5.4-nano': 0.0003,
+        'gpt-5.3-instant': 0.0005, 'o4-mini': 0.0044,
+        'gpt-4o-mini': 0.0006, 'gpt-4o': 0.015, 'o3-mini': 0.0044,
+        'claude-opus-4-6': 0.075, 'claude-sonnet-4-6': 0.015, 'claude-haiku-4-5': 0.004,
         'claude-3-5-sonnet-20241022': 0.015, 'claude-3-5-haiku-20241022': 0.004,
         'claude-3-opus-20240229': 0.075,
+        'gemini-3.1-pro': 0.005, 'gemini-3.1-flash-lite': 0.0004, 'gemini-3.0-flash': 0.0006,
+        'gemini-2.5-pro': 0.005, 'gemini-2.5-flash': 0.0006, 'gemini-2.5-flash-lite': 0.0004,
         'gemini-2.0-flash': 0.0004, 'gemini-1.5-pro': 0.005,
         'deepseek-chat': 0.00110, 'deepseek-reasoner': 0.00219,
         'llama-3.1-8b-instant': 0.00008, 'llama-3.1-70b-versatile': 0.00079,

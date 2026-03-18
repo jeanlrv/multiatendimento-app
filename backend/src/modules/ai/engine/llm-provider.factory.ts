@@ -19,16 +19,35 @@ export interface LLMProviderConfig {
  */
 export const MULTIMODAL_MODELS = [
     // OpenAI
-    'gpt-4o',
-    'gpt-4o-mini',
+    'gpt-5.4',
+    'gpt-5.4-mini',
+    'gpt-5.4-nano',
+    'gpt-5.3-instant',
     'gpt-4.1',
     'gpt-4.1-mini',
+    'gpt-4o',
+    'gpt-4o-mini',
+    'o4-mini',
     'o3-mini',
     // Gemini
+    'gemini-3.1-pro',
+    'gemini-3.1-flash-lite',
+    'gemini-3.0-flash',
+    'gemini-2.5-pro',
+    'gemini-2.5-flash',
+    'gemini-2.5-flash-lite',
     'gemini-2.0-flash',
     'gemini-2.0-flash-lite',
-    'gemini-1.5-flash',
-    'gemini-1.5-pro',
+    'google/gemini-2.0-flash-exp:free',
+    // Anthropic (Vision)
+    'claude-opus-4-6',
+    'claude-sonnet-4-6',
+    'claude-haiku-4-5',
+    'claude-sonnet-4-20250514',
+    'claude-3-5-sonnet-20241022',
+    'claude-3-5-haiku-20241022',
+    // xAI
+    'grok-2-vision-latest',
 ];
 
 /**
@@ -48,10 +67,15 @@ export const LLM_PROVIDERS: LLMProviderConfig[] = [
         name: 'OpenAI',
         envKey: 'OPENAI_API_KEY',
         models: [
-            { id: 'gpt-4o-mini', name: 'GPT-4o Mini (Rápido & Econômico)', contextWindow: 128000 },
-            { id: 'gpt-4o', name: 'GPT-4o (Poderoso & Preciso)', contextWindow: 128000 },
-            { id: 'gpt-4.1-mini', name: 'GPT-4.1 Mini', contextWindow: 1047576 },
+            { id: 'gpt-5.4', name: 'GPT-5.4 (Flagship)', contextWindow: 1047576 },
+            { id: 'gpt-5.4-mini', name: 'GPT-5.4 Mini (Rápido & Visão)', contextWindow: 1047576 },
+            { id: 'gpt-5.4-nano', name: 'GPT-5.4 Nano (Ultra Econômico & Visão)', contextWindow: 1047576 },
+            { id: 'gpt-5.3-instant', name: 'GPT-5.3 Instant (Baixa Latência)', contextWindow: 1047576 },
             { id: 'gpt-4.1', name: 'GPT-4.1', contextWindow: 1047576 },
+            { id: 'gpt-4.1-mini', name: 'GPT-4.1 Mini', contextWindow: 1047576 },
+            { id: 'gpt-4o', name: 'GPT-4o', contextWindow: 128000 },
+            { id: 'gpt-4o-mini', name: 'GPT-4o Mini', contextWindow: 128000 },
+            { id: 'o4-mini', name: 'O4 Mini (Raciocínio)', contextWindow: 200000 },
             { id: 'o3-mini', name: 'O3 Mini (Raciocínio)', contextWindow: 200000 },
         ],
     },
@@ -60,9 +84,11 @@ export const LLM_PROVIDERS: LLMProviderConfig[] = [
         name: 'Anthropic',
         envKey: 'ANTHROPIC_API_KEY',
         models: [
-            { id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4', contextWindow: 200000 },
-            { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet', contextWindow: 200000 },
-            { id: 'claude-3-5-haiku-20241022', name: 'Claude 3.5 Haiku (Rápido)', contextWindow: 200000 },
+            { id: 'claude-opus-4-6', name: 'Claude Opus 4.6 (Mais Inteligente)', contextWindow: 1000000 },
+            { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6 (Equilibrado)', contextWindow: 1000000 },
+            { id: 'claude-haiku-4-5', name: 'Claude Haiku 4.5 (Rápido & Econômico)', contextWindow: 200000 },
+            { id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4 (Legado)', contextWindow: 200000 },
+            { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet (Legado)', contextWindow: 200000 },
         ],
     },
     {
@@ -70,9 +96,13 @@ export const LLM_PROVIDERS: LLMProviderConfig[] = [
         name: 'Google Gemini',
         envKey: 'GEMINI_API_KEY',
         models: [
-            { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', contextWindow: 1048576 },
-            { id: 'gemini-2.0-flash-lite', name: 'Gemini 2.0 Flash Lite (Econômico)', contextWindow: 1048576 },
-            { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', contextWindow: 2097152 },
+            { id: 'gemini-3.1-pro', name: 'Gemini 3.1 Pro (Preview)', contextWindow: 2097152 },
+            { id: 'gemini-3.1-flash-lite', name: 'Gemini 3.1 Flash Lite (Preview)', contextWindow: 1048576 },
+            { id: 'gemini-3.0-flash', name: 'Gemini 3.0 Flash', contextWindow: 1048576 },
+            { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro (Mais Avançado)', contextWindow: 1048576 },
+            { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash (Rápido & Inteligente)', contextWindow: 1048576 },
+            { id: 'gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash Lite (Econômico)', contextWindow: 1048576 },
+            { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash (Legado)', contextWindow: 1048576 },
         ],
     },
     {
