@@ -36,6 +36,7 @@ export const EMBEDDING_PROVIDERS: EmbeddingProviderConfig[] = [
             { id: 'all-MiniLM-L6-v2', name: 'all-MiniLM-L6-v2 (Leve ~25MB, estável, inglês)', dimensions: 384 },
             { id: 'bge-small-en-v1.5', name: 'BGE Small EN v1.5 (Leve ~25MB, alta qualidade, inglês)', dimensions: 384 },
             { id: 'multilingual-e5-large', name: 'Multilingual E5 Large (PT-BR, requer ≥1GB RAM)', dimensions: 1024 },
+            { id: 'clip-vit-base-patch32', name: 'CLIP ViT-B/32 (Image Embedding Local)', dimensions: 512 },
         ],
     },
     {
@@ -323,29 +324,32 @@ export class EmbeddingProviderFactory implements OnModuleInit {
         'all-MiniLM-L6-v2': 'fast-all-MiniLM-L6-v2',
         'bge-small-en-v1.5': 'fast-bge-small-en-v1.5',
         'multilingual-e5-large': 'fast-multilingual-e5-large',
+        'clip-vit-base-patch32': 'fast-clip-vit-base-patch32',
         // Compatibilidade com IDs antigos (Xenova/)
         'Xenova/all-MiniLM-L6-v2': 'fast-all-MiniLM-L6-v2',
         'Xenova/bge-micro-v2': 'fast-all-MiniLM-L6-v2',
     };
 
     /**
-     * Retorna (ou cria e cacheia) uma instância FlagEmbedding do fastembed.
+     * Retorna (ou cria e cacheia) uma instância FlagEmbedding ou ImageEmbedding do fastembed.
      * Usa onnxruntime-node (binários nativos Linux) — sem WASM, sem SharedArrayBuffer.
      */
     private async getOrCreateFastEmbedModel(modelId: string): Promise<any> {
         const fastModelId = this.NATIVE_MODEL_MAP[modelId] || 'fast-all-MiniLM-L6-v2';
+        const isImageModel = fastModelId.includes('clip');
 
         if (this.fastEmbedCache.has(fastModelId)) {
             return this.fastEmbedCache.get(fastModelId);
         }
 
-        const { FlagEmbedding } = await import('fastembed');
+        const { FlagEmbedding, ImageEmbedding } = await import('fastembed');
         const cacheDir = this.configService.get<string>('FASTEMBED_CACHE_PATH') || '/tmp/fastembed_cache';
         const timeoutMs = parseInt(this.configService.get<string>('FASTEMBED_TIMEOUT_MS') || '300000', 10);
 
-        this.logger.log(`[NativeEmbed] Inicializando fastembed modelo "${fastModelId}" (cache: ${cacheDir}, timeout: ${timeoutMs}ms)`);
+        this.logger.log(`[NativeEmbed] Inicializando fastembed modelo "${fastModelId}" (tipo: ${isImageModel ? 'IMAGEM' : 'TEXTO'}, cache: ${cacheDir})`);
 
-        const initPromise = FlagEmbedding.init({
+        const Klass = isImageModel ? ImageEmbedding : FlagEmbedding;
+        const initPromise = (Klass as any).init({
             model: fastModelId as any,
             cacheDir,
             showDownloadProgress: false,
@@ -353,32 +357,35 @@ export class EmbeddingProviderFactory implements OnModuleInit {
 
         const timeoutPromise = new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error(
-                `fastembed init timeout após ${timeoutMs}ms. Modelo "${fastModelId}" é grande demais para download em tempo real. ` +
-                `Use all-MiniLM-L6-v2 (~25MB) ou configure FASTEMBED_TIMEOUT_MS para aumentar o timeout.`
+                `fastembed init timeout após ${timeoutMs}ms. Modelo "${fastModelId}" é grande demais para download em tempo real.`
             )), timeoutMs)
         );
 
         const model = await Promise.race([initPromise, timeoutPromise]);
 
         this.fastEmbedCache.set(fastModelId, model);
-        this.logger.log(`[NativeEmbed] Modelo "${fastModelId}" carregado via onnxruntime-node.`);
+        this.logger.log(`[NativeEmbed] Modelo "${fastModelId}" carregado.`);
         return model;
     }
 
     private createNativeEmbeddings(modelId: string): Embeddings {
+        const isImageModel = modelId.includes('clip');
         return {
             embedDocuments: async (docs: string[]): Promise<number[][]> => {
-                const flagModel = await this.getOrCreateFastEmbedModel(modelId);
+                const model = await this.getOrCreateFastEmbedModel(modelId);
                 const results: number[][] = [];
-                for await (const batch of flagModel.embed(docs, 32)) {
+                // Se for imagem, espera-se que docs contenha caminhos locais ou base64
+                const iterator = isImageModel ? model.embed(docs) : model.embed(docs, 32);
+                for await (const batch of iterator) {
                     for (const vec of batch) results.push(Array.from(vec));
                 }
                 return results;
             },
             embedQuery: async (query: string): Promise<number[]> => {
-                const flagModel = await this.getOrCreateFastEmbedModel(modelId);
+                const model = await this.getOrCreateFastEmbedModel(modelId);
                 const results: number[][] = [];
-                for await (const batch of flagModel.embed([query], 1)) {
+                const iterator = isImageModel ? model.embed([query]) : model.embed([query], 1);
+                for await (const batch of iterator) {
                     for (const vec of batch) results.push(Array.from(vec));
                 }
                 return results[0];
