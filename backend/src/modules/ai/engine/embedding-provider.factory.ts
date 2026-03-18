@@ -342,7 +342,9 @@ export class EmbeddingProviderFactory implements OnModuleInit {
             return this.fastEmbedCache.get(fastModelId);
         }
 
-        const { FlagEmbedding, ImageEmbedding } = await import('fastembed');
+        const fastembed = await import('fastembed');
+        const FlagEmbedding = fastembed.FlagEmbedding;
+        const ImageEmbedding = (fastembed as any).ImageEmbedding;
         const cacheDir = this.configService.get<string>('FASTEMBED_CACHE_PATH') || '/tmp/fastembed_cache';
         const timeoutMs = parseInt(this.configService.get<string>('FASTEMBED_TIMEOUT_MS') || '300000', 10);
 
