@@ -425,7 +425,7 @@ export class LLMProviderFactory {
      * Remove o prefixo do provider do modelId (ex: "groq:llama-3.1-8b" → "llama-3.1-8b")
      */
     private stripPrefix(modelId: string): string {
-        const prefixes = ['groq:', 'openrouter:', 'ollama:', 'azure:', 'together:', 'lmstudio:', 'perplexity:', 'xai:', 'cohere:', 'huggingface:', 'anythingllm:'];
+        const prefixes = ['openai:', 'gemini:', 'anthropic:', 'groq:', 'openrouter:', 'ollama:', 'azure:', 'together:', 'lmstudio:', 'perplexity:', 'xai:', 'cohere:', 'huggingface:', 'anythingllm:', 'deepseek:'];
         for (const prefix of prefixes) {
             if (modelId.startsWith(prefix)) return modelId.substring(prefix.length);
         }
