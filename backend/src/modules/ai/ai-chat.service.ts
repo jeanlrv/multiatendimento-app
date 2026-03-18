@@ -124,13 +124,18 @@ export class AIChatService {
     private allocateTokenBudget(message: string): { chunkLimit: number } {
         const charCount = message.length;
         const wordCount = message.trim().split(/\s+/).length;
+        
+        const isFiller = /^(ok|obrigado|obrigada|valeu|sim|n[ãa]o|tchau|pode finalizar.*?)$/i.test(message.trim());
+        if (isFiller || charCount < 10) return { chunkLimit: 0 };
+
         if (charCount > 300 || wordCount > 50) return { chunkLimit: 25 };
         if (charCount > 100 || wordCount > 15) return { chunkLimit: 20 };
         return { chunkLimit: 15 };
     }
 
     private guardContextOverflow(systemPrompt: string, context: string, history: any[], message: string, modelId: string): string {
-        const maxChars = this.MODEL_CONTEXT_CHARS[modelId] ?? this.DEFAULT_MAX_CONTEXT_CHARS;
+        const pureModelId = modelId.includes(':') ? modelId.split(':').pop()! : modelId;
+        const maxChars = this.MODEL_CONTEXT_CHARS[pureModelId] ?? this.DEFAULT_MAX_CONTEXT_CHARS;
         const fixedChars = systemPrompt.length + message.length +
             history.reduce((s, h) => s + (h.content?.length || 0), 0);
         const budgetForContext = maxChars * 0.65 - fixedChars;
@@ -162,7 +167,7 @@ export class AIChatService {
                     ? `Resumo anterior: ${existingSummary}\n\nMensagens recentes:\n`
                     : 'Mensagens da conversa:\n';
                 const historyText = history
-                    .slice(-20)
+                    .slice(-10)
                     .map(m => `${m.role === 'user' ? 'Usuário' : 'Assistente'}: ${m.content}`)
                     .join('\n');
 
@@ -298,8 +303,8 @@ export class AIChatService {
                 for (const [key, cached] of this.semanticCache.entries()) {
                     if (key.startsWith(cacheKeyPrefix)) {
                         if (Date.now() - cached.timestamp > this.CACHE_TTL_MS) { this.semanticCache.delete(key); continue; }
-                        if (this.vectorStoreService.cosineSimilarity(promptEmbedding, cached.embedding) > 0.95) {
-                            this.logger.log(`[Cache HIT] Similarity > 0.95 para agente ${agent.name}`);
+                        if (this.vectorStoreService.cosineSimilarity(promptEmbedding, cached.embedding) > 0.92) {
+                            this.logger.log(`[Cache HIT] Similarity > 0.92 para agente ${agent.name}`);
                             return cached.response;
                         }
                     }
@@ -362,7 +367,7 @@ export class AIChatService {
                 )
             );
 
-            if (conversationId && history.length >= 30) {
+            if (conversationId && history.length >= 15) {
                 this.triggerProgressiveSummarization(conversationId, companyId, agentId, history, conversationSummary);
             }
 
@@ -418,8 +423,8 @@ export class AIChatService {
                     for (const [key, cached] of this.semanticCache.entries()) {
                         if (key.startsWith(cacheKeyPrefix)) {
                             if (Date.now() - cached.timestamp > this.CACHE_TTL_MS) { this.semanticCache.delete(key); continue; }
-                            if (this.vectorStoreService.cosineSimilarity(promptEmbedding, cached.embedding) > 0.95) {
-                                this.logger.log(`[Cache HIT] Semantic similarity > 0.95 (MM) para agente ${agent.name}`);
+                            if (this.vectorStoreService.cosineSimilarity(promptEmbedding, cached.embedding) > 0.92) {
+                                this.logger.log(`[Cache HIT] Semantic similarity > 0.92 (MM) para agente ${agent.name}`);
                                 return cached.response;
                             }
                         }
@@ -498,8 +503,8 @@ export class AIChatService {
                     for (const [key, cached] of this.semanticCache.entries()) {
                         if (key.startsWith(cacheKeyPrefix)) {
                             if (Date.now() - cached.timestamp > this.CACHE_TTL_MS) { this.semanticCache.delete(key); continue; }
-                            if (this.vectorStoreService.cosineSimilarity(promptEmbedding, cached.embedding) > 0.95) {
-                                this.logger.log(`[Cache HIT/Stream] Similarity > 0.95 para agente ${agent.name}`);
+                            if (this.vectorStoreService.cosineSimilarity(promptEmbedding, cached.embedding) > 0.92) {
+                                this.logger.log(`[Cache HIT/Stream] Similarity > 0.92 para agente ${agent.name}`);
                                 observer.next({ data: { type: 'chunk', content: cached.response } });
                                 observer.next({ data: { type: 'end', content: '' } });
                                 observer.complete();

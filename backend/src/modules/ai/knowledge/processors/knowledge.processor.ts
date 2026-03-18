@@ -65,14 +65,14 @@ export class KnowledgeProcessor extends WorkerHost {
 
             this.logger.log(`[Processador] Texto extraído com sucesso: ${text.length} caracteres${pageCount ? `, ${pageCount} páginas` : ''}`);
 
-            // 4. Chunking adaptativo — documentos longos usam chunks maiores
+            // 4. Chunking adaptativo — otimizado para não ofuscar o RAG Context
             const isLongDoc = text.length > 50000;
             const splitter = new RecursiveCharacterTextSplitter({
-                chunkSize: isLongDoc ? 2000 : 1500,
-                chunkOverlap: 400,   // Aumentado de 300 → 400 para melhor coerência semântica
+                chunkSize: isLongDoc ? 1200 : 1000,
+                chunkOverlap: 200,
             });
             const chunks = await splitter.splitText(text);
-            this.logger.log(`[Processador] Documento ${documentId} dividido em ${chunks.length} chunks (tamanho: ${isLongDoc ? 2000 : 1500}, overlap: 400)`);
+            this.logger.log(`[Processador] Documento ${documentId} dividido em ${chunks.length} chunks (tamanho: ${isLongDoc ? 1200 : 1000}, overlap: 200)`);
 
             // 5. Gera embeddings usando o provider da base de conhecimento
             let embeddingProvider = document.knowledgeBase?.embeddingProvider || 'native';

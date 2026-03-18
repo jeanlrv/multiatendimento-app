@@ -207,7 +207,7 @@ export class VectorStoreService {
             for (const candidate of sorted) {
                 const isDuplicate = deduplicated.some(existing => {
                     const overlap = this.jaccardSimilarity(candidate.content, existing.content);
-                    return overlap > 0.7;
+                    return overlap > 0.85;
                 });
                 if (!isDuplicate) {
                     deduplicated.push(candidate);
@@ -267,7 +267,7 @@ export class VectorStoreService {
                     for (const candidate of merged) {
                         const isDuplicate = final.some(existing => {
                             const overlap = this.jaccardSimilarity(candidate.content, existing.content);
-                            return overlap > 0.7;
+                            return overlap > 0.85;
                         });
                         if (!isDuplicate) {
                             final.push(candidate);
