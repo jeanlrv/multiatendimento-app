@@ -81,8 +81,8 @@ export const usersService = {
         await api.delete(`/users/${id}`);
     },
 
-    getMentionable: async (): Promise<{ id: string; name: string }[]> => {
-        const response = await api.get<{ id: string; name: string }[]>('/users/mentionable');
+    getMentionable: async (): Promise<{ id: string; name: string; email: string; avatar?: string }[]> => {
+        const response = await api.get<{ id: string; name: string; email: string; avatar?: string }[]>('/users/mentionable');
         return response.data;
     },
 

@@ -24,7 +24,7 @@ import { useNotificationSound } from '@/hooks/useNotificationSound';
 import { SentimentIndicator } from '@/components/chat/SentimentIndicator';
 import { MessageBubble } from '@/components/chat/MessageBubble';
 import { BulkActionBar } from '@/components/tickets/BulkActionBar';
-import { ticketsService, type Ticket, type Message } from '@/services/tickets';
+import { ticketsService, type Ticket, type Message, type Tag } from '@/services/tickets';
 import { usersService } from '@/services/users';
 import CustomerProfilePanel from '@/components/customers/CustomerProfilePanel';
 import { TicketCard } from '@/components/tickets/TicketCard';
@@ -143,7 +143,7 @@ export default function TicketsPage() {
     const [macroFilter, setMacroFilter] = useState('');
     const [macroSelectedIndex, setMacroSelectedIndex] = useState(0);
 
-    const [availableTags, setAvailableTags] = useState<{ id: string, name: string, color: string }[]>([]);
+    const [availableTags, setAvailableTags] = useState<Tag[]>([]);
     const [tagBarSearch, setTagBarSearch] = useState('');
     const [showTagBarDropdown, setShowTagBarDropdown] = useState(false);
     const tagBarRef = useRef<HTMLDivElement>(null);
@@ -253,7 +253,7 @@ export default function TicketsPage() {
             // Pré-selecionar departamentos do usuário (não-admins), se ainda não houver filtro manual
             const hasReadAll = user?.permissions?.includes('TICKETS_READ_ALL');
             if (!hasReadAll && user?.departments?.length) {
-                const myDeptIds = user.departments.map((d: { id: string }) => d.id);
+                const myDeptIds = (user.departments as any[]).map(d => d.departmentId || d.id);
                 setAdvancedFilters(prev => {
                     // Só inicializa se ainda não foi alterado manualmente
                     if (prev.departments.length === 0) {
@@ -281,8 +281,8 @@ export default function TicketsPage() {
                 api.get(`/tickets/${ticketId}`),
                 api.get(`/chat/${ticketId}/messages`),
             ]);
-            setSelectedTicket(ticketRes.data);
-            setMessages(messagesRes.data);
+            setSelectedTicket(ticketRes.data as Ticket);
+            setMessages(messagesRes.data as Message[]);
         } catch (error) {
             console.error('Erro ao carregar mensagens:', error);
         } finally {
@@ -294,7 +294,8 @@ export default function TicketsPage() {
         setLoadingHistory(true);
         try {
             const response = await api.get(`/tickets?contactId=${contactId}&status=RESOLVED`);
-            setContactHistory(response.data?.data || response.data || []);
+            const historyData = response.data?.data || response.data || [];
+            setContactHistory(historyData as Ticket[]);
         } catch (error) {
             console.error('Erro ao carregar histórico:', error);
         } finally {
@@ -1556,8 +1557,9 @@ export default function TicketsPage() {
                                                 key={m}
                                                 onClick={async () => {
                                                     try {
-                                                        await ticketsService.update(selectedTicket.id, { mode: m });
-                                                        setSelectedTicket(prev => prev ? { ...prev, mode: m as any } : null);
+                                                        const targetMode = m as 'AI' | 'HUMANO';
+                                                        await ticketsService.update(selectedTicket.id, { mode: targetMode });
+                                                        setSelectedTicket(prev => prev ? { ...prev, mode: targetMode } : null);
                                                         toast.success(`Modo ${label}`);
                                                     } catch (error) {
                                                         toast.error('Erro ao alternar modo');
@@ -2580,7 +2582,7 @@ export default function TicketsPage() {
                                             <CustomerProfilePanel
                                                 contactId={selectedTicket.contactId || selectedTicket.contact?.id || ''}
                                                 onNavigateToTicket={(ticketId) => {
-                                                    const t = tickets.find((tk: any) => tk.id === ticketId);
+                                                    const t = tickets.find((tk: Ticket) => tk.id === ticketId);
                                                     if (t) setSelectedTicket(t);
                                                 }}
                                             />

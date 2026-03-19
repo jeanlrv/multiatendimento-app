@@ -1,9 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { Smile, Meh, Frown, Sparkles } from 'lucide-react';
-
-import { type Message } from '@/services/tickets';
+import { Smile, Meh, Frown } from 'lucide-react';
 
 export interface SentimentIndicatorProps {
     sentiment?: string | null;
@@ -53,7 +51,7 @@ export function SentimentIndicator({ sentiment, score, className = '' }: Sentime
             <span className={`text-[10px] font-black uppercase tracking-widest ${config.textColor}`}>
                 {config.label}
             </span>
-            {score && (
+            {score !== null && score !== undefined && (
                 <div className="flex items-center gap-0.5 ml-1">
                     {[1, 2, 3, 4, 5].map((star) => (
                         <div
