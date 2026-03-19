@@ -1,5 +1,42 @@
 import { api } from './api';
 
+export interface Message {
+    id: string;
+    content: string;
+    fromMe: boolean;
+    sentAt: string;
+    messageType: 'TEXT' | 'IMAGE' | 'AUDIO' | 'VIDEO' | 'DOCUMENT' | 'STICKER' | 'INTERNAL';
+    mediaUrl?: string;
+    status?: string;
+    origin?: 'AGENT' | 'CLIENT' | 'AI';
+    transcription?: string;
+    quotedMessageId?: string;
+    quotedMessage?: {
+        content: string;
+        fromMe: boolean;
+    };
+    isEdited?: boolean;
+    isDeleted?: boolean;
+    replyToId?: string;
+    threadId?: string;
+    senderUserId?: string;
+    senderAiAgentId?: string;
+    senderUser?: {
+        name: string;
+        avatar?: string;
+    };
+    senderAiAgent?: {
+        name: string;
+        avatar?: string;
+    };
+}
+
+export interface Tag {
+    id: string;
+    name: string;
+    color: string;
+}
+
 export interface BulkActionParams {
     ids: string[];
     action: 'RESOLVE' | 'PAUSE' | 'ASSIGN' | 'DELETE';
@@ -24,32 +61,54 @@ export interface TicketFilters {
 export interface Ticket {
     id: string;
     status: string;
-    companyId: string;
-    departmentId?: string;
-    assignedUserId?: string;
-    contactId: string;
-    subject?: string;
-    priority?: string;
-    mode?: string;
-    unreadMessages?: number;
-    lastMessageAt?: string;
-    createdAt: string;
+    priority: string;
+    subject: string;
     updatedAt: string;
-    contact?: {
+    createdAt: string;
+    contactId: string;
+    companyId: string;
+    contact: {
         id?: string;
         name: string;
         phoneNumber: string;
-        profilePicture?: string;
         information?: string;
+        profilePicture?: string;
     };
-    department?: {
+    department: {
         id: string;
         name: string;
         emoji?: string;
         color?: string;
+        slaFirstResponseMin?: number | null;
+        slaResolutionMin?: number | null;
     };
-    tags?: any[];
-    evaluation?: any;
+    firstResponseAt?: string | null;
+    resolvedAt?: string | null;
+    mode: 'AI' | 'HUMANO' | 'HIBRIDO';
+    unreadMessages: number;
+    notes?: string;
+    evaluation?: {
+        aiSentiment?: string;
+        aiSentimentScore?: number;
+        aiSummary?: string;
+        aiJustification?: string;
+    };
+    assignedUser?: {
+        id: string;
+        name: string;
+        avatar?: string;
+    };
+    tags?: {
+        id: string;
+        tag: {
+            id: string;
+            name: string;
+            color: string;
+        };
+    }[];
+    lastMessageAt?: string;
+    realtimeSentiment?: string | null;
+    realtimeSentimentScore?: number | null;
     [key: string]: any;
 }
 

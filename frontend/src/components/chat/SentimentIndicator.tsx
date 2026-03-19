@@ -3,9 +3,11 @@
 import { motion } from 'framer-motion';
 import { Smile, Meh, Frown, Sparkles } from 'lucide-react';
 
+import { type Message } from '@/services/tickets';
+
 export interface SentimentIndicatorProps {
-    sentiment?: string;
-    score?: number;
+    sentiment?: string | null;
+    score?: number | null;
     className?: string;
 }
 

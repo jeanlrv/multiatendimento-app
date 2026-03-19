@@ -3,13 +3,14 @@
 import { motion } from 'framer-motion';
 import { CheckCheck, User } from 'lucide-react';
 import { SlaIndicator } from '@/components/chat/SlaIndicator';
+import { type Ticket } from '@/services/tickets';
 import { translateStatus } from '@/lib/translations';
 
 interface TicketCardProps {
-    ticket: any; // Mantendo any aqui para compatibilidade com o objeto pesado do Prisma, mas tratando propriedades internas
-    selectedTicket: any | null;
+    ticket: Ticket;
+    selectedTicket: Ticket | null;
     selectedTicketIds: string[];
-    onSelect: (ticket: any) => void;
+    onSelect: (ticket: Ticket) => void;
     onToggleSelection: (id: string, e: React.MouseEvent) => void;
 }
 

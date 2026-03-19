@@ -24,7 +24,7 @@ import { useNotificationSound } from '@/hooks/useNotificationSound';
 import { SentimentIndicator } from '@/components/chat/SentimentIndicator';
 import { MessageBubble } from '@/components/chat/MessageBubble';
 import { BulkActionBar } from '@/components/tickets/BulkActionBar';
-import { ticketsService } from '@/services/tickets';
+import { ticketsService, type Ticket, type Message } from '@/services/tickets';
 import { usersService } from '@/services/users';
 import CustomerProfilePanel from '@/components/customers/CustomerProfilePanel';
 import { TicketCard } from '@/components/tickets/TicketCard';
@@ -32,81 +32,9 @@ import { ShortcutsModal } from '@/components/tickets/ShortcutsModal';
 import { ScheduleMessageModal } from '@/components/tickets/ScheduleMessageModal';
 import { MergeTicketModal } from '@/components/tickets/MergeTicketModal';
 
-interface Message {
-    id: string;
-    content: string;
-    fromMe: boolean;
-    sentAt: string;
-    messageType: 'TEXT' | 'IMAGE' | 'AUDIO' | 'VIDEO' | 'DOCUMENT' | 'STICKER' | 'INTERNAL';
-    mediaUrl?: string;
-    status?: string;
-    origin?: 'AGENT' | 'CLIENT' | 'AI';
-    transcription?: string;
-    quotedMessageId?: string;
-    quotedMessage?: {
-        content: string;
-        fromMe: boolean;
-    };
-    isEdited?: boolean;
-    isDeleted?: boolean;
-    replyToId?: string;
-    threadId?: string;
-    senderUserId?: string;
-    senderAiAgentId?: string;
-    senderUser?: {
-        name: string;
-        avatar?: string;
-    };
-    senderAiAgent?: {
-        name: string;
-        avatar?: string;
-    };
-}
+// As interfaces Message e Ticket agora são importadas de @/services/tickets
 
-interface Ticket {
-    id: string;
-    status: string;
-    priority: string;
-    subject: string;
-    updatedAt: string;
-    contactId: string;
-    contact: {
-        id?: string;
-        name: string;
-        phoneNumber: string;
-        information?: string;
-        profilePicture?: string;
-    };
-    department: {
-        id: string;
-        name: string;
-        emoji?: string;
-        color?: string;
-    };
-    mode: 'AI' | 'HUMANO' | 'HIBRIDO';
-    unreadMessages: number;
-    notes?: string;
-    evaluation?: {
-        aiSentiment?: string;
-        aiSentimentScore?: number;
-        aiSummary?: string;
-        aiJustification?: string;
-    };
-    assignedUser?: {
-        id: string;
-        name: string;
-        avatar?: string;
-    };
-    tags?: {
-        tag: {
-            id: string;
-            name: string;
-            color: string;
-        }
-    }[];
-    realtimeSentimentScore?: number | null;
-    realtimeSentiment?: string | null;
-}
+// A interface Ticket agora é importada de @/services/tickets
 
 
 /** Aplica formatação estilo WhatsApp no conteúdo de texto das mensagens */
@@ -299,7 +227,8 @@ export default function TicketsPage() {
                 departmentId: advancedFilters.departments.join(',')
             }, signal);
             // Backend retorna paginado: { data: Ticket[], meta: {...} }
-            setTickets(Array.isArray(response) ? response : (response?.data ?? []));
+            const ticketData = Array.isArray(response) ? response : (response?.data ?? []);
+            setTickets(ticketData as Ticket[]);
         } catch (error: any) {
             if (error?.name === 'CanceledError' || error?.name === 'AbortError') return;
             console.error('Erro ao buscar tickets:', error);

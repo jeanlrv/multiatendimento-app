@@ -4,18 +4,13 @@ import React, { useEffect, useState } from 'react';
 import { Clock, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
-interface TicketWithSla {
-    createdAt: string;
-    firstResponseAt?: string | null;
-    resolvedAt?: string | null;
-    status: string;
-    department: {
-        slaFirstResponseMin?: number | null;
-        slaResolutionMin?: number | null;
-    };
-}
+import { type Ticket } from '@/services/tickets';
 
-export function SlaIndicator({ ticket }: { ticket: TicketWithSla }) {
+/**
+ * Interface mínima necessária para o SLA, 
+ * agora usando a estrutura oficial do Ticket centralizado.
+ */
+export function SlaIndicator({ ticket }: { ticket: Ticket }) {
     const [now, setNow] = useState(new Date());
 
     // Update current time every minute to refresh SLA timers if ticket is open

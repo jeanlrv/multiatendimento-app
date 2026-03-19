@@ -6,22 +6,7 @@ import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { CustomAudioPlayer } from './CustomAudioPlayer';
 
-interface Message {
-    id: string;
-    content: string;
-    fromMe: boolean;
-    sentAt: string;
-    messageType: string;
-    mediaUrl?: string;
-    status?: string;
-    origin?: 'AGENT' | 'CLIENT' | 'AI';
-    transcription?: string;
-    quotedMessageId?: string;
-    quotedMessage?: {
-        content: string;
-        fromMe: boolean;
-    };
-}
+import { type Message } from '@/services/tickets';
 
 interface MessageBubbleProps {
     msg: Message;
