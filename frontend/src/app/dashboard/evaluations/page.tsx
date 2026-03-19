@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     Star, MessageSquare, TrendingUp, TrendingDown, Minus, User, Calendar, Bot,
     Eye, X, Hash, Phone, Building2, UserCheck, Clock, BarChart2, Smile, Meh, Frown,
-    MessageCircle, ChevronDown, ChevronUp, Download, Filter
+    MessageCircle, ChevronDown, ChevronUp, Download, Filter, FileDown
 } from 'lucide-react';
 
 interface Evaluation {
@@ -116,8 +116,9 @@ function DiagnosticModal({ ev, onClose }: { ev: Evaluation; onClose: () => void 
                     animate={{ scale: 1, opacity: 1, y: 0 }}
                     exit={{ scale: 0.92, opacity: 0, y: 20 }}
                     transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-                    className="bg-white dark:bg-gray-900 rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90dvh] overflow-y-auto"
+                    className="bg-white dark:bg-gray-900 rounded-3xl shadow-2xl w-full max-w-5xl max-h-[90dvh] overflow-y-auto"
                     onClick={e => e.stopPropagation()}
+                    id="diagnostic-print-area"
                 >
                     {/* Header */}
                     <div className="sticky top-0 z-10 bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm border-b border-gray-100 dark:border-gray-800 px-6 py-4 flex items-start justify-between rounded-t-3xl">
@@ -127,14 +128,128 @@ function DiagnosticModal({ ev, onClose }: { ev: Evaluation; onClose: () => void 
                                 <Hash size={11} />#{ev.ticket.id.slice(-8).toUpperCase()} · {ev.ticket.subject || 'Sem assunto'}
                             </p>
                         </div>
-                        <button onClick={onClose} className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
-                            <X size={18} />
-                        </button>
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => {
+                                    const printContent = document.getElementById('diagnostic-print-area');
+                                    if (!printContent) return;
+                                    const printWindow = window.open('', '_blank');
+                                    if (!printWindow) return;
+                                    printWindow.document.write(`
+                                        <!DOCTYPE html>
+                                        <html>
+                                        <head>
+                                            <title>Diagnóstico - #${ev.ticket.id.slice(-8).toUpperCase()}</title>
+                                            <style>
+                                                * { margin: 0; padding: 0; box-sizing: border-box; }
+                                                body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; padding: 40px; color: #1a1a1a; line-height: 1.6; }
+                                                .print-header { text-align: center; margin-bottom: 32px; padding-bottom: 20px; border-bottom: 2px solid #e5e7eb; }
+                                                .print-header h1 { font-size: 22px; font-weight: 800; color: #111; }
+                                                .print-header p { font-size: 12px; color: #666; margin-top: 4px; }
+                                                .meta-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+                                                .meta-card { padding: 14px; border: 1px solid #e5e7eb; border-radius: 12px; background: #f9fafb; }
+                                                .meta-label { font-size: 9px; text-transform: uppercase; letter-spacing: 1px; color: #9ca3af; font-weight: 700; }
+                                                .meta-value { font-size: 13px; font-weight: 700; margin-top: 4px; }
+                                                .meta-sub { font-size: 10px; color: #6b7280; }
+                                                .section { margin-bottom: 20px; padding: 18px; border: 1px solid #e5e7eb; border-radius: 14px; }
+                                                .section-title { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; font-weight: 800; margin-bottom: 10px; }
+                                                .section-body { font-size: 13px; color: #374151; }
+                                                .sentiment-positive { background: #ecfdf5; border-color: #a7f3d0; }
+                                                .sentiment-positive .section-title { color: #059669; }
+                                                .sentiment-negative { background: #fef2f2; border-color: #fecaca; }
+                                                .sentiment-negative .section-title { color: #dc2626; }
+                                                .sentiment-neutral { background: #fffbeb; border-color: #fde68a; }
+                                                .sentiment-neutral .section-title { color: #d97706; }
+                                                .ai-section { background: #eff6ff; border-color: #bfdbfe; }
+                                                .ai-section .section-title { color: #2563eb; }
+                                                .summary-section { background: #faf5ff; border-color: #e9d5ff; }
+                                                .summary-section .section-title { color: #7c3aed; }
+                                                .csat-section { background: #fefce8; border-color: #fde68a; }
+                                                .csat-section .section-title { color: #ca8a04; }
+                                                .stars { color: #f59e0b; font-size: 18px; }
+                                                .score-bar { height: 8px; border-radius: 4px; background: #e5e7eb; margin-top: 8px; overflow: hidden; }
+                                                .score-fill { height: 100%; border-radius: 4px; }
+                                                .score-fill.green { background: #10b981; }
+                                                .score-fill.amber { background: #f59e0b; }
+                                                .score-fill.red { background: #ef4444; }
+                                                .msg-container { margin-top: 20px; }
+                                                .msg-title { font-size: 12px; font-weight: 700; color: #374151; margin-bottom: 10px; }
+                                                .msg { padding: 8px 14px; border-radius: 12px; margin-bottom: 6px; font-size: 12px; max-width: 75%; }
+                                                .msg-sent { background: #2563eb; color: white; margin-left: auto; border-bottom-right-radius: 4px; }
+                                                .msg-received { background: #f3f4f6; color: #1f2937; border-bottom-left-radius: 4px; }
+                                                .msg-time { font-size: 9px; opacity: 0.6; margin-top: 3px; }
+                                                .footer { margin-top: 32px; text-align: center; font-size: 10px; color: #9ca3af; padding-top: 16px; border-top: 1px solid #e5e7eb; }
+                                            </style>
+                                        </head>
+                                        <body>
+                                            <div class="print-header">
+                                                <h1>Diagnóstico do Atendimento</h1>
+                                                <p>#${ev.ticket.id.slice(-8).toUpperCase()} · ${ev.ticket.subject || 'Sem assunto'} · ${new Date(ev.createdAt).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
+                                            </div>
+                                            <div class="meta-grid">
+                                                <div class="meta-card">
+                                                    <div class="meta-label">Cliente</div>
+                                                    <div class="meta-value">${ev.ticket.contact.name}</div>
+                                                    <div class="meta-sub">${ev.ticket.contact.phoneNumber}</div>
+                                                </div>
+                                                <div class="meta-card">
+                                                    <div class="meta-label">Departamento</div>
+                                                    <div class="meta-value">${ev.ticket.department.emoji} ${ev.ticket.department.name}</div>
+                                                </div>
+                                                <div class="meta-card">
+                                                    <div class="meta-label">Atendente</div>
+                                                    <div class="meta-value">${ev.ticket.assignedUser?.name || 'Não atribuído'}</div>
+                                                </div>
+                                                <div class="meta-card">
+                                                    <div class="meta-label">Encerrado em</div>
+                                                    <div class="meta-value">${closedAt ? new Date(closedAt).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</div>
+                                                </div>
+                                            </div>
+                                            <div class="section sentiment-${ev.aiSentiment.toLowerCase()}">
+                                                <div class="section-title">Sentimento IA: ${SENTIMENT_CONFIG[ev.aiSentiment]?.label || ev.aiSentiment} — Score ${ev.aiSentimentScore?.toFixed(1) ?? '—'}/10</div>
+                                                <div class="score-bar"><div class="score-fill ${ev.aiSentimentScore >= 7 ? 'green' : ev.aiSentimentScore >= 4 ? 'amber' : 'red'}" style="width: ${Math.max(0, Math.min(100, (ev.aiSentimentScore / 10) * 100))}%"></div></div>
+                                            </div>
+                                            <div class="section ai-section">
+                                                <div class="section-title">Análise da IA</div>
+                                                <div class="section-body">${ev.aiJustification || 'Sem análise disponível.'}</div>
+                                            </div>
+                                            ${ev.ticket.summary ? `<div class="section summary-section"><div class="section-title">Resumo do Atendimento</div><div class="section-body">${ev.ticket.summary}</div></div>` : ''}
+                                            <div class="section csat-section">
+                                                <div class="section-title">Avaliação do Cliente (CSAT)</div>
+                                                <div class="section-body">
+                                                    ${ev.customerRating ? `<span class="stars">${'★'.repeat(ev.customerRating)}${'☆'.repeat(5 - ev.customerRating)}</span> ${ev.customerRating}/5` : 'Cliente não avaliou este atendimento.'}
+                                                    ${ev.customerFeedback ? `<br/><em style="margin-top:8px;display:block;color:#6b7280">"${ev.customerFeedback}"</em>` : ''}
+                                                </div>
+                                            </div>
+                                            ${messages.length > 0 ? `
+                                                <div class="msg-container">
+                                                    <div class="msg-title">Histórico de Mensagens (${messages.length})</div>
+                                                    ${messages.map(msg => `<div style="display:flex;justify-content:${msg.fromMe ? 'flex-end' : 'flex-start'}"><div class="msg ${msg.fromMe ? 'msg-sent' : 'msg-received'}">${msg.transcription || msg.content}<div class="msg-time">${new Date(msg.sentAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div></div></div>`).join('')}
+                                                </div>
+                                            ` : ''}
+                                            <div class="footer">Gerado automaticamente · ${new Date().toLocaleString('pt-BR')}</div>
+                                        </body>
+                                        </html>
+                                    `);
+                                    printWindow.document.close();
+                                    printWindow.focus();
+                                    setTimeout(() => { printWindow.print(); printWindow.close(); }, 500);
+                                }}
+                                className="flex items-center gap-1.5 px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-xl text-xs font-bold transition-colors shadow-md shadow-blue-500/20 print:hidden"
+                                title="Exportar como PDF"
+                            >
+                                <FileDown size={14} />
+                                Salvar PDF
+                            </button>
+                            <button onClick={onClose} className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors print:hidden">
+                                <X size={18} />
+                            </button>
+                        </div>
                     </div>
 
-                    <div className="p-6 space-y-5">
+                    <div className="p-6 md:p-8 space-y-5">
                         {/* Ticket Meta */}
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                             <div className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-2xl">
                                 <Phone size={14} className="text-gray-400 shrink-0" />
                                 <div className="min-w-0">

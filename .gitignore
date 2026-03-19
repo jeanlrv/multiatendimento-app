@@ -112,3 +112,12 @@ backend/debug_login.ts
 backend/reset_admin.ts
 check_docs3.js
 check_docs4.js
+
+############################################
+# DEBUG TEXT & LINTS
+############################################
+*err.txt
+*errors.txt
+*lint.txt
+prompt_out.txt
+temp*.txt

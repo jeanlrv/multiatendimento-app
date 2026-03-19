@@ -303,20 +303,50 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect, On
     }
 
     @OnEvent('ticket.status_changed')
-    handleTicketStatusChanged(data: { ticketId: string; companyId: string; ticket?: any; newStatus?: string }) {
-        if (data?.companyId) {
-            this.emitTicketUpdated(data.companyId, {
-                ticketId: data.ticketId,
-                newStatus: data.newStatus,
-                ticket: data.ticket,
-            });
+    async handleTicketStatusChanged(data: { ticketId: string; companyId: string; ticket?: any; newStatus?: string }) {
+        if (!data?.companyId) return;
+
+        // Busca o ticket completo para que o frontend receba todos os dados necessários
+        let fullTicket = data.ticket;
+        if (!fullTicket?.contact || !fullTicket?.department) {
+            try {
+                fullTicket = await this.prisma.ticket.findUnique({
+                    where: { id: data.ticketId },
+                    include: {
+                        contact: { select: { id: true, name: true, phoneNumber: true } },
+                        department: { select: { id: true, name: true, emoji: true, color: true } },
+                        assignedUser: { select: { id: true, name: true, avatar: true } },
+                        tags: { include: { tag: true } },
+                    },
+                });
+            } catch (err) {
+                this.logger.warn(`Falha ao buscar ticket completo ${data.ticketId}: ${err.message}`);
+            }
         }
+
+        this.emitTicketUpdated(data.companyId, {
+            ticketId: data.ticketId,
+            newStatus: data.newStatus || fullTicket?.status,
+            ticket: fullTicket,
+        });
     }
 
     @OnEvent('ticket.transferred')
     handleTicketTransferred(data: { ticketId: string; companyId: string; fromDepartmentId?: string; toDepartmentId?: string; ticket?: any }) {
         if (data?.companyId) {
             this.emitTicketTransferred(data.companyId, data);
+        }
+    }
+
+    @OnEvent('ticket.human_queue')
+    handleTicketHumanQueue(data: { ticketId: string; companyId: string; departmentId?: string; contactName?: string; summary?: string }) {
+        if (data?.companyId) {
+            this.emitTicketHumanQueue(data.companyId, {
+                ticketId: data.ticketId,
+                contactName: data.contactName || 'Contato',
+                departmentId: data.departmentId,
+                summary: data.summary,
+            });
         }
     }
 

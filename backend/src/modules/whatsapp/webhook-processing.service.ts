@@ -7,6 +7,7 @@ import { ChatGateway } from '../chat/chat.gateway';
 import { CryptoService } from '../../common/services/crypto.service';
 import { LockService } from '../workflows/core/lock.service';
 import { MessageType } from '@prisma/client';
+import { ZApiWebhookPayload } from './dto/zapi-webhook.dto';
 
 const ZAPI_STATUS_MAP: Record<string, string> = {
     SENT: 'SENT',
@@ -142,7 +143,7 @@ export class WebhookProcessingService {
         }
     }
 
-    extractMessageContent(payload: any): {
+    extractMessageContent(payload: ZApiWebhookPayload): {
         messageType: MessageType;
         content: string;
         mediaUrl?: string;
@@ -212,7 +213,7 @@ export class WebhookProcessingService {
         return created.id;
     }
 
-    async processIncomingMessage(payload: any): Promise<void> {
+    async processIncomingMessage(payload: ZApiWebhookPayload): Promise<void> {
         if (payload.fromMe === true) {
             this.logger.debug(`[MSG] Ignorada (fromMe=true): ${payload.messageId}`);
             return;
@@ -468,7 +469,7 @@ export class WebhookProcessingService {
         }
     }
 
-    async processMessageStatus(payload: any): Promise<void> {
+    async processMessageStatus(payload: ZApiWebhookPayload): Promise<void> {
         const { instanceId, ids, status: zapiStatus } = payload;
 
         if (!ids || !Array.isArray(ids) || ids.length === 0) return;
@@ -501,7 +502,7 @@ export class WebhookProcessingService {
         }
     }
 
-    async processPresenceUpdate(payload: any): Promise<void> {
+    async processPresenceUpdate(payload: ZApiWebhookPayload): Promise<void> {
         const { instanceId, phone, status } = payload;
         const isTyping = status === 'COMPOSING' || status === 'RECORDING';
 
@@ -521,7 +522,7 @@ export class WebhookProcessingService {
         }
     }
 
-    async processInstanceStatus(payload: any, status: 'CONNECTED' | 'DISCONNECTED'): Promise<void> {
+    async processInstanceStatus(payload: ZApiWebhookPayload, status: 'CONNECTED' | 'DISCONNECTED'): Promise<void> {
         const { instanceId } = payload;
 
         try {

@@ -1,1 +1,0 @@
-const { PrismaClient } = require('./node_modules/@prisma/client'); const prisma = new PrismaClient(); async function run() { const agent = await prisma.aIAgent.findFirst({ include: { knowledgeBase: true }}); console.log(JSON.stringify(agent, null, 2)); } run().then(() => prisma.());

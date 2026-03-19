@@ -6,7 +6,8 @@
         "dev": "next dev",
         "build": "next build",
         "start": "next start",
-        "lint": "next lint"
+        "lint": "next lint",
+        "test:e2e": "playwright test"
     },
     "dependencies": {
         "@fullcalendar/core": "^6.1.20",
@@ -53,6 +54,7 @@
         "zod": "^3.22.4"
     },
     "devDependencies": {
+        "@playwright/test": "^1.58.2",
         "@types/node": "^20.10.6",
         "@types/react": "^18.2.46",
         "@types/react-dom": "^18.2.18",
@@ -60,6 +62,7 @@
         "autoprefixer": "^10.4.16",
         "eslint": "^8.56.0",
         "eslint-config-next": "14.2.35",
+        "playwright": "^1.58.2",
         "postcss": "^8.4.33",
         "tailwindcss": "^3.4.1",
         "typescript": "5.9.3"

@@ -814,12 +814,32 @@ export default function TicketsPage() {
         };
 
         const handleTicketUpdated = (data: any) => {
-            // Atualiza o ticket na lista (status, modo, atribuição)
-            setTickets(prev => prev.map(t =>
-                t.id === (data.ticketId || data.ticket?.id)
-                    ? { ...t, ...(data.ticket || {}), status: data.newStatus || t.status }
-                    : t
-            ));
+            const tId = data.ticketId || data.ticket?.id;
+            // Atualiza o ticket na lista (status, modo, atribuição, dados completos)
+            setTickets(prev => prev.map(t => {
+                if (t.id !== tId) return t;
+                const merged = { ...t };
+                if (data.ticket) {
+                    if (data.ticket.contact) merged.contact = { ...merged.contact, ...data.ticket.contact };
+                    if (data.ticket.department) merged.department = { ...merged.department, ...data.ticket.department };
+                    if (data.ticket.assignedUser !== undefined) merged.assignedUser = data.ticket.assignedUser;
+                    if (data.ticket.mode) merged.mode = data.ticket.mode;
+                    if (data.ticket.status) merged.status = data.ticket.status;
+                    if (data.ticket.tags) merged.tags = data.ticket.tags;
+                    if (data.ticket.priority) merged.priority = data.ticket.priority;
+                }
+                if (data.newStatus) merged.status = data.newStatus;
+                return merged;
+            }));
+            // Se é o ticket selecionado, atualiza também a view de chat
+            if (selectedTicketRef.current?.id === tId && data.ticket) {
+                setSelectedTicket(prev => prev ? {
+                    ...prev,
+                    ...(data.ticket.mode ? { mode: data.ticket.mode } : {}),
+                    ...(data.newStatus ? { status: data.newStatus } : {}),
+                    ...(data.ticket.assignedUser !== undefined ? { assignedUser: data.ticket.assignedUser } : {}),
+                } : null);
+            }
         };
 
         const handleTicketTransferred = () => {

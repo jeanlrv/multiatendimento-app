@@ -13,6 +13,7 @@ import { Observable } from 'rxjs';
 import axios from 'axios';
 import { OpenAI, toFile } from 'openai';
 import { getCircuitBreaker } from '../../common/utils/circuit-breaker';
+import { AiChatMessage } from './dto/ai-chat-message.dto';
 
 @Injectable()
 export class AIChatService {
@@ -97,7 +98,7 @@ export class AIChatService {
     }
 
     /** FASE 3/7 — Compressor de Contexto histórico (com preservação de contexto inicial) */
-    compressContext(history: any[], maxMessages = 20) {
+    compressContext(history: AiChatMessage[], maxMessages = 20) {
         if (!history || history.length === 0) return [];
         const FILLER_WORDS = new Set(['ok', 'obrigado', 'obrigada', 'valeu', 'sim', 'nao', 'não', 'tchau']);
         const compressed = history.filter((h, index) => {
@@ -106,7 +107,7 @@ export class AIChatService {
             return true;
         });
 
-        const grouped: any[] = [];
+        const grouped: AiChatMessage[] = [];
         for (const h of compressed) {
             if (grouped.length > 0 && grouped[grouped.length - 1].role === h.role) {
                 grouped[grouped.length - 1].content += '\n' + h.content;
@@ -133,7 +134,7 @@ export class AIChatService {
         return { chunkLimit: 15 };
     }
 
-    private guardContextOverflow(systemPrompt: string, context: string, history: any[], message: string, modelId: string): string {
+    private guardContextOverflow(systemPrompt: string, context: string, history: AiChatMessage[], message: string, modelId: string): string {
         const pureModelId = modelId.includes(':') ? modelId.split(':').pop()! : modelId;
         const maxChars = this.MODEL_CONTEXT_CHARS[pureModelId] ?? this.DEFAULT_MAX_CONTEXT_CHARS;
         const fixedChars = systemPrompt.length + message.length +
@@ -151,7 +152,7 @@ export class AIChatService {
         conversationId: string,
         companyId: string,
         agentId: string,
-        history: any[],
+        history: AiChatMessage[],
         existingSummary?: string,
     ): void {
         setImmediate(async () => {
@@ -272,7 +273,7 @@ export class AIChatService {
     /**
      * Motor de Chat Nativo: Usa LangChain com suporte multi-provider.
      */
-    async chat(companyId: string, agentId: string, message: string, history: any[] = [], conversationId?: string, systemSuffix?: string) {
+    async chat(companyId: string, agentId: string, message: string, history: AiChatMessage[] = [], conversationId?: string, systemSuffix?: string) {
         if (!message || message.trim().length === 0) {
             throw new BadRequestException('Mensagem não pode ser vazia');
         }
@@ -396,7 +397,7 @@ export class AIChatService {
     }
 
     /** Chat multimodal com suporte a imagens */
-    async chatMultimodal(companyId: string, agentId: string, message: string, imageUrls: string[] = [], history: any[] = []) {
+    async chatMultimodal(companyId: string, agentId: string, message: string, imageUrls: string[] = [], history: AiChatMessage[] = []) {
         if (!message || message.trim().length === 0) {
             throw new BadRequestException('Mensagem não pode ser vazia');
         }

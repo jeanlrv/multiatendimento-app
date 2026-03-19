@@ -5,6 +5,7 @@ import { Throttle } from '@nestjs/throttler';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { Public } from '../../common/decorators/public.decorator';
 import { WebhookProcessingService } from './webhook-processing.service';
+import { ZApiWebhookPayload } from './dto/zapi-webhook.dto';
 
 /**
  * Rate limiting para webhooks Z-API:
@@ -38,7 +39,7 @@ export class WebhooksController {
     @HttpCode(202)
     @Throttle({ default: { limit: WEBHOOK_THROTTLE_LIMIT, ttl: WEBHOOK_THROTTLE_TTL } })
     @ApiOperation({ summary: 'Webhook para receber eventos da Z-API' })
-    async handleZApiWebhook(@Body() payload: any) {
+    async handleZApiWebhook(@Body() payload: ZApiWebhookPayload) {
         try {
             const type: string = payload.type || '';
             const instanceId: string = payload.instanceId || '';
