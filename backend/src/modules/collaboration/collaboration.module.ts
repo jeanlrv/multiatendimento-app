@@ -1,14 +1,16 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { CollaborationService } from './collaboration.service';
 import { CollaborationGateway } from './collaboration.gateway';
 import { CollaborationController } from './collaboration.controller';
 import { DatabaseModule } from '../../database/database.module';
+import { AIModule } from '../ai/ai.module';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 
 @Module({
     imports: [
         DatabaseModule,
+        forwardRef(() => AIModule),
         JwtModule.registerAsync({
             imports: [ConfigModule],
             useFactory: async (configService: ConfigService) => ({

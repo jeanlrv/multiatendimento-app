@@ -43,7 +43,8 @@ export class CollaborationGateway implements OnGatewayConnection, OnGatewayDisco
             }
 
             const payload = this.jwtService.verify(token.replace('Bearer ', ''));
-            client.data.user = payload;
+            // Padronizando no socket data
+            client.data.user = { ...payload, id: payload.sub };
 
             // Sala privada do usuário
             client.join(`user:${payload.sub}`);
@@ -52,8 +53,9 @@ export class CollaborationGateway implements OnGatewayConnection, OnGatewayDisco
             if (payload.companyId) {
                 client.join(`company:${payload.companyId}`);
 
-                // Atualizar e Notificar Presença
-                this.collabService.updatePresence(payload.sub, 'ONLINE');
+                // Atualizar Status para ONLINE no Banco
+                await this.collabService.updateStatus(payload.sub, 'ONLINE');
+                
                 this.server.to(`company:${payload.companyId}`).emit('presenceUpdate', {
                     userId: payload.sub,
                     status: 'ONLINE'
@@ -67,10 +69,11 @@ export class CollaborationGateway implements OnGatewayConnection, OnGatewayDisco
         }
     }
 
-    handleDisconnect(client: Socket) {
+    async handleDisconnect(client: Socket) {
         const user = client.data.user;
         if (user && user.companyId) {
-            this.collabService.updatePresence(user.sub, 'OFFLINE');
+            // Em cenários de alta disponibilidade, você pode querer um delay antes de marcar OFFLINE
+            await this.collabService.updateStatus(user.sub, 'OFFLINE');
             this.server.to(`company:${user.companyId}`).emit('presenceUpdate', {
                 userId: user.sub,
                 status: 'OFFLINE'
@@ -99,25 +102,37 @@ export class CollaborationGateway implements OnGatewayConnection, OnGatewayDisco
     @SubscribeMessage('sendInternalMessage')
     async handleInternalMessage(
         @ConnectedSocket() client: Socket,
-        @MessageBody() data: { chatId: string, content: string, type?: any, mediaUrl?: string }
+        @MessageBody() data: { 
+            chatId: string, 
+            content: string, 
+            type?: any, 
+            replyToId?: string,
+            threadId?: string
+        }
     ) {
         const user = client.data.user;
-        const message = await this.collabService.sendInternalMessage(
-            data.chatId,
-            user.sub,
-            data.content,
-            data.type,
-            data.mediaUrl
-        );
+        
+        const message = await this.collabService.sendInternalMessage({
+            chatId: data.chatId,
+            senderUserId: user.sub,
+            content: data.content,
+            type: data.type,
+            replyToId: data.replyToId,
+            threadId: data.threadId
+        });
 
         // Emitir para todos na sala do chat interna
         this.server.to(`internal-chat:${data.chatId}`).emit('newInternalMessage', message);
 
-        // Notificar novos chats/atividades globalmente na empresa (opcional para badges)
+        // Notificar globalmente na empresa para badges de unread
         this.server.to(`company:${user.companyId}`).emit('internalActivity', {
             chatId: data.chatId,
-            senderName: user.name
+            senderName: user.name,
+            content: data.content.substring(0, 30) + '...'
         });
+
+        // --- Verificação de Menção a IA ---
+        // Se a mensagem contém @nomedoagente, disparar lógica de IA (implementação futura no service)
     }
 
     @SubscribeMessage('updateStatus')
@@ -127,7 +142,7 @@ export class CollaborationGateway implements OnGatewayConnection, OnGatewayDisco
     ) {
         const user = client.data.user;
         if (user && user.companyId) {
-            this.collabService.updatePresence(user.sub, status);
+            await this.collabService.updateStatus(user.sub, status);
             this.server.to(`company:${user.companyId}`).emit('presenceUpdate', {
                 userId: user.sub,
                 status
@@ -146,6 +161,55 @@ export class CollaborationGateway implements OnGatewayConnection, OnGatewayDisco
             userId: user.sub,
             userName: user.name,
             isTyping: data.isTyping
+        });
+    }
+
+    @SubscribeMessage('addReaction')
+    async handleAddReaction(
+        @ConnectedSocket() client: Socket,
+        @MessageBody() data: { messageId: string, emoji: string, chatId: string }
+    ) {
+        const user = client.data.user;
+        // Notifica a sala sobre a nova reação (persistência pode ser feita via REST ou Service aqui)
+        this.server.to(`internal-chat:${data.chatId}`).emit('reactionAdded', {
+            messageId: data.messageId,
+            emoji: data.emoji,
+            userId: user.sub
+        });
+    }
+
+    @SubscribeMessage('editInternalMessage')
+    async handleEditMessage(
+        @ConnectedSocket() client: Socket,
+        @MessageBody() data: { messageId: string, content: string, chatId: string }
+    ) {
+        const user = client.data.user;
+        const message = await this.collabService.editInternalMessage(user.sub, data.messageId, data.content);
+        this.server.to(`internal-chat:${data.chatId}`).emit('internalMessageUpdated', message);
+    }
+
+    @SubscribeMessage('markRead')
+    async handleMarkRead(
+        @ConnectedSocket() client: Socket,
+        @MessageBody() data: { chatMemberId: string, messageId: string, chatId: string }
+    ) {
+        await this.collabService.markAsRead(data.chatMemberId, data.messageId);
+        this.server.to(`internal-chat:${data.chatId}`).emit('messageStatusUpdate', {
+            messageId: data.messageId,
+            status: 'READ',
+            userId: client.data.user.id // Usando id em vez de sub para consistência
+        });
+    }
+
+    @SubscribeMessage('markDelivered')
+    async handleMarkDelivered(
+        @ConnectedSocket() client: Socket,
+        @MessageBody() data: { messageId: string, chatId: string }
+    ) {
+        await this.collabService.markAsDelivered(data.messageId);
+        this.server.to(`internal-chat:${data.chatId}`).emit('messageStatusUpdate', {
+            messageId: data.messageId,
+            status: 'DELIVERED'
         });
     }
 }

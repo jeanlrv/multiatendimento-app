@@ -1,9 +1,10 @@
-import { Controller, Get, Post, Body, Param, Query, Request, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query, Request, UseGuards, Patch, NotFoundException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { CollaborationService } from './collaboration.service';
 import { Company } from '../../common/decorators/company.decorator';
 import { PrismaService } from '../../database/prisma.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { InternalChatType } from '@prisma/client';
 
 @ApiTags('Collaboration')
 @ApiBearerAuth()
@@ -16,84 +17,123 @@ export class CollaborationController {
     ) { }
 
     @Get('users')
-    @ApiOperation({ summary: 'Listar usuários da empresa com presença em tempo real' })
-    async listCompanyUsers(@Company() companyId: string) {
-        const users = await this.prisma.user.findMany({
-            where: { companyId, isActive: true },
-            select: { id: true, name: true, avatar: true, email: true },
-            orderBy: { name: 'asc' },
+    @ApiOperation({ summary: 'Listar usuários e Agentes IA ativos no chat interno' })
+    async listParticipants(@Company() companyId: string) {
+        const users = await this.collabService.getAllPresence(companyId);
+        
+        const aiAgents = await this.prisma.aIAgent.findMany({
+            where: { companyId, isActive: true, allowInInternalChat: true },
+            select: { id: true, name: true, avatar: true, description: true }
         });
 
-        return users.map(user => ({
-            ...user,
-            presence: this.collabService.getPresence(user.id),
-        }));
+        return {
+            users,
+            aiAgents: aiAgents.map(agent => ({ ...agent, chatStatus: 'ONLINE', isAi: true }))
+        };
+    }
+
+    @Patch('settings/status')
+    @ApiOperation({ summary: 'Atualizar status de presença (ONLINE, BUSY, OFFLINE)' })
+    updateStatus(@Request() req: any, @Body() data: { status: string }) {
+        return this.collabService.updateStatus(req.user.id, data.status);
+    }
+
+    @Patch('settings/sound')
+    @ApiOperation({ summary: 'Ativar/Desativar notificações sonoras' })
+    toggleSound(@Request() req: any, @Body() data: { enabled: boolean }) {
+        return this.collabService.toggleSound(req.user.id, data.enabled);
     }
 
     @Get('chats')
     @ApiOperation({ summary: 'Listar chats do usuário autenticado' })
     getUserChats(@Request() req: any) {
-        // req.user.id é o campo correto (JwtStrategy mapeia payload.sub → id)
         return this.collabService.getUserChats(req.user.id, req.user.companyId);
     }
 
     @Post('chats/direct')
-    @ApiOperation({ summary: 'Obter ou criar chat direto com outro usuário' })
+    @ApiOperation({ summary: 'Obter ou criar chat direto com outro usuário ou Agente IA' })
     getOrCreateDirectChat(
         @Request() req: any,
-        @Body() data: { userId: string },
+        @Body() data: { userId?: string, aiAgentId?: string },
     ) {
-        return this.collabService.getOrCreateDirectChat(req.user.companyId, req.user.id, data.userId);
+        return this.collabService.getOrCreateDirectChat(
+            req.user.companyId, 
+            { userId: req.user.id }, 
+            { userId: data.userId, aiId: data.aiAgentId }
+        );
     }
 
-    @Post('chats/group')
-    @ApiOperation({ summary: 'Criar chat em grupo' })
-    createGroupChat(
+    @Post('chats/room')
+    @ApiOperation({ summary: 'Criar sala (grupo ou canal)' })
+    createChatRoom(
         @Request() req: any,
-        @Body() data: { name: string; memberIds: string[] },
+        @Body() data: { name: string, description?: string, type: InternalChatType, memberIds: string[], aiAgentIds?: string[] },
     ) {
-        return this.collabService.createGroupChat(req.user.companyId, data.name, req.user.id, data.memberIds);
+        return this.collabService.createChatRoom(req.user.companyId, {
+            ...data,
+            creatorId: req.user.id
+        });
     }
 
     @Get('chats/:id/messages')
-    @ApiOperation({ summary: 'Histórico de mensagens de um chat' })
+    @ApiOperation({ summary: 'Histórico de mensagens de um chat (com scroll infinito)' })
     async getChatMessages(
         @Request() req: any,
         @Param('id') chatId: string,
         @Query('limit') limit?: number,
+        @Query('before') before?: string,
+        @Query('threadId') threadId?: string,
     ) {
-        // Validar se o chat pertence à empresa e se o usuário é membro
-        const chat = await this.prisma.internalChat.findFirst({
-            where: {
-                id: chatId,
-                companyId: req.user.companyId,
-                members: { some: { userId: req.user.id } }
-            }
+        // Validar acesso (simplificado para exemplo)
+        const member = await this.prisma.internalChatMember.findFirst({
+            where: { chatId, userId: req.user.id }
         });
 
-        if (!chat) {
-            throw new Error('Chat não encontrado ou acesso negado');
-        }
+        if (!member) throw new NotFoundException('Chat não encontrado ou acesso negado');
 
-        return this.collabService.getChatHistory(chatId, limit ? Number(limit) : 50);
+        return this.collabService.getHistory(chatId, {
+            limit: limit ? Number(limit) : 50,
+            before: before ? new Date(before) : undefined,
+            threadId
+        });
     }
 
-    @Post('chats/:id/read')
-    @ApiOperation({ summary: 'Marcar chat como lido pelo usuário autenticado' })
-    async markAsRead(@Param('id') chatId: string, @Request() req: any) {
-        // Validar se o chat pertence à empresa e se o usuário é membro
-        const chat = await this.prisma.internalChat.findFirst({
-            where: {
-                id: chatId,
-                companyId: req.user.companyId,
-                members: { some: { userId: req.user.id } }
-            }
+    @Get('history/search')
+    @ApiOperation({ summary: 'Busca avançada de histórico com filtros (destinatário, data, termo)' })
+    async searchHistory(
+        @Request() req: any,
+        @Query('senderId') senderId?: string,
+        @Query('chatId') chatId?: string,
+        @Query('startDate') startDate?: string,
+        @Query('endDate') endDate?: string,
+        @Query('query') query?: string,
+    ) {
+        return this.collabService.searchHistory(req.user.companyId, {
+            senderId,
+            chatId,
+            startDate: startDate ? new Date(startDate) : undefined,
+            endDate: endDate ? new Date(endDate) : undefined,
+            query
         });
+    }
 
-        if (!chat) {
-            throw new Error('Chat não encontrado ou acesso negado');
-        }
+    @Post('chats/:chatId/members/:memberId/read')
+    @ApiOperation({ summary: 'Marcar até qual mensagem o usuário leu' })
+    async markAsRead(
+        @Param('chatId') chatId: string,
+        @Param('memberId') memberId: string,
+        @Body() data: { messageId: string }
+    ) {
+        return this.collabService.markAsRead(memberId, data.messageId);
+    }
 
-        return this.collabService.markAsRead(chatId, req.user.id);
+    @Patch('message/:id')
+    @ApiOperation({ summary: 'Editar uma mensagem enviada' })
+    async editMessage(
+        @Request() req,
+        @Param('id') messageId: string,
+        @Body('content') content: string
+    ) {
+        return this.collabService.editInternalMessage(req.user.id, messageId, content);
     }
 }

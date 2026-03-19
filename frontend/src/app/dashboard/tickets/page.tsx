@@ -47,6 +47,20 @@ interface Message {
         content: string;
         fromMe: boolean;
     };
+    isEdited?: boolean;
+    isDeleted?: boolean;
+    replyToId?: string;
+    threadId?: string;
+    senderUserId?: string;
+    senderAiAgentId?: string;
+    senderUser?: {
+        name: string;
+        avatar?: string;
+    };
+    senderAiAgent?: {
+        name: string;
+        avatar?: string;
+    };
 }
 
 interface Ticket {
@@ -61,6 +75,7 @@ interface Ticket {
         name: string;
         phoneNumber: string;
         information?: string;
+        profilePicture?: string;
     };
     department: {
         id: string;
@@ -72,11 +87,11 @@ interface Ticket {
     unreadMessages: number;
     notes?: string;
     evaluation?: {
-        aiSentiment: string;
-        aiSentimentScore: number;
-        aiSummary: string;
-        aiJustification: string;
-    } | any;
+        aiSentiment?: string;
+        aiSentimentScore?: number;
+        aiSummary?: string;
+        aiJustification?: string;
+    };
     assignedUser?: {
         id: string;
         name: string;
@@ -89,6 +104,8 @@ interface Ticket {
             color: string;
         }
     }[];
+    realtimeSentimentScore?: number | null;
+    realtimeSentiment?: string | null;
 }
 
 
@@ -120,7 +137,7 @@ export default function TicketsPage() {
     const [showOnlyUnread, setShowOnlyUnread] = useState(false);
     const [showContactHistory, setShowContactHistory] = useState(false);
     const [contactSidebarTab, setContactSidebarTab] = useState<'contact' | 'crm'>('crm');
-    const [contactHistory, setContactHistory] = useState<any[]>([]);
+    const [contactHistory, setContactHistory] = useState<Ticket[]>([]);
     const [loadingHistory, setLoadingHistory] = useState(false);
 
     // Edição Inline
@@ -1045,11 +1062,11 @@ export default function TicketsPage() {
         }
     };
 
-    const displayedTickets = showOnlyUnread ? tickets.filter((t: any) => (t.unreadMessages || 0) > 0) : tickets;
-    const aiTickets = filter === 'IN_PROGRESS' ? displayedTickets.filter((t: any) => t.mode === 'AI' || t.mode === 'HIBRIDO') : [];
-    const humanTickets = filter === 'IN_PROGRESS' ? displayedTickets.filter((t: any) => t.mode === 'HUMANO') : [];
+    const displayedTickets = showOnlyUnread ? tickets.filter((t) => (t.unreadMessages || 0) > 0) : tickets;
+    const aiTickets = filter === 'IN_PROGRESS' ? displayedTickets.filter((t) => t.mode === 'AI' || t.mode === 'HIBRIDO') : [];
+    const humanTickets = filter === 'IN_PROGRESS' ? displayedTickets.filter((t) => t.mode === 'HUMANO') : [];
 
-    const renderTicketCard = (ticket: any) => (
+    const renderTicketCard = (ticket: Ticket) => (
         <TicketCard
             key={ticket.id}
             ticket={ticket}
@@ -1063,9 +1080,9 @@ export default function TicketsPage() {
     return (
         <div className="flex flex-col md:flex-row h-full gap-3 md:gap-4 max-w-full relative overflow-hidden">
             {/* Lista de Tickets - Esquerda */}
-            <div className={`w-full md:w-[300px] lg:w-[340px] xl:w-[380px] h-full flex-shrink-0 flex flex-col liquid-glass md:rounded-2xl overflow-hidden border border-slate-200 dark:border-white/10 shadow-xl relative aurora transition-all duration-300 ${selectedTicket ? 'hidden md:flex' : 'flex'}`}>
+            <div className={`w-full md:w-[300px] lg:w-[340px] xl:w-[380px] h-full flex-shrink-0 flex flex-col liquid-glass md:rounded-2xl shadow-xl aurora transition-all duration-300 ${selectedTicket ? 'hidden md:flex' : 'flex'}`}>
                 {/* Header da Lista */}
-                <div className="p-3 md:p-4 border-b border-slate-200 dark:border-white/5 relative z-10">
+                <div className="p-3 md:p-4 border-b border-slate-200 dark:border-white/10 relative z-10">
                     <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center gap-4">
                             {/* Checkbox Selecionar Todos */}
@@ -1262,7 +1279,7 @@ export default function TicketsPage() {
                     </AnimatePresence>
 
                     {/* Filtros Estilo Cápsula */}
-                    <div className="flex items-center gap-1 bg-slate-200/40 dark:bg-white/5 p-1 rounded-xl border border-white/50 dark:border-white/5">
+                    <div className="flex items-center gap-1 bg-slate-200/40 dark:bg-white/5 p-1 rounded-xl border border-white/50 dark:border-white/10">
                         {['OPEN', 'IN_PROGRESS', 'PAUSED', 'RESOLVED'].map((s) => (
                             <button
                                 key={s}
@@ -1449,7 +1466,7 @@ export default function TicketsPage() {
                 ) : (
                     <>
                         {/* Header da Conversa */}
-                        <div className="p-2 md:p-3 border-b border-white/40 dark:border-white/5 flex flex-col gap-2 bg-white/40 dark:bg-black/20 backdrop-blur-xl shrink-0 min-w-0 md:rounded-t-2xl overflow-hidden border-x border-t border-slate-200 dark:border-white/10">
+                        <div className="p-2 md:p-3 border-b flex flex-col gap-2 bg-white/40 dark:bg-black/20 backdrop-blur-xl shrink-0 min-w-0 md:rounded-t-2xl overflow-hidden border-x border-t border-slate-200 dark:border-white/10">
                             <div className="flex items-center justify-between gap-2">
                                 <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1">
                                     <button
@@ -1604,7 +1621,7 @@ export default function TicketsPage() {
                                     )}
 
                                     {/* Modo IA / Humano */}
-                                    <div className="flex items-center bg-slate-100/50 dark:bg-white/5 p-0.5 rounded-xl border border-white/50 dark:border-white/5 backdrop-blur-md shrink-0">
+                                    <div className="flex items-center bg-slate-100/50 dark:bg-white/5 p-0.5 rounded-xl border border-white/50 dark:border-white/10 backdrop-blur-md shrink-0">
                                         {[{ key: 'AI', icon: <Bot size={12} />, label: 'IA', color: 'bg-blue-500 shadow-blue-500/30' }, { key: 'HUMANO', icon: <User size={12} />, label: 'Humano', color: 'bg-amber-500 shadow-amber-500/30' }].map(({ key: m, icon, label, color }) => (
                                             <button
                                                 key={m}
@@ -1630,11 +1647,11 @@ export default function TicketsPage() {
                                     </div>
 
                                     {/* Indicador de sentimento — apenas desktop */}
-                                    {((selectedTicket as any).realtimeSentimentScore !== undefined && (selectedTicket as any).realtimeSentimentScore !== null) || (selectedTicket as any).evaluation ? (
+                                    {(selectedTicket.realtimeSentimentScore !== undefined && selectedTicket.realtimeSentimentScore !== null) || selectedTicket.evaluation ? (
                                         <div className="shrink-0 hidden lg:block">
                                             <SentimentIndicator
-                                                sentiment={(selectedTicket as any).realtimeSentimentScore !== null ? undefined : (selectedTicket as any).evaluation?.aiSentiment}
-                                                score={(selectedTicket as any).realtimeSentimentScore ?? (selectedTicket as any).evaluation?.aiSentimentScore}
+                                                sentiment={selectedTicket.realtimeSentimentScore !== null ? undefined : selectedTicket.evaluation?.aiSentiment}
+                                                score={selectedTicket.realtimeSentimentScore ?? selectedTicket.evaluation?.aiSentimentScore}
                                                 className="scale-90 origin-right"
                                             />
                                         </div>
@@ -1644,7 +1661,7 @@ export default function TicketsPage() {
                                     <div ref={optionsMenuRef} className="relative shrink-0">
                                         <button
                                             onClick={() => setShowOptionsMenu(v => !v)}
-                                            className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all border text-slate-700 dark:text-slate-300 ${showOptionsMenu ? 'bg-primary/10 border-primary/30 text-primary dark:text-primary' : 'bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 border-slate-200 dark:border-white/5'}`}
+                                            className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all border text-slate-700 dark:text-slate-300 ${showOptionsMenu ? 'bg-primary/10 border-primary/30 text-primary dark:text-primary' : 'bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 border-slate-200 dark:border-white/10'}`}
                                         >
                                             <SlidersHorizontal className="h-4 w-4" />
                                             <span className="text-[10px] font-black uppercase tracking-widest hidden lg:block">Opções</span>
@@ -1731,19 +1748,19 @@ export default function TicketsPage() {
                                                         <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">Categorizar (Tags)</div>
                                                         <div className="max-h-32 overflow-y-auto custom-scrollbar flex flex-col gap-1">
                                                             {availableTags.map(tag => {
-                                                                const currentTagIds = selectedTicket.tags?.map((t: any) => t.tag?.id || t.id) || [];
+                                                                const currentTagIds = selectedTicket.tags?.map((t) => t.tag?.id) || [];
                                                                 const isApplied = currentTagIds.includes(tag.id);
                                                                 return (
                                                                     <button
                                                                         key={tag.id}
                                                                         onClick={async () => {
                                                                             const newTagIds = isApplied
-                                                                                ? currentTagIds.filter((id: string) => id !== tag.id)
-                                                                                : [...currentTagIds, tag.id];
+                                                                                ? currentTagIds.filter((id) => id && id !== tag.id) as string[]
+                                                                                : [...currentTagIds.filter(id => id) as string[], tag.id];
                                                                             try {
                                                                                 const updated = await ticketsService.update(selectedTicket.id, { tagIds: newTagIds });
-                                                                                setSelectedTicket((prev: any) => prev ? { ...prev, tags: updated.tags ?? prev.tags } : prev);
-                                                                                setTickets((prev: any[]) => prev.map((t: any) => t.id === selectedTicket.id ? { ...t, tags: updated.tags ?? t.tags } : t));
+                                                                                setSelectedTicket((prev) => prev ? { ...prev, tags: updated.tags ?? prev.tags } : prev);
+                                                                                setTickets((prev) => prev.map((t) => t.id === selectedTicket.id ? { ...t, tags: updated.tags ?? t.tags } : t));
                                                                                 toast.success(isApplied ? 'Tag removida' : 'Tag adicionada');
                                                                             } catch {
                                                                                 toast.error('Erro ao atualizar tags');
@@ -1768,7 +1785,7 @@ export default function TicketsPage() {
                                     </div>
 
                                     {/* Ações Rápidas em Destaque */}
-                                    <div className="flex items-center gap-1 bg-slate-100/50 dark:bg-white/5 p-1 rounded-2xl border border-white/50 dark:border-white/5 backdrop-blur-md shrink-0">
+                                    <div className="flex items-center gap-1 bg-slate-100/50 dark:bg-white/5 p-1 rounded-2xl border border-white/50 dark:border-white/10 backdrop-blur-md shrink-0">
                                         {/* Atalhos */}
                                         <button
                                             onClick={() => setShowShortcutsModal(true)}
@@ -1937,20 +1954,20 @@ export default function TicketsPage() {
                             </div>
 
                             {/* Barra de Tags do Cabeçalho */}
-                            <div ref={tagBarRef} className="px-4 py-1.5 border-b border-white/40 dark:border-white/5 bg-white/20 dark:bg-black/10 backdrop-blur-md flex flex-wrap gap-1.5 items-center min-h-[36px] border-x border-slate-200 dark:border-white/10 relative">
+                            <div ref={tagBarRef} className="px-4 py-1.5 border-b bg-white/20 dark:bg-black/10 backdrop-blur-md flex flex-wrap gap-1.5 items-center min-h-[36px] border-x border-slate-200 dark:border-white/10 relative">
                                 <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 mr-1">Tags:</span>
 
                                 {/* Tags existentes (clique para remover) */}
-                                {selectedTicket.tags?.map((t: any) => (
+                                {selectedTicket.tags?.map((t) => (
                                     <button
                                         key={t.tag.id}
                                         onClick={async () => {
-                                            const currentTagIds = (selectedTicket.tags ?? []).map((tg: any) => tg.tag?.id || tg.id);
-                                            const newTagIds = currentTagIds.filter((id: string) => id !== (t.tag?.id || t.id));
+                                            const currentTagIds = (selectedTicket.tags ?? []).map((tg) => tg.tag?.id);
+                                            const newTagIds = currentTagIds.filter((id) => id && id !== t.tag?.id) as string[];
                                             try {
                                                 const updated = await ticketsService.update(selectedTicket.id, { tagIds: newTagIds });
-                                                setSelectedTicket((prev: any) => prev ? { ...prev, tags: updated.tags ?? prev.tags } : prev);
-                                                setTickets((prev: any[]) => prev.map((tk: any) => tk.id === selectedTicket.id ? { ...tk, tags: updated.tags ?? tk.tags } : tk));
+                                                setSelectedTicket((prev) => prev ? { ...prev, tags: updated.tags ?? prev.tags } : prev);
+                                                setTickets((prev) => prev.map((tk) => tk.id === selectedTicket.id ? { ...tk, tags: updated.tags ?? tk.tags } : tk));
                                                 toast.success('Tag removida');
                                             } catch { toast.error('Erro ao remover tag'); }
                                         }}
@@ -2060,7 +2077,7 @@ export default function TicketsPage() {
                                                         <p className="text-sm font-black uppercase tracking-widest">Nenhuma mensagem encontrada</p>
                                                     </div>
                                                 )}
-                                                {messages.filter(m => m.content?.toLowerCase().includes(messageSearch.toLowerCase()) || m.transcription?.toLowerCase().includes(messageSearch.toLowerCase())).map((msg: any, idx) => (
+                                                {messages.filter(m => m.content?.toLowerCase().includes(messageSearch.toLowerCase()) || m.transcription?.toLowerCase().includes(messageSearch.toLowerCase())).map((msg, idx) => (
                                                     <motion.div
                                                         key={msg.id}
                                                         initial={{ opacity: 0, x: msg.fromMe ? 20 : -20 }}
@@ -2073,7 +2090,7 @@ export default function TicketsPage() {
                                                                 ? 'bg-amber-100 dark:bg-amber-900/40 border-2 border-dashed border-amber-300 dark:border-amber-700/50 text-amber-900 dark:text-amber-100 rounded-3xl'
                                                                 : msg.fromMe
                                                                     ? 'bg-primary text-white rounded-[1.5rem] rounded-br-[0.2rem]'
-                                                                    : 'liquid-glass rounded-[1.5rem] rounded-bl-[0.2rem] border border-slate-200 dark:border-white/5'
+                                                                    : 'liquid-glass rounded-[1.5rem] rounded-bl-[0.2rem]'
                                                                 } px-6 py-4 relative group`}
                                                             style={msg.messageType !== 'INTERNAL' ? (
                                                                 msg.fromMe
@@ -2128,7 +2145,7 @@ export default function TicketsPage() {
                                                                         <motion.div
                                                                             initial={{ opacity: 0, y: 5 }}
                                                                             animate={{ opacity: 1, y: 0 }}
-                                                                            className={`text-[11px] font-medium leading-relaxed p-4 rounded-xl border ${msg.fromMe ? 'bg-white/10 border-white/10' : 'bg-black/5 dark:bg-white/5 border-slate-200 dark:border-white/5'}`}
+                                                                            className={`text-[11px] font-medium leading-relaxed p-4 rounded-xl border ${msg.fromMe ? 'bg-white/10 border-white/10' : 'bg-black/5 dark:bg-white/5 border-slate-200 dark:border-white/10'}`}
                                                                         >
                                                                             <span className="text-[9px] font-black uppercase text-primary block mb-1">Transcrição IA</span>
                                                                             "{msg.transcription}"
@@ -2222,7 +2239,7 @@ export default function TicketsPage() {
                                     </AnimatePresence>
 
                                     {isRecording ? (
-                                        <div className="p-3 bg-white/60 dark:bg-black/40 border-t border-white/40 dark:border-white/5 backdrop-blur-2xl">
+                                        <div className="p-3 bg-white/60 dark:bg-black/40 border-t border-slate-200 dark:border-white/10 backdrop-blur-2xl">
                                             {sendingAudio && (
                                                 <div className="flex items-center gap-2 justify-center mb-2 text-xs font-black uppercase tracking-widest text-primary animate-pulse">
                                                     <div className="h-3 w-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
@@ -2237,7 +2254,7 @@ export default function TicketsPage() {
                                             </div>
                                         </div>
                                     ) : (
-                                        <div className="p-3 bg-white/60 dark:bg-black/40 border-t border-white/40 dark:border-white/5 backdrop-blur-2xl">
+                                        <div className="p-3 bg-white/60 dark:bg-black/40 border-t border-slate-200 dark:border-white/10 backdrop-blur-2xl">
                                             {/* Copilot Suggestions Panel */}
                                             <AnimatePresence>
                                                 {showCopilot && (
@@ -2724,7 +2741,7 @@ export default function TicketsPage() {
                                                 )}
                                             </div>
 
-                                            <div className="bg-slate-50 dark:bg-white/5 rounded-2xl p-4 border border-slate-100 dark:border-white/5">
+                                            <div className="bg-slate-50 dark:bg-white/5 rounded-2xl p-4 border border-slate-100 dark:border-white/10">
                                                 <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">Canal Principal</p>
                                                 <div className="flex items-center gap-2 text-primary font-black text-sm">
                                                     <Phone size={14} />
@@ -2743,7 +2760,7 @@ export default function TicketsPage() {
                                             ) : (
                                                 <div className="space-y-3">
                                                     {contactHistory.map((h) => (
-                                                        <div key={h.id} className="bg-white/50 dark:bg-black/20 rounded-xl p-3 border border-white/40 dark:border-white/5 group hover:border-primary/30 transition-all">
+                                                        <div key={h.id} className="bg-white/50 dark:bg-black/20 rounded-xl p-3 border border-slate-200 dark:border-white/10 group hover:border-primary/30 transition-all">
                                                             <div className="flex justify-between items-start mb-1">
                                                                 <span className="text-[10px] font-black text-primary truncate">#{h.id.substring(h.id.length - 4).toUpperCase()}</span>
                                                                 <span className="text-[8px] font-bold text-slate-400">{new Date(h.createdAt).toLocaleDateString()}</span>

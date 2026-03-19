@@ -13,6 +13,10 @@ export interface TicketFilters {
     search?: string;
     priority?: string;
     connectionId?: string;
+    tags?: string | string[];
+    startDate?: string;
+    endDate?: string;
+    contactId?: string;
     page?: number;
     limit?: number;
 }
@@ -24,9 +28,29 @@ export interface Ticket {
     departmentId?: string;
     assignedUserId?: string;
     contactId: string;
+    subject?: string;
+    priority?: string;
+    mode?: string;
+    unreadMessages?: number;
+    lastMessageAt?: string;
     createdAt: string;
     updatedAt: string;
-    [key: string]: unknown;
+    contact?: {
+        id?: string;
+        name: string;
+        phoneNumber: string;
+        profilePicture?: string;
+        information?: string;
+    };
+    department?: {
+        id: string;
+        name: string;
+        emoji?: string;
+        color?: string;
+    };
+    tags?: any[];
+    evaluation?: any;
+    [key: string]: any;
 }
 
 export interface PaginatedTickets {

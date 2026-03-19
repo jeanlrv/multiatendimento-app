@@ -2,13 +2,12 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-  provider        = "prisma-client-js"
-  binaryTargets   = ["native", "linux-musl-openssl-3.0.x"]
+  provider      = "prisma-client-js"
 }
 
 datasource db {
-  provider   = "postgresql"
-  url        = env("DATABASE_URL")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 // ============================================
@@ -55,14 +54,18 @@ model User {
   workflowVersions WorkflowVersion[]
 
   // Relações do Hub de Colaboração (Épico 4)
-  internalChatMembers  InternalChatMember[]
-  internalChatMessages InternalChatMessage[]
-  savedFilters         SavedFilter[]
-  notifications        Notification[]      @relation("NotifiedUser")
-  conversations        Conversation[]
-  pushSubscriptions    PushSubscription[]
-  scheduledMessages    ScheduledMessage[]
-  customerNotes        CustomerNote[]
+  chatStatus            String                        @default("ONLINE") // ONLINE | BUSY | OFFLINE
+  chatSoundEnabled      Boolean                       @default(true)
+  internalChatMembers   InternalChatMember[]
+  internalChatMessages  InternalChatMessage[]
+  internalChatReactions InternalChatMessageReaction[]
+  internalChatMentions  InternalChatMessageMention[]
+  savedFilters          SavedFilter[]
+  notifications         Notification[]                @relation("NotifiedUser")
+  conversations         Conversation[]
+  pushSubscriptions     PushSubscription[]
+  scheduledMessages     ScheduledMessage[]
+  customerNotes         CustomerNote[]
 
   @@index([email])
   @@map("users")
@@ -183,13 +186,13 @@ model WhatsAppInstance {
   phoneNumber     String?   @unique
   zapiInstanceId  String?   @unique
   zapiToken       String?
-  zapiClientToken String?   // Client-Token de segurança Z-API (Security Token)
+  zapiClientToken String? // Client-Token de segurança Z-API (Security Token)
   status          String    @default("DISCONNECTED")
   qrCode          String?
   lastSeenAt      DateTime?
   isActive        Boolean   @default(true)
   companyId       String
-  departmentId    String?   // Departamento principal (mantido para roteamento legado e FK)
+  departmentId    String? // Departamento principal (mantido para roteamento legado e FK)
   departmentIds   String[]  @default([]) // Múltiplos departamentos vinculados
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
@@ -306,10 +309,10 @@ model Contact {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  company   Company    @relation(fields: [companyId], references: [id])
-  customer  Customer?  @relation(fields: [customerId], references: [id])
-  tickets   Ticket[]
-  schedules Schedule[]
+  company             Company              @relation(fields: [companyId], references: [id])
+  customer            Customer?            @relation(fields: [customerId], references: [id])
+  tickets             Ticket[]
+  schedules           Schedule[]
   broadcastRecipients BroadcastRecipient[]
 
   // CSAT Survey
@@ -359,7 +362,7 @@ model Company {
   limitTokens        Int                 @default(0)
   limitTokensPerHour Int                 @default(0)
   limitTokensPerDay  Int                 @default(0)
-  dailyCostAlertUsd  Float               @default(0)  // 0 = alertas desativados
+  dailyCostAlertUsd  Float               @default(0) // 0 = alertas desativados
   logoUrl            String?
   primaryColor       String              @default("#3B82F6") // Padrão KSZap Blue
   secondaryColor     String              @default("#1E293B") // Padrão Slate 800
@@ -376,7 +379,7 @@ model Company {
   notifications  Notification[]
 
   // Respostas Rápidas (Macros)
-  quickReplies  QuickReply[]
+  quickReplies QuickReply[]
 
   apiKeys APIKey[]
 
@@ -404,26 +407,26 @@ model Company {
 // ============================================
 
 model Ticket {
-  id               String         @id @default(uuid())
-  publicToken      String         @unique @default(uuid()) // Token público opaco para o portal do cliente
-  contactId        String
-  departmentId     String
-  connectionId     String? // Opcional se usar WhatsAppInstance
-  assignedUserId   String?
-  status           TicketStatus   @default(OPEN)
-  priority         TicketPriority @default(MEDIUM)
-  mode             TicketMode     @default(AI)
-  subject          String?
-  unreadMessages   Int            @default(0)
-  currentFlowState String?
-  companyId        String
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
-  closedAt         DateTime?
-  firstResponseAt  DateTime?
-  resolvedAt       DateTime?
-  lastMessageAt    DateTime?      @default(now())
-  summary          String?        @db.Text
+  id                     String         @id @default(uuid())
+  publicToken            String         @unique @default(uuid()) // Token público opaco para o portal do cliente
+  contactId              String
+  departmentId           String
+  connectionId           String? // Opcional se usar WhatsAppInstance
+  assignedUserId         String?
+  status                 TicketStatus   @default(OPEN)
+  priority               TicketPriority @default(MEDIUM)
+  mode                   TicketMode     @default(AI)
+  subject                String?
+  unreadMessages         Int            @default(0)
+  currentFlowState       String?
+  companyId              String
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
+  closedAt               DateTime?
+  firstResponseAt        DateTime?
+  resolvedAt             DateTime?
+  lastMessageAt          DateTime?      @default(now())
+  summary                String?        @db.Text
   realtimeSentimentScore Int?
 
   company Company @relation(fields: [companyId], references: [id])
@@ -474,23 +477,23 @@ enum TicketPriority {
 // ============================================
 
 model Message {
-  id            String        @id @default(uuid())
-  ticketId      String
-  externalId    String?       @unique
-  fromMe        Boolean
-  origin        MessageOrigin @default(AGENT)
-  messageType   MessageType
-  content       String?
-  mediaUrl      String?
-  status        MessageStatus @default(PENDING)
-  isDeleted     Boolean       @default(false)
-  deletedById   String?
-  sentAt        DateTime      @default(now())
-  deliveredAt   DateTime?
-  readAt        DateTime?
-  transcription String?       @db.Text
+  id              String        @id @default(uuid())
+  ticketId        String
+  externalId      String?       @unique
+  fromMe          Boolean
+  origin          MessageOrigin @default(AGENT)
+  messageType     MessageType
+  content         String?
+  mediaUrl        String?
+  status          MessageStatus @default(PENDING)
+  isDeleted       Boolean       @default(false)
+  deletedById     String?
+  sentAt          DateTime      @default(now())
+  deliveredAt     DateTime?
+  readAt          DateTime?
+  transcription   String?       @db.Text
   quotedMessageId String?
-  
+
   ticket        Ticket    @relation(fields: [ticketId], references: [id], onDelete: Cascade)
   deletedBy     User?     @relation("DeletedBy", fields: [deletedById], references: [id])
   quotedMessage Message?  @relation("MessageReplies", fields: [quotedMessageId], references: [id])
@@ -568,14 +571,14 @@ model TicketTag {
 
 model QuickReply {
   id        String   @id @default(uuid())
-  shortcut  String   // Ex: "/ola"
+  shortcut  String // Ex: "/ola"
   content   String   @db.Text
   companyId String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  
-  company   Company  @relation(fields: [companyId], references: [id])
-  
+
+  company Company @relation(fields: [companyId], references: [id])
+
   @@unique([companyId, shortcut])
   @@index([companyId])
   @@map("quick_replies")
@@ -598,7 +601,7 @@ model KnowledgeBase {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  company   Company      @relation(fields: [companyId], references: [id])
+  company   Company     @relation(fields: [companyId], references: [id])
   agents    AIAgent[]
   documents Document[]
   syncLogs  KBSyncLog[]
@@ -612,7 +615,7 @@ model KBSyncLog {
   knowledgeBaseId String
   filename        String
   fileSize        Int?
-  status          String   // SUCCESS | REPLACED | ERROR
+  status          String // SUCCESS | REPLACED | ERROR
   errorMessage    String?
   documentId      String?
   agentHostname   String?
@@ -646,11 +649,11 @@ model Document {
 }
 
 model DocumentChunk {
-  id         String @id @default(uuid())
+  id         String  @id @default(uuid())
   documentId String
-  content    String @db.Text
-  pageNumber Int?    // Número da página (para PDFs)
-  metadata   Json?   // Metadados adicionais como título do documento, etc.
+  content    String  @db.Text
+  pageNumber Int? // Número da página (para PDFs)
+  metadata   Json? // Metadados adicionais como título do documento, etc.
   section    String? // Seção do documento (por exemplo, cabeçalho, corpo, rodapé)
 
   // Embedding via pgvector nativo (qualquer dimensão — multi-provider)
@@ -665,6 +668,7 @@ model DocumentChunk {
 model AIAgent {
   id                     String   @id @default(uuid())
   name                   String
+  avatar                 String?
   description            String?
   anythingllmWorkspaceId String? // Mantido opcional para retrocompatibilidade
   prompt                 String?  @db.Text // System Prompt ("Como agir")
@@ -684,21 +688,27 @@ model AIAgent {
   departments   Department[]
   conversations Conversation[]
 
-  // ── Widget Embed ───────────────────────────────────────
-  embedId             String?   @unique   // UUID público para embedding
-  embedEnabled        Boolean   @default(false)
-  embedBrandColor     String    @default("#4F46E5")
-  embedBrandLogo      String?   // URL da logo da empresa
-  embedAgentName      String?   // Nome exibido no widget (default: agent.name)
-  embedWelcomeMsg     String?   // Mensagem de boas-vindas
-  embedPlaceholder    String    @default("Digite sua mensagem...")
-  embedPosition       String    @default("bottom-right") // bottom-right | bottom-left
-  embedAllowedDomains String[]  @default([])  // vazio = qualquer domínio
-  embedRateLimit      Int       @default(20)  // msgs por 10min por sessão
-  allowModelDowngrade Boolean   @default(false) // permite downgrade automático para queries simples
-  limitTokensPerDay   Int       @default(0)     // 0 = usa limite da empresa
+  // ── Chat Interno (ChatOps) ─────────────────────────────
+  allowInInternalChat  Boolean                      @default(false)
+  internalChatMembers  InternalChatMember[]
+  internalChatMessages InternalChatMessage[]
+  internalChatMentions InternalChatMessageMention[]
 
-  apiKeys       APIKey[]
+  // ── Widget Embed ───────────────────────────────────────
+  embedId             String?  @unique // UUID público para embedding
+  embedEnabled        Boolean  @default(false)
+  embedBrandColor     String   @default("#4F46E5")
+  embedBrandLogo      String? // URL da logo da empresa
+  embedAgentName      String? // Nome exibido no widget (default: agent.name)
+  embedWelcomeMsg     String? // Mensagem de boas-vindas
+  embedPlaceholder    String   @default("Digite sua mensagem...")
+  embedPosition       String   @default("bottom-right") // bottom-right | bottom-left
+  embedAllowedDomains String[] @default([]) // vazio = qualquer domínio
+  embedRateLimit      Int      @default(20) // msgs por 10min por sessão
+  allowModelDowngrade Boolean  @default(false) // permite downgrade automático para queries simples
+  limitTokensPerDay   Int      @default(0) // 0 = usa limite da empresa
+
+  apiKeys APIKey[]
 
   @@index([companyId])
   @@index([knowledgeBaseId])
@@ -708,26 +718,26 @@ model AIAgent {
 model EmbedChatSession {
   id        String   @id @default(uuid())
   embedId   String
-  sessionId String   // UUID gerado no cliente (localStorage)
+  sessionId String // UUID gerado no cliente (localStorage)
   messages  Json     @default("[]") // [{role, content, ts}]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([embedId, sessionId])
   @@unique([embedId, sessionId])
+  @@index([embedId, sessionId])
   @@map("embed_chat_sessions")
 }
 
 model APIKey {
-  id          String    @id @default(uuid())
-  name        String
-  keyHash     String    @unique  // SHA-256 do token
-  keyPrefix   String             // primeiros 12 chars para exibição (ex: "kszap_xxxxxxxx")
-  companyId   String
-  agentId     String?            // null = acesso a todos os agentes da empresa
-  isActive    Boolean   @default(true)
-  lastUsedAt  DateTime?
-  createdAt   DateTime  @default(now())
+  id         String    @id @default(uuid())
+  name       String
+  keyHash    String    @unique // SHA-256 do token
+  keyPrefix  String // primeiros 12 chars para exibição (ex: "kszap_xxxxxxxx")
+  companyId  String
+  agentId    String? // null = acesso a todos os agentes da empresa
+  isActive   Boolean   @default(true)
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
 
   company Company  @relation(fields: [companyId], references: [id])
   agent   AIAgent? @relation(fields: [agentId], references: [id])
@@ -735,7 +745,6 @@ model APIKey {
   @@index([companyId])
   @@map("api_keys")
 }
-
 
 // ============================================
 // AVALIAÇÕES
@@ -1074,15 +1083,15 @@ model Conversation {
   userId              String
   agentId             String
   title               String
-  summary             String?  @db.Text   // resumo progressivo das mensagens antigas
+  summary             String?  @db.Text // resumo progressivo das mensagens antigas
   summaryMessageCount Int      @default(0) // nº de msgs cobertas pelo sumário
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
-  company      Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  user         User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  agent        AIAgent               @relation(fields: [agentId], references: [id], onDelete: Cascade)
-  messages     ConversationMessage[]
+  company  Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user     User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  agent    AIAgent               @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  messages ConversationMessage[]
 
   @@index([companyId])
   @@index([userId])
@@ -1093,7 +1102,7 @@ model Conversation {
 model ConversationMessage {
   id             String   @id @default(uuid())
   conversationId String
-  role           String   // user, assistant, system
+  role           String // user, assistant, system
   content        String   @db.Text
   metadata       Json?
   createdAt      DateTime @default(now())
@@ -1129,21 +1138,24 @@ model Notification {
 }
 
 // ============================================
-// MENSAGERIA INTERNA (HUB DE COLABORAÇÃO)
+// MENSAGERIA INTERNA (HUB DE COLABORAÇÃO E CHATOPS)
 // ============================================
 
 enum InternalChatType {
   DIRECT
   GROUP
+  CHANNEL
 }
 
 model InternalChat {
-  id        String           @id @default(uuid())
-  name      String? // Nome apenas para grupos
-  type      InternalChatType @default(DIRECT)
-  companyId String
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
+  id          String           @id @default(uuid())
+  name        String? // Nome apenas para grupos/canais
+  description String?
+  type        InternalChatType @default(DIRECT)
+  isArchived  Boolean          @default(false)
+  companyId   String
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
 
   company  Company               @relation(fields: [companyId], references: [id])
   members  InternalChatMember[]
@@ -1153,36 +1165,113 @@ model InternalChat {
 }
 
 model InternalChatMember {
-  id        String   @id @default(uuid())
-  chatId    String
-  userId    String
-  role      String   @default("MEMBER") // ADMIN, MEMBER
-  createdAt DateTime @default(now())
+  id     String @id @default(uuid())
+  chatId String
 
-  chat InternalChat @relation(fields: [chatId], references: [id], onDelete: Cascade)
-  user User         @relation(fields: [userId], references: [id])
+  userId    String?
+  aiAgentId String?
 
-  @@unique([chatId, userId])
+  role String @default("MEMBER") // OWNER, ADMIN, MEMBER
+
+  isPinned          Boolean  @default(false)
+  isMuted           Boolean  @default(false)
+  lastReadMessageId String?
+  createdAt         DateTime @default(now())
+
+  chat    InternalChat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  user    User?        @relation(fields: [userId], references: [id])
+  aiAgent AIAgent?     @relation(fields: [aiAgentId], references: [id])
+
+  @@index([chatId])
+  @@index([userId])
+  @@index([aiAgentId])
   @@map("internal_chat_members")
 }
 
 model InternalChatMessage {
-  id          String      @id @default(uuid())
-  chatId      String
-  senderId    String
-  content     String?     @db.Text
-  mediaUrl    String?
-  type        MessageType @default(TEXT)
-  readAt      Json? // Mapeamento de { userId: timestamp }
-  deliveredAt DateTime?
-  sentAt      DateTime    @default(now())
+  id     String @id @default(uuid())
+  chatId String
 
-  chat   InternalChat @relation(fields: [chatId], references: [id], onDelete: Cascade)
-  sender User         @relation(fields: [senderId], references: [id])
+  senderUserId    String?
+  senderAiAgentId String?
+
+  content String?     @db.Text
+  type    MessageType @default(TEXT)
+
+  replyToId String?
+  threadId  String?
+
+  isEdited  Boolean @default(false)
+  isDeleted Boolean @default(false)
+  isPinned  Boolean @default(false)
+
+  mediaUrl    String?
+  readAt      Json?
+  deliveredAt DateTime?
+  sentAt      DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  chat          InternalChat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  senderUser    User?        @relation(fields: [senderUserId], references: [id])
+  senderAiAgent AIAgent?     @relation(fields: [senderAiAgentId], references: [id])
+
+  reactions   InternalChatMessageReaction[]
+  mentions    InternalChatMessageMention[]
+  attachments InternalChatAttachment[]
 
   @@index([chatId])
-  @@index([senderId])
+  @@index([senderUserId])
+  @@index([senderAiAgentId])
   @@map("internal_chat_messages")
+}
+
+// --------------------------------------------------------------------------
+// REAÇÕES, MENÇÕES E ANEXOS DO CHAT INTERNO
+// --------------------------------------------------------------------------
+
+model InternalChatMessageReaction {
+  id        String @id @default(uuid())
+  messageId String
+  userId    String
+  emoji     String
+
+  message InternalChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, emoji])
+  @@map("internal_chat_message_reactions")
+}
+
+model InternalChatMessageMention {
+  id        String @id @default(uuid())
+  messageId String
+
+  userId    String?
+  aiAgentId String?
+
+  message InternalChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User?               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  aiAgent AIAgent?            @relation(fields: [aiAgentId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+  @@map("internal_chat_message_mentions")
+}
+
+model InternalChatAttachment {
+  id        String @id @default(uuid())
+  messageId String
+
+  type         String
+  url          String
+  thumbnailUrl String?
+  fileName     String
+  fileSize     Int
+  mimeType     String
+
+  message InternalChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+  @@map("internal_chat_attachments")
 }
 
 // ============================================
@@ -1212,20 +1301,20 @@ model SavedFilter {
 // ============================================
 
 model Broadcast {
-  id           String    @id @default(uuid())
-  name         String
-  message      String    @db.Text
-  status       String    @default("DRAFT") // DRAFT | RUNNING | PAUSED | COMPLETED | FAILED | SCHEDULED
-  companyId    String
-  connectionId String?   // WhatsApp instance a usar
-  totalContacts Int      @default(0)
-  sentCount     Int      @default(0)
-  failedCount   Int      @default(0)
-  scheduledAt  DateTime? // Se preenchido, o envio será agendado para esta data/hora
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id            String    @id @default(uuid())
+  name          String
+  message       String    @db.Text
+  status        String    @default("DRAFT") // DRAFT | RUNNING | PAUSED | COMPLETED | FAILED | SCHEDULED
+  companyId     String
+  connectionId  String? // WhatsApp instance a usar
+  totalContacts Int       @default(0)
+  sentCount     Int       @default(0)
+  failedCount   Int       @default(0)
+  scheduledAt   DateTime? // Se preenchido, o envio será agendado para esta data/hora
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  company    Company           @relation(fields: [companyId], references: [id])
+  company    Company              @relation(fields: [companyId], references: [id])
   recipients BroadcastRecipient[]
 
   @@index([companyId])
@@ -1233,13 +1322,13 @@ model Broadcast {
 }
 
 model BroadcastRecipient {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   broadcastId String
   contactId   String
-  status      String   @default("PENDING") // PENDING | SENT | FAILED
+  status      String    @default("PENDING") // PENDING | SENT | FAILED
   sentAt      DateTime?
   error       String?
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
 
   broadcast Broadcast @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
   contact   Contact   @relation(fields: [contactId], references: [id])
@@ -1261,11 +1350,11 @@ model ScheduledMessage {
   content     String   @db.Text
   scheduledAt DateTime
   status      String   @default("PENDING") // PENDING | SENT | CANCELLED | FAILED
-  jobId       String?  // BullMQ job ID para cancelamento
+  jobId       String? // BullMQ job ID para cancelamento
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  ticket  Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  ticket  Ticket  @relation(fields: [ticketId], references: [id], onDelete: Cascade)
   company Company @relation(fields: [companyId], references: [id])
   user    User?   @relation(fields: [userId], references: [id])
 
@@ -1282,11 +1371,11 @@ model ScheduledMessage {
 model ProviderConfig {
   id          String   @id @default(uuid())
   companyId   String
-  provider    String   // e.g. 'openai', 'anthropic', 'gemini', 'ollama'
+  provider    String // e.g. 'openai', 'anthropic', 'gemini', 'ollama'
   category    String   @default("llm") // 'llm', 'embedding', 'both'
   apiKey      String?  @db.Text // Armazenado criptografado (AES-256-GCM)
-  baseUrl     String?  // Para providers locais (Ollama, LM Studio) ou Azure
-  extraConfig Json?    // Dados extras: { azureEndpoint, azureDeployment, ... }
+  baseUrl     String? // Para providers locais (Ollama, LM Studio) ou Azure
+  extraConfig Json? // Dados extras: { azureEndpoint, azureDeployment, ... }
   isEnabled   Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

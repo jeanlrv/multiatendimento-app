@@ -6,7 +6,7 @@ import { SlaIndicator } from '@/components/chat/SlaIndicator';
 import { translateStatus } from '@/lib/translations';
 
 interface TicketCardProps {
-    ticket: any;
+    ticket: any; // Mantendo any aqui para compatibilidade com o objeto pesado do Prisma, mas tratando propriedades internas
     selectedTicket: any | null;
     selectedTicketIds: string[];
     onSelect: (ticket: any) => void;
@@ -17,14 +17,15 @@ export function TicketCard({ ticket, selectedTicket, selectedTicketIds, onSelect
     const isSelected = selectedTicket?.id === ticket.id;
     const isBulkSelected = selectedTicketIds.includes(ticket.id);
 
+    const borderClass = isSelected || isBulkSelected
+        ? 'border-primary ring-2 ring-primary ring-offset-2 dark:ring-offset-slate-900 bg-primary/5 shadow-md shadow-primary/5'
+        : 'border-transparent bg-white/60 dark:bg-transparent hover:border-white/40 dark:hover:border-white/10';
+
     return (
         <motion.button
             key={ticket.id}
             onClick={() => onSelect(ticket)}
-            className={`w-full text-left p-2.5 rounded-2xl transition-all border relative group/card ${isSelected
-                ? 'bg-primary/10 border-primary shadow-md shadow-primary/5'
-                : 'bg-white/60 dark:bg-transparent border-transparent hover:border-white/40 dark:hover:border-white/10'
-                } ${isBulkSelected ? 'ring-2 ring-primary ring-offset-2 dark:ring-offset-slate-900 border-primary bg-primary/5' : ''}`}
+            className={`w-full text-left p-2.5 rounded-2xl transition-all border relative group/card ${borderClass}`}
             whileHover={{ x: 5 }}
             whileTap={{ scale: 0.98 }}
         >
