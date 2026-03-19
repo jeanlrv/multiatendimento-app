@@ -1,0 +1,396 @@
+node_modules/@prisma/client/runtime/library.d.ts(73,5): error TS18028: Private identifiers are only available when targeting ECMAScript 2015 and higher.
+node_modules/@prisma/client/runtime/library.d.ts(401,5): error TS18028: Private identifiers are only available when targeting ECMAScript 2015 and higher.
+node_modules/@prisma/client/runtime/library.d.ts(2037,5): error TS18028: Private identifiers are only available when targeting ECMAScript 2015 and higher.
+node_modules/rxjs/dist/types/index.d.ts(3,28): error TS2307: Cannot find module './internal/Observable' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(4,39): error TS2307: Cannot find module './internal/observable/ConnectableObservable' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(5,35): error TS2307: Cannot find module './internal/operators/groupBy' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(6,26): error TS2307: Cannot find module './internal/Operator' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(8,33): error TS2307: Cannot find module './internal/observable/dom/animationFrames' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(9,25): error TS2307: Cannot find module './internal/Subject' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(10,33): error TS2307: Cannot find module './internal/BehaviorSubject' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(11,31): error TS2307: Cannot find module './internal/ReplaySubject' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(12,30): error TS2307: Cannot find module './internal/AsyncSubject' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(13,37): error TS2307: Cannot find module './internal/scheduler/asap' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(14,39): error TS2307: Cannot find module './internal/scheduler/async' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(15,39): error TS2307: Cannot find module './internal/scheduler/queue' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(16,57): error TS2307: Cannot find module './internal/scheduler/animationFrame' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(17,53): error TS2307: Cannot find module './internal/scheduler/VirtualTimeScheduler' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(18,27): error TS2307: Cannot find module './internal/Scheduler' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(19,30): error TS2307: Cannot find module './internal/Subscription' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(20,28): error TS2307: Cannot find module './internal/Subscriber' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(21,48): error TS2307: Cannot find module './internal/Notification' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(22,22): error TS2307: Cannot find module './internal/util/pipe' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(23,22): error TS2307: Cannot find module './internal/util/noop' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(24,26): error TS2307: Cannot find module './internal/util/identity' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(25,30): error TS2307: Cannot find module './internal/util/isObservable' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(26,31): error TS2307: Cannot find module './internal/lastValueFrom' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(27,32): error TS2307: Cannot find module './internal/firstValueFrom' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(28,41): error TS2307: Cannot find module './internal/util/ArgumentOutOfRangeError' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(29,28): error TS2307: Cannot find module './internal/util/EmptyError' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(30,31): error TS2307: Cannot find module './internal/util/NotFoundError' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(31,41): error TS2307: Cannot find module './internal/util/ObjectUnsubscribedError' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(32,31): error TS2307: Cannot find module './internal/util/SequenceError' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(33,30): error TS2307: Cannot find module './internal/operators/timeout' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(34,37): error TS2307: Cannot find module './internal/util/UnsubscriptionError' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(35,30): error TS2307: Cannot find module './internal/observable/bindCallback' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(36,34): error TS2307: Cannot find module './internal/observable/bindNodeCallback' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(37,31): error TS2307: Cannot find module './internal/observable/combineLatest' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(38,24): error TS2307: Cannot find module './internal/observable/concat' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(39,29): error TS2307: Cannot find module './internal/observable/connectable' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(40,23): error TS2307: Cannot find module './internal/observable/defer' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(41,23): error TS2307: Cannot find module './internal/observable/empty' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(42,26): error TS2307: Cannot find module './internal/observable/forkJoin' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(43,22): error TS2307: Cannot find module './internal/observable/from' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(44,27): error TS2307: Cannot find module './internal/observable/fromEvent' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(45,34): error TS2307: Cannot find module './internal/observable/fromEventPattern' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(46,26): error TS2307: Cannot find module './internal/observable/generate' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(47,21): error TS2307: Cannot find module './internal/observable/iif' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(48,26): error TS2307: Cannot find module './internal/observable/interval' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(49,23): error TS2307: Cannot find module './internal/observable/merge' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(50,23): error TS2307: Cannot find module './internal/observable/never' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(51,20): error TS2307: Cannot find module './internal/observable/of' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(52,35): error TS2307: Cannot find module './internal/observable/onErrorResumeNext' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(53,23): error TS2307: Cannot find module './internal/observable/pairs' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(54,27): error TS2307: Cannot find module './internal/observable/partition' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(55,22): error TS2307: Cannot find module './internal/observable/race' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(56,23): error TS2307: Cannot find module './internal/observable/range' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(57,28): error TS2307: Cannot find module './internal/observable/throwError' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(58,23): error TS2307: Cannot find module './internal/observable/timer' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(59,23): error TS2307: Cannot find module './internal/observable/using' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(60,21): error TS2307: Cannot find module './internal/observable/zip' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(62,23): error TS2307: Cannot find module './internal/observable/empty' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(63,23): error TS2307: Cannot find module './internal/observable/never' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(64,15): error TS2307: Cannot find module './internal/types' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(65,38): error TS2307: Cannot find module './internal/config' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(66,23): error TS2307: Cannot find module './internal/operators/audit' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(67,27): error TS2307: Cannot find module './internal/operators/auditTime' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(68,24): error TS2307: Cannot find module './internal/operators/buffer' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(69,29): error TS2307: Cannot find module './internal/operators/bufferCount' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(70,28): error TS2307: Cannot find module './internal/operators/bufferTime' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(71,30): error TS2307: Cannot find module './internal/operators/bufferToggle' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(72,28): error TS2307: Cannot find module './internal/operators/bufferWhen' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(73,28): error TS2307: Cannot find module './internal/operators/catchError' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(74,28): error TS2307: Cannot find module './internal/operators/combineAll' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(75,34): error TS2307: Cannot find module './internal/operators/combineLatestAll' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(76,35): error TS2307: Cannot find module './internal/operators/combineLatestWith' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(77,27): error TS2307: Cannot find module './internal/operators/concatAll' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(78,27): error TS2307: Cannot find module './internal/operators/concatMap' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(79,29): error TS2307: Cannot find module './internal/operators/concatMapTo' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(80,28): error TS2307: Cannot find module './internal/operators/concatWith' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(81,40): error TS2307: Cannot find module './internal/operators/connect' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(82,23): error TS2307: Cannot find module './internal/operators/count' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(83,26): error TS2307: Cannot find module './internal/operators/debounce' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(84,30): error TS2307: Cannot find module './internal/operators/debounceTime' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(85,32): error TS2307: Cannot find module './internal/operators/defaultIfEmpty' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(86,23): error TS2307: Cannot find module './internal/operators/delay' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(87,27): error TS2307: Cannot find module './internal/operators/delayWhen' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(88,31): error TS2307: Cannot find module './internal/operators/dematerialize' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(89,26): error TS2307: Cannot find module './internal/operators/distinct' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(90,38): error TS2307: Cannot find module './internal/operators/distinctUntilChanged' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(91,41): error TS2307: Cannot find module './internal/operators/distinctUntilKeyChanged' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(92,27): error TS2307: Cannot find module './internal/operators/elementAt' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(93,25): error TS2307: Cannot find module './internal/operators/endWith' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(94,23): error TS2307: Cannot find module './internal/operators/every' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(95,25): error TS2307: Cannot find module './internal/operators/exhaust' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(96,28): error TS2307: Cannot find module './internal/operators/exhaustAll' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(97,28): error TS2307: Cannot find module './internal/operators/exhaustMap' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(98,24): error TS2307: Cannot find module './internal/operators/expand' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(99,24): error TS2307: Cannot find module './internal/operators/filter' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(100,26): error TS2307: Cannot find module './internal/operators/finalize' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(101,22): error TS2307: Cannot find module './internal/operators/find' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(102,27): error TS2307: Cannot find module './internal/operators/findIndex' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(103,23): error TS2307: Cannot find module './internal/operators/first' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(104,73): error TS2307: Cannot find module './internal/operators/groupBy' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(105,32): error TS2307: Cannot find module './internal/operators/ignoreElements' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(106,25): error TS2307: Cannot find module './internal/operators/isEmpty' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(107,22): error TS2307: Cannot find module './internal/operators/last' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(108,21): error TS2307: Cannot find module './internal/operators/map' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(109,23): error TS2307: Cannot find module './internal/operators/mapTo' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(110,29): error TS2307: Cannot find module './internal/operators/materialize' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(111,21): error TS2307: Cannot find module './internal/operators/max' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(112,26): error TS2307: Cannot find module './internal/operators/mergeAll' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(113,25): error TS2307: Cannot find module './internal/operators/flatMap' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(114,26): error TS2307: Cannot find module './internal/operators/mergeMap' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(115,28): error TS2307: Cannot find module './internal/operators/mergeMapTo' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(116,27): error TS2307: Cannot find module './internal/operators/mergeScan' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(117,27): error TS2307: Cannot find module './internal/operators/mergeWith' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(118,21): error TS2307: Cannot find module './internal/operators/min' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(119,27): error TS2307: Cannot find module './internal/operators/multicast' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(120,27): error TS2307: Cannot find module './internal/operators/observeOn' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(121,39): error TS2307: Cannot find module './internal/operators/onErrorResumeNextWith' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(122,26): error TS2307: Cannot find module './internal/operators/pairwise' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(123,23): error TS2307: Cannot find module './internal/operators/pluck' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(124,25): error TS2307: Cannot find module './internal/operators/publish' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(125,33): error TS2307: Cannot find module './internal/operators/publishBehavior' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(126,29): error TS2307: Cannot find module './internal/operators/publishLast' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(127,31): error TS2307: Cannot find module './internal/operators/publishReplay' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(128,26): error TS2307: Cannot find module './internal/operators/raceWith' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(129,24): error TS2307: Cannot find module './internal/operators/reduce' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(130,38): error TS2307: Cannot find module './internal/operators/repeat' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(131,28): error TS2307: Cannot find module './internal/operators/repeatWhen' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(132,36): error TS2307: Cannot find module './internal/operators/retry' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(133,27): error TS2307: Cannot find module './internal/operators/retryWhen' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(134,26): error TS2307: Cannot find module './internal/operators/refCount' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(135,24): error TS2307: Cannot find module './internal/operators/sample' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(136,28): error TS2307: Cannot find module './internal/operators/sampleTime' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(137,22): error TS2307: Cannot find module './internal/operators/scan' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(138,31): error TS2307: Cannot find module './internal/operators/sequenceEqual' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(139,36): error TS2307: Cannot find module './internal/operators/share' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(140,48): error TS2307: Cannot find module './internal/operators/shareReplay' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(141,24): error TS2307: Cannot find module './internal/operators/single' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(142,22): error TS2307: Cannot find module './internal/operators/skip' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(143,26): error TS2307: Cannot find module './internal/operators/skipLast' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(144,27): error TS2307: Cannot find module './internal/operators/skipUntil' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(145,27): error TS2307: Cannot find module './internal/operators/skipWhile' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(146,27): error TS2307: Cannot find module './internal/operators/startWith' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(147,29): error TS2307: Cannot find module './internal/operators/subscribeOn' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(148,27): error TS2307: Cannot find module './internal/operators/switchAll' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(149,27): error TS2307: Cannot find module './internal/operators/switchMap' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(150,29): error TS2307: Cannot find module './internal/operators/switchMapTo' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(151,28): error TS2307: Cannot find module './internal/operators/switchScan' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(152,22): error TS2307: Cannot find module './internal/operators/take' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(153,26): error TS2307: Cannot find module './internal/operators/takeLast' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(154,27): error TS2307: Cannot find module './internal/operators/takeUntil' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(155,27): error TS2307: Cannot find module './internal/operators/takeWhile' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(156,34): error TS2307: Cannot find module './internal/operators/tap' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(157,42): error TS2307: Cannot find module './internal/operators/throttle' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(158,30): error TS2307: Cannot find module './internal/operators/throttleTime' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(159,30): error TS2307: Cannot find module './internal/operators/throwIfEmpty' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(160,30): error TS2307: Cannot find module './internal/operators/timeInterval' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(161,53): error TS2307: Cannot find module './internal/operators/timeout' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(162,29): error TS2307: Cannot find module './internal/operators/timeoutWith' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(163,27): error TS2307: Cannot find module './internal/operators/timestamp' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(164,25): error TS2307: Cannot find module './internal/operators/toArray' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(165,24): error TS2307: Cannot find module './internal/operators/window' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(166,29): error TS2307: Cannot find module './internal/operators/windowCount' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(167,28): error TS2307: Cannot find module './internal/operators/windowTime' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(168,30): error TS2307: Cannot find module './internal/operators/windowToggle' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(169,28): error TS2307: Cannot find module './internal/operators/windowWhen' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(170,32): error TS2307: Cannot find module './internal/operators/withLatestFrom' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(171,24): error TS2307: Cannot find module './internal/operators/zipAll' or its corresponding type declarations.
+node_modules/rxjs/dist/types/index.d.ts(172,25): error TS2307: Cannot find module './internal/operators/zipWith' or its corresponding type declarations.
+node_modules/rxjs/dist/types/internal/scheduled/scheduled.d.ts(1,48): error TS2307: Cannot find module '../types' or its corresponding type declarations.
+node_modules/rxjs/dist/types/internal/scheduled/scheduled.d.ts(2,28): error TS2307: Cannot find module '../Observable' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(1,23): error TS2307: Cannot find module '../internal/operators/audit' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(2,27): error TS2307: Cannot find module '../internal/operators/auditTime' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(3,24): error TS2307: Cannot find module '../internal/operators/buffer' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(4,29): error TS2307: Cannot find module '../internal/operators/bufferCount' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(5,28): error TS2307: Cannot find module '../internal/operators/bufferTime' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(6,30): error TS2307: Cannot find module '../internal/operators/bufferToggle' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(7,28): error TS2307: Cannot find module '../internal/operators/bufferWhen' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(8,28): error TS2307: Cannot find module '../internal/operators/catchError' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(9,28): error TS2307: Cannot find module '../internal/operators/combineAll' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(10,34): error TS2307: Cannot find module '../internal/operators/combineLatestAll' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(11,31): error TS2307: Cannot find module '../internal/operators/combineLatest' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(12,35): error TS2307: Cannot find module '../internal/operators/combineLatestWith' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(13,24): error TS2307: Cannot find module '../internal/operators/concat' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(14,27): error TS2307: Cannot find module '../internal/operators/concatAll' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(15,27): error TS2307: Cannot find module '../internal/operators/concatMap' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(16,29): error TS2307: Cannot find module '../internal/operators/concatMapTo' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(17,28): error TS2307: Cannot find module '../internal/operators/concatWith' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(18,40): error TS2307: Cannot find module '../internal/operators/connect' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(19,23): error TS2307: Cannot find module '../internal/operators/count' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(20,26): error TS2307: Cannot find module '../internal/operators/debounce' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(21,30): error TS2307: Cannot find module '../internal/operators/debounceTime' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(22,32): error TS2307: Cannot find module '../internal/operators/defaultIfEmpty' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(23,23): error TS2307: Cannot find module '../internal/operators/delay' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(24,27): error TS2307: Cannot find module '../internal/operators/delayWhen' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(25,31): error TS2307: Cannot find module '../internal/operators/dematerialize' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(26,26): error TS2307: Cannot find module '../internal/operators/distinct' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(27,38): error TS2307: Cannot find module '../internal/operators/distinctUntilChanged' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(28,41): error TS2307: Cannot find module '../internal/operators/distinctUntilKeyChanged' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(29,27): error TS2307: Cannot find module '../internal/operators/elementAt' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(30,25): error TS2307: Cannot find module '../internal/operators/endWith' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(31,23): error TS2307: Cannot find module '../internal/operators/every' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(32,25): error TS2307: Cannot find module '../internal/operators/exhaust' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(33,28): error TS2307: Cannot find module '../internal/operators/exhaustAll' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(34,28): error TS2307: Cannot find module '../internal/operators/exhaustMap' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(35,24): error TS2307: Cannot find module '../internal/operators/expand' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(36,24): error TS2307: Cannot find module '../internal/operators/filter' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(37,26): error TS2307: Cannot find module '../internal/operators/finalize' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(38,22): error TS2307: Cannot find module '../internal/operators/find' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(39,27): error TS2307: Cannot find module '../internal/operators/findIndex' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(40,23): error TS2307: Cannot find module '../internal/operators/first' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(41,73): error TS2307: Cannot find module '../internal/operators/groupBy' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(42,32): error TS2307: Cannot find module '../internal/operators/ignoreElements' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(43,25): error TS2307: Cannot find module '../internal/operators/isEmpty' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(44,22): error TS2307: Cannot find module '../internal/operators/last' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(45,21): error TS2307: Cannot find module '../internal/operators/map' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(46,23): error TS2307: Cannot find module '../internal/operators/mapTo' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(47,29): error TS2307: Cannot find module '../internal/operators/materialize' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(48,21): error TS2307: Cannot find module '../internal/operators/max' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(49,23): error TS2307: Cannot find module '../internal/operators/merge' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(50,26): error TS2307: Cannot find module '../internal/operators/mergeAll' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(51,25): error TS2307: Cannot find module '../internal/operators/flatMap' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(52,26): error TS2307: Cannot find module '../internal/operators/mergeMap' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(53,28): error TS2307: Cannot find module '../internal/operators/mergeMapTo' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(54,27): error TS2307: Cannot find module '../internal/operators/mergeScan' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(55,27): error TS2307: Cannot find module '../internal/operators/mergeWith' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(56,21): error TS2307: Cannot find module '../internal/operators/min' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(57,27): error TS2307: Cannot find module '../internal/operators/multicast' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(58,27): error TS2307: Cannot find module '../internal/operators/observeOn' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(59,35): error TS2307: Cannot find module '../internal/operators/onErrorResumeNextWith' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(60,26): error TS2307: Cannot find module '../internal/operators/pairwise' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(61,27): error TS2307: Cannot find module '../internal/operators/partition' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(62,23): error TS2307: Cannot find module '../internal/operators/pluck' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(63,25): error TS2307: Cannot find module '../internal/operators/publish' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(64,33): error TS2307: Cannot find module '../internal/operators/publishBehavior' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(65,29): error TS2307: Cannot find module '../internal/operators/publishLast' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(66,31): error TS2307: Cannot find module '../internal/operators/publishReplay' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(67,22): error TS2307: Cannot find module '../internal/operators/race' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(68,26): error TS2307: Cannot find module '../internal/operators/raceWith' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(69,24): error TS2307: Cannot find module '../internal/operators/reduce' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(70,38): error TS2307: Cannot find module '../internal/operators/repeat' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(71,28): error TS2307: Cannot find module '../internal/operators/repeatWhen' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(72,36): error TS2307: Cannot find module '../internal/operators/retry' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(73,27): error TS2307: Cannot find module '../internal/operators/retryWhen' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(74,26): error TS2307: Cannot find module '../internal/operators/refCount' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(75,24): error TS2307: Cannot find module '../internal/operators/sample' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(76,28): error TS2307: Cannot find module '../internal/operators/sampleTime' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(77,22): error TS2307: Cannot find module '../internal/operators/scan' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(78,31): error TS2307: Cannot find module '../internal/operators/sequenceEqual' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(79,36): error TS2307: Cannot find module '../internal/operators/share' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(80,48): error TS2307: Cannot find module '../internal/operators/shareReplay' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(81,24): error TS2307: Cannot find module '../internal/operators/single' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(82,22): error TS2307: Cannot find module '../internal/operators/skip' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(83,26): error TS2307: Cannot find module '../internal/operators/skipLast' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(84,27): error TS2307: Cannot find module '../internal/operators/skipUntil' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(85,27): error TS2307: Cannot find module '../internal/operators/skipWhile' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(86,27): error TS2307: Cannot find module '../internal/operators/startWith' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(87,29): error TS2307: Cannot find module '../internal/operators/subscribeOn' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(88,27): error TS2307: Cannot find module '../internal/operators/switchAll' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(89,27): error TS2307: Cannot find module '../internal/operators/switchMap' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(90,29): error TS2307: Cannot find module '../internal/operators/switchMapTo' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(91,28): error TS2307: Cannot find module '../internal/operators/switchScan' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(92,22): error TS2307: Cannot find module '../internal/operators/take' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(93,26): error TS2307: Cannot find module '../internal/operators/takeLast' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(94,27): error TS2307: Cannot find module '../internal/operators/takeUntil' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(95,27): error TS2307: Cannot find module '../internal/operators/takeWhile' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(96,34): error TS2307: Cannot find module '../internal/operators/tap' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(97,42): error TS2307: Cannot find module '../internal/operators/throttle' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(98,30): error TS2307: Cannot find module '../internal/operators/throttleTime' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(99,30): error TS2307: Cannot find module '../internal/operators/throwIfEmpty' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(100,30): error TS2307: Cannot find module '../internal/operators/timeInterval' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(101,53): error TS2307: Cannot find module '../internal/operators/timeout' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(102,29): error TS2307: Cannot find module '../internal/operators/timeoutWith' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(103,27): error TS2307: Cannot find module '../internal/operators/timestamp' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(104,25): error TS2307: Cannot find module '../internal/operators/toArray' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(105,24): error TS2307: Cannot find module '../internal/operators/window' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(106,29): error TS2307: Cannot find module '../internal/operators/windowCount' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(107,28): error TS2307: Cannot find module '../internal/operators/windowTime' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(108,30): error TS2307: Cannot find module '../internal/operators/windowToggle' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(109,28): error TS2307: Cannot find module '../internal/operators/windowWhen' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(110,32): error TS2307: Cannot find module '../internal/operators/withLatestFrom' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(111,21): error TS2307: Cannot find module '../internal/operators/zip' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(112,24): error TS2307: Cannot find module '../internal/operators/zipAll' or its corresponding type declarations.
+node_modules/rxjs/dist/types/operators/index.d.ts(113,25): error TS2307: Cannot find module '../internal/operators/zipWith' or its corresponding type declarations.
+node_modules/rxjs/dist/types/testing/index.d.ts(1,43): error TS2307: Cannot find module '../internal/testing/TestScheduler' or its corresponding type declarations.
+src/modules/auth/auth.controller.spec.ts(101,32): error TS2339: Property 'email' does not exist on type 'object'.
+src/modules/auth/auth.controller.ts(35,5): error TS1241: Unable to resolve signature of method decorator when called as an expression.
+  The runtime will invoke the decorator with 2 arguments, but the decorator expects 3.
+src/modules/auth/auth.controller.ts(35,6): error TS1270: Decorator function return type 'void | TypedPropertyDescriptor<unknown>' is not assignable to type 'void | ((req: { user: AuthenticatedUser; }, _loginDto: LoginDto, res: Response<any, Record<string, any>>) => Promise<{ access_token: string; refresh_token: string; user: object; }>)'.
+  Type 'TypedPropertyDescriptor<unknown>' is not assignable to type 'void | ((req: { user: AuthenticatedUser; }, _loginDto: LoginDto, res: Response<any, Record<string, any>>) => Promise<{ access_token: string; refresh_token: string; user: object; }>)'.
+src/modules/auth/auth.controller.ts(37,5): error TS1241: Unable to resolve signature of method decorator when called as an expression.
+  The runtime will invoke the decorator with 2 arguments, but the decorator expects 3.
+src/modules/auth/auth.controller.ts(37,6): error TS1270: Decorator function return type 'void | TypedPropertyDescriptor<unknown>' is not assignable to type 'void | ((req: { user: AuthenticatedUser; }, _loginDto: LoginDto, res: Response<any, Record<string, any>>) => Promise<{ access_token: string; refresh_token: string; user: object; }>)'.
+  Type 'TypedPropertyDescriptor<unknown>' is not assignable to type 'void | ((req: { user: AuthenticatedUser; }, _loginDto: LoginDto, res: Response<any, Record<string, any>>) => Promise<{ access_token: string; refresh_token: string; user: object; }>)'.
+src/modules/auth/auth.controller.ts(41,17): error TS1206: Decorators are not valid here.
+src/modules/auth/auth.controller.ts(41,62): error TS1206: Decorators are not valid here.
+src/modules/auth/auth.controller.ts(41,91): error TS1206: Decorators are not valid here.
+src/modules/auth/auth.controller.ts(50,5): error TS1241: Unable to resolve signature of method decorator when called as an expression.
+  The runtime will invoke the decorator with 2 arguments, but the decorator expects 3.
+src/modules/auth/auth.controller.ts(50,6): error TS1270: Decorator function return type 'void | TypedPropertyDescriptor<unknown>' is not assignable to type 'void | ((bodyToken: string, req: { cookies: Record<string, string>; user?: AuthenticatedUser; }, res: Response<any, Record<string, any>>) => Promise<...>)'.
+  Type 'TypedPropertyDescriptor<unknown>' is not assignable to type 'void | ((bodyToken: string, req: { cookies: Record<string, string>; user?: AuthenticatedUser; }, res: Response<any, Record<string, any>>) => Promise<...>)'.
+src/modules/auth/auth.controller.ts(51,5): error TS1241: Unable to resolve signature of method decorator when called as an expression.
+  The runtime will invoke the decorator with 2 arguments, but the decorator expects 3.
+src/modules/auth/auth.controller.ts(51,6): error TS1270: Decorator function return type 'void | TypedPropertyDescriptor<unknown>' is not assignable to type 'void | ((bodyToken: string, req: { cookies: Record<string, string>; user?: AuthenticatedUser; }, res: Response<any, Record<string, any>>) => Promise<...>)'.
+  Type 'TypedPropertyDescriptor<unknown>' is not assignable to type 'void | ((bodyToken: string, req: { cookies: Record<string, string>; user?: AuthenticatedUser; }, res: Response<any, Record<string, any>>) => Promise<...>)'.
+src/modules/auth/auth.controller.ts(53,5): error TS1241: Unable to resolve signature of method decorator when called as an expression.
+  The runtime will invoke the decorator with 2 arguments, but the decorator expects 3.
+src/modules/auth/auth.controller.ts(53,6): error TS1270: Decorator function return type 'void | TypedPropertyDescriptor<unknown>' is not assignable to type 'void | ((bodyToken: string, req: { cookies: Record<string, string>; user?: AuthenticatedUser; }, res: Response<any, Record<string, any>>) => Promise<...>)'.
+  Type 'TypedPropertyDescriptor<unknown>' is not assignable to type 'void | ((bodyToken: string, req: { cookies: Record<string, string>; user?: AuthenticatedUser; }, res: Response<any, Record<string, any>>) => Promise<...>)'.
+src/modules/auth/auth.controller.ts(57,9): error TS1206: Decorators are not valid here.
+src/modules/auth/auth.controller.ts(58,9): error TS1206: Decorators are not valid here.
+src/modules/auth/auth.controller.ts(59,9): error TS1206: Decorators are not valid here.
+src/modules/auth/auth.controller.ts(72,5): error TS1241: Unable to resolve signature of method decorator when called as an expression.
+  The runtime will invoke the decorator with 2 arguments, but the decorator expects 3.
+src/modules/auth/auth.controller.ts(72,6): error TS1270: Decorator function return type 'void | TypedPropertyDescriptor<unknown>' is not assignable to type 'void | ((bodyToken: string, req: { cookies: Record<string, string>; user?: AuthenticatedUser; }, res: Response<any, Record<string, any>>) => Promise<...>)'.
+  Type 'TypedPropertyDescriptor<unknown>' is not assignable to type 'void | ((bodyToken: string, req: { cookies: Record<string, string>; user?: AuthenticatedUser; }, res: Response<any, Record<string, any>>) => Promise<...>)'.
+src/modules/auth/auth.controller.ts(73,5): error TS1241: Unable to resolve signature of method decorator when called as an expression.
+  The runtime will invoke the decorator with 2 arguments, but the decorator expects 3.
+src/modules/auth/auth.controller.ts(73,6): error TS1270: Decorator function return type 'void | TypedPropertyDescriptor<unknown>' is not assignable to type 'void | ((bodyToken: string, req: { cookies: Record<string, string>; user?: AuthenticatedUser; }, res: Response<any, Record<string, any>>) => Promise<...>)'.
+  Type 'TypedPropertyDescriptor<unknown>' is not assignable to type 'void | ((bodyToken: string, req: { cookies: Record<string, string>; user?: AuthenticatedUser; }, res: Response<any, Record<string, any>>) => Promise<...>)'.
+src/modules/auth/auth.controller.ts(75,5): error TS1241: Unable to resolve signature of method decorator when called as an expression.
+  The runtime will invoke the decorator with 2 arguments, but the decorator expects 3.
+src/modules/auth/auth.controller.ts(75,6): error TS1270: Decorator function return type 'void | TypedPropertyDescriptor<unknown>' is not assignable to type 'void | ((bodyToken: string, req: { cookies: Record<string, string>; user?: AuthenticatedUser; }, res: Response<any, Record<string, any>>) => Promise<...>)'.
+  Type 'TypedPropertyDescriptor<unknown>' is not assignable to type 'void | ((bodyToken: string, req: { cookies: Record<string, string>; user?: AuthenticatedUser; }, res: Response<any, Record<string, any>>) => Promise<...>)'.
+src/modules/auth/auth.controller.ts(78,9): error TS1206: Decorators are not valid here.
+src/modules/auth/auth.controller.ts(79,9): error TS1206: Decorators are not valid here.
+src/modules/auth/auth.controller.ts(80,9): error TS1206: Decorators are not valid here.
+src/modules/auth/auth.controller.ts(92,5): error TS1241: Unable to resolve signature of method decorator when called as an expression.
+  The runtime will invoke the decorator with 2 arguments, but the decorator expects 3.
+src/modules/auth/auth.controller.ts(92,6): error TS1270: Decorator function return type 'void | TypedPropertyDescriptor<unknown>' is not assignable to type 'void | ((req: { user: AuthenticatedUser; }) => { id: string; email: string; companyId: string; role: string | { name: string; }; departments: { id: string; name: string; }[]; })'.
+  Type 'TypedPropertyDescriptor<unknown>' is not assignable to type 'void | ((req: { user: AuthenticatedUser; }) => { id: string; email: string; companyId: string; role: string | { name: string; }; departments: { id: string; name: string; }[]; })'.
+src/modules/auth/auth.controller.ts(95,5): error TS1241: Unable to resolve signature of method decorator when called as an expression.
+  The runtime will invoke the decorator with 2 arguments, but the decorator expects 3.
+src/modules/auth/auth.controller.ts(95,6): error TS1270: Decorator function return type 'void | TypedPropertyDescriptor<unknown>' is not assignable to type 'void | ((req: { user: AuthenticatedUser; }) => { id: string; email: string; companyId: string; role: string | { name: string; }; departments: { id: string; name: string; }[]; })'.
+  Type 'TypedPropertyDescriptor<unknown>' is not assignable to type 'void | ((req: { user: AuthenticatedUser; }) => { id: string; email: string; companyId: string; role: string | { name: string; }; departments: { id: string; name: string; }[]; })'.
+src/modules/auth/auth.controller.ts(96,16): error TS1206: Decorators are not valid here.
+src/modules/auth/dto/login.dto.ts(5,6): error TS1240: Unable to resolve signature of property decorator when called as an expression.
+  Argument of type 'ClassFieldDecoratorContext<LoginDto, string> & { name: "email"; private: false; static: false; }' is not assignable to parameter of type 'string | symbol'.
+src/modules/auth/dto/login.dto.ts(6,6): error TS1240: Unable to resolve signature of property decorator when called as an expression.
+  Argument of type 'ClassFieldDecoratorContext<LoginDto, string> & { name: "email"; private: false; static: false; }' is not assignable to parameter of type 'string | symbol'.
+src/modules/auth/dto/login.dto.ts(7,6): error TS1240: Unable to resolve signature of property decorator when called as an expression.
+  Argument of type 'ClassFieldDecoratorContext<LoginDto, string> & { name: "email"; private: false; static: false; }' is not assignable to parameter of type 'string | symbol'.
+src/modules/auth/dto/login.dto.ts(10,6): error TS1240: Unable to resolve signature of property decorator when called as an expression.
+  Argument of type 'ClassFieldDecoratorContext<LoginDto, string> & { name: "password"; private: false; static: false; }' is not assignable to parameter of type 'string | symbol'.
+src/modules/auth/dto/login.dto.ts(11,6): error TS1240: Unable to resolve signature of property decorator when called as an expression.
+  Argument of type 'ClassFieldDecoratorContext<LoginDto, string> & { name: "password"; private: false; static: false; }' is not assignable to parameter of type 'string | symbol'.
+src/modules/auth/dto/login.dto.ts(12,6): error TS1240: Unable to resolve signature of property decorator when called as an expression.
+  Argument of type 'ClassFieldDecoratorContext<LoginDto, string> & { name: "password"; private: false; static: false; }' is not assignable to parameter of type 'string | symbol'.
+src/modules/users/dto/create-user.dto.ts(5,6): error TS1240: Unable to resolve signature of property decorator when called as an expression.
+  Argument of type 'ClassFieldDecoratorContext<CreateUserDto, string> & { name: "email"; private: false; static: false; }' is not assignable to parameter of type 'string | symbol'.
+src/modules/users/dto/create-user.dto.ts(6,6): error TS1240: Unable to resolve signature of property decorator when called as an expression.
+  Argument of type 'ClassFieldDecoratorContext<CreateUserDto, string> & { name: "email"; private: false; static: false; }' is not assignable to parameter of type 'string | symbol'.
+src/modules/users/dto/create-user.dto.ts(7,6): error TS1240: Unable to resolve signature of property decorator when called as an expression.
+  Argument of type 'ClassFieldDecoratorContext<CreateUserDto, string> & { name: "email"; private: false; static: false; }' is not assignable to parameter of type 'string | symbol'.
+src/modules/users/dto/create-user.dto.ts(10,6): error TS1240: Unable to resolve signature of property decorator when called as an expression.
+  Argument of type 'ClassFieldDecoratorContext<CreateUserDto, string> & { name: "password"; private: false; static: false; }' is not assignable to parameter of type 'string | symbol'.
+src/modules/users/dto/create-user.dto.ts(11,6): error TS1240: Unable to resolve signature of property decorator when called as an expression.
+  Argument of type 'ClassFieldDecoratorContext<CreateUserDto, string> & { name: "password"; private: false; static: false; }' is not assignable to parameter of type 'string | symbol'.
+src/modules/users/dto/create-user.dto.ts(12,6): error TS1240: Unable to resolve signature of property decorator when called as an expression.
+  Argument of type 'ClassFieldDecoratorContext<CreateUserDto, string> & { name: "password"; private: false; static: false; }' is not assignable to parameter of type 'string | symbol'.
+src/modules/users/dto/create-user.dto.ts(13,6): error TS1240: Unable to resolve signature of property decorator when called as an expression.
+  Argument of type 'ClassFieldDecoratorContext<CreateUserDto, string> & { name: "password"; private: false; static: false; }' is not assignable to parameter of type 'string | symbol'.
+src/modules/users/dto/create-user.dto.ts(14,6): error TS1240: Unable to resolve signature of property decorator when called as an expression.
+  Argument of type 'ClassFieldDecoratorContext<CreateUserDto, string> & { name: "password"; private: false; static: false; }' is not assignable to parameter of type 'string | symbol'.
+src/modules/users/dto/create-user.dto.ts(17,6): error TS1240: Unable to resolve signature of property decorator when called as an expression.
+  Argument of type 'ClassFieldDecoratorContext<CreateUserDto, string> & { name: "name"; private: false; static: false; }' is not assignable to parameter of type 'string | symbol'.
+src/modules/users/dto/create-user.dto.ts(18,6): error TS1240: Unable to resolve signature of property decorator when called as an expression.
+  Argument of type 'ClassFieldDecoratorContext<CreateUserDto, string> & { name: "name"; private: false; static: false; }' is not assignable to parameter of type 'string | symbol'.
+src/modules/users/dto/create-user.dto.ts(19,6): error TS1240: Unable to resolve signature of property decorator when called as an expression.
+  Argument of type 'ClassFieldDecoratorContext<CreateUserDto, string> & { name: "name"; private: false; static: false; }' is not assignable to parameter of type 'string | symbol'.
+src/modules/users/dto/create-user.dto.ts(22,6): error TS1240: Unable to resolve signature of property decorator when called as an expression.
+  Argument of type 'ClassFieldDecoratorContext<CreateUserDto, string> & { name: "roleId"; private: false; static: false; }' is not assignable to parameter of type 'string | symbol'.
+src/modules/users/dto/create-user.dto.ts(23,6): error TS1240: Unable to resolve signature of property decorator when called as an expression.
+  Argument of type 'ClassFieldDecoratorContext<CreateUserDto, string> & { name: "roleId"; private: false; static: false; }' is not assignable to parameter of type 'string | symbol'.
+src/modules/users/dto/create-user.dto.ts(24,6): error TS1240: Unable to resolve signature of property decorator when called as an expression.
+  Argument of type 'ClassFieldDecoratorContext<CreateUserDto, string> & { name: "roleId"; private: false; static: false; }' is not assignable to parameter of type 'string | symbol'.
+src/modules/users/dto/create-user.dto.ts(27,6): error TS1240: Unable to resolve signature of property decorator when called as an expression.
+  Argument of type 'ClassFieldDecoratorContext<CreateUserDto, string> & { name: "departmentId"; private: false; static: false; }' is not assignable to parameter of type 'string | symbol'.
+src/modules/users/dto/create-user.dto.ts(28,6): error TS1240: Unable to resolve signature of property decorator when called as an expression.
+  Argument of type 'ClassFieldDecoratorContext<CreateUserDto, string> & { name: "departmentId"; private: false; static: false; }' is not assignable to parameter of type 'string | symbol'.
+src/modules/users/dto/create-user.dto.ts(29,6): error TS1240: Unable to resolve signature of property decorator when called as an expression.
+  Argument of type 'ClassFieldDecoratorContext<CreateUserDto, string> & { name: "departmentId"; private: false; static: false; }' is not assignable to parameter of type 'string | symbol'.
+src/modules/users/dto/create-user.dto.ts(32,6): error TS1240: Unable to resolve signature of property decorator when called as an expression.
+  Argument of type 'ClassFieldDecoratorContext<CreateUserDto, boolean> & { name: "isActive"; private: false; static: false; }' is not assignable to parameter of type 'string | symbol'.
+src/modules/users/dto/create-user.dto.ts(33,6): error TS1240: Unable to resolve signature of property decorator when called as an expression.
+  Argument of type 'ClassFieldDecoratorContext<CreateUserDto, boolean> & { name: "isActive"; private: false; static: false; }' is not assignable to parameter of type 'string | symbol'.
+src/modules/users/dto/create-user.dto.ts(34,6): error TS1240: Unable to resolve signature of property decorator when called as an expression.
+  Argument of type 'ClassFieldDecoratorContext<CreateUserDto, boolean> & { name: "isActive"; private: false; static: false; }' is not assignable to parameter of type 'string | symbol'.
+src/modules/users/dto/create-user.dto.ts(37,6): error TS1240: Unable to resolve signature of property decorator when called as an expression.
+  Argument of type 'ClassFieldDecoratorContext<CreateUserDto, string[]> & { name: "departmentIds"; private: false; static: false; }' is not assignable to parameter of type 'string | symbol'.
+src/modules/users/dto/create-user.dto.ts(38,6): error TS1240: Unable to resolve signature of property decorator when called as an expression.
+  Argument of type 'ClassFieldDecoratorContext<CreateUserDto, string[]> & { name: "departmentIds"; private: false; static: false; }' is not assignable to parameter of type 'string | symbol'.
+src/modules/users/dto/create-user.dto.ts(39,6): error TS1240: Unable to resolve signature of property decorator when called as an expression.
+  Argument of type 'ClassFieldDecoratorContext<CreateUserDto, string[]> & { name: "departmentIds"; private: false; static: false; }' is not assignable to parameter of type 'string | symbol'.

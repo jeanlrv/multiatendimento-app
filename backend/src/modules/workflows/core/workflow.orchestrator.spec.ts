@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { WorkflowOrchestrator } from './workflow.orchestrator';
 import { ActionRegistry } from './action.registry';
 import { PrismaService } from '../../../database/prisma.service';
+import { createPrismaMock } from '../../../database/prisma-mock';
 import { WorkflowGraph, WorkflowNode } from '../types/workflow-graph.types';
 import { WorkflowContext, ActionExecutor, ActionResult } from '../interfaces/action-executor.interface';
 
@@ -11,11 +12,7 @@ const mockActionRegistry = {
 };
 
 // Mock Prisma
-const mockPrismaService = {
-    workflowActionMetric: {
-        upsert: jest.fn(),
-    },
-};
+const mockPrismaService = createPrismaMock();
 
 // Mock Executor
 const mockExecutor: ActionExecutor = {

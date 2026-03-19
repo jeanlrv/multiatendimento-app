@@ -49,8 +49,8 @@ export default function MacrosPage() {
             await QuickRepliesService.remove(macro.id);
             setMacros(prev => prev.filter(m => m.id !== macro.id));
             toast.success('Resposta rápida removida');
-        } catch (err: any) {
-            toast.error(err.response?.data?.message || 'Erro ao remover resposta rápida');
+        } catch (err) {
+            toast.error((err as any).response?.data?.message || 'Erro ao remover resposta rápida');
         } finally {
             setDeletingId(null);
         }
@@ -246,8 +246,8 @@ function MacroModal({ macro, onClose, onSave }: ModalProps) {
                 : await QuickRepliesService.update(macro.id, { ...form, shortcut: finalShortcut });
             toast.success(isNew ? 'Criada!' : 'Atualizada!');
             onSave(result);
-        } catch (err: any) {
-            toast.error(err.response?.data?.message || 'Erro ao salvar');
+        } catch (err) {
+            toast.error((err as any).response?.data?.message || 'Erro ao salvar');
         } finally {
             setSubmitting(false);
         }

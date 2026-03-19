@@ -4,6 +4,8 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
 
+import { JwtPayload, AuthenticatedUser } from '../interfaces/auth.interfaces';
+
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
     constructor(private configService: ConfigService) {
@@ -19,13 +21,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         });
     }
 
-    async validate(payload: any) {
+    async validate(payload: JwtPayload): Promise<AuthenticatedUser> {
         return {
             id: payload.sub,
             email: payload.email,
             companyId: payload.companyId,
             role: payload.role,
-            permissions: payload.permissions,
+            permissions: payload.permissions || [],
             departments: payload.departments || []
         };
     }

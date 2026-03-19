@@ -8,22 +8,22 @@ export interface Tag {
 }
 
 export const TagsService = {
-    findAll: async (signal?: AbortSignal) => {
+    findAll: async (signal?: AbortSignal): Promise<Tag[]> => {
         const response = await api.get<Tag[]>('/tags', { signal });
         return response.data;
     },
 
-    create: async (data: { name: string; color?: string }) => {
+    create: async (data: { name: string; color?: string }): Promise<Tag> => {
         const response = await api.post<Tag>('/tags', data);
         return response.data;
     },
 
-    update: async (id: string, data: Partial<{ name: string; color?: string }>) => {
+    update: async (id: string, data: Partial<{ name: string; color?: string }>): Promise<Tag> => {
         const response = await api.patch<Tag>(`/tags/${id}`, data);
         return response.data;
     },
 
-    remove: async (id: string) => {
+    remove: async (id: string): Promise<void> => {
         await api.delete(`/tags/${id}`);
     }
 };

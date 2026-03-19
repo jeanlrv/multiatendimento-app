@@ -94,9 +94,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             // Fetch company branding e redirecionar sequencialmente
             await fetchCompany();
             router.push('/dashboard');
-        } catch (error: any) {
+        } catch (error) {
             // Logar apenas status HTTP — nunca dados de resposta (podem conter informações sensíveis)
-            const status = error.response?.status;
+            const status = (error as any)?.response?.status;
             console.error('Erro no login:', { status });
             throw error;
         }

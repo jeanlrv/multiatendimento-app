@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, UnauthorizedException, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { UsersService } from '../users/users.service';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -7,7 +7,7 @@ import * as bcrypt from 'bcryptjs';
 import { randomBytes } from 'crypto';
 
 @Injectable()
-export class AuthService implements OnModuleInit {
+export class AuthService implements OnModuleInit, OnModuleDestroy {
     private readonly logger = new Logger(AuthService.name);
     private cleanupInterval: NodeJS.Timeout | null = null;
 
@@ -29,6 +29,13 @@ export class AuthService implements OnModuleInit {
         }, SIX_HOURS);
         // Executar uma vez no boot (após 30s para não bloquear startup)
         setTimeout(() => this.cleanupExpiredTokens(), 30_000);
+    }
+
+    onModuleDestroy() {
+        if (this.cleanupInterval) {
+            clearInterval(this.cleanupInterval);
+            this.cleanupInterval = null;
+        }
     }
 
     private async cleanupExpiredTokens() {

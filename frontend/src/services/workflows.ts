@@ -9,7 +9,7 @@ export interface WorkflowRule {
 }
 
 export const WorkflowsService = {
-    findAll: async () => {
+    findAll: async (): Promise<WorkflowRule[]> => {
         const response = await api.get<WorkflowRule[]>('/workflows');
         return response.data;
     }

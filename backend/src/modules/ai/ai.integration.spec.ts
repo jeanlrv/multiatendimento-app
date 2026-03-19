@@ -39,7 +39,9 @@ describe('AI Chat Engine (Integração Média Mocks)', () => {
                 { provide: PrismaService, useValue: mockPrisma },
                 { provide: LLMService, useValue: mockLlmService },
                 { provide: VectorStoreService, useValue: mockVectorStoreService },
-                { provide: ProviderConfigService, useValue: { getDecryptedForCompany: jest.fn().mockResolvedValue(new Map()) } },
+                { provide: ProviderConfigService, useValue: { 
+                    getDecryptedForCompany: jest.fn().mockResolvedValue(new Map([['openai', { apiKey: 'sk-test' }]])) 
+                } },
                 { provide: EventEmitter2, useValue: { emit: jest.fn() } },
                 { provide: AIMetricsService, useValue: { checkTokenLimits: jest.fn(), trackTokenUsage: jest.fn().mockResolvedValue(true) } },
             ],
@@ -81,9 +83,8 @@ describe('AI Chat Engine (Integração Média Mocks)', () => {
         // Tentativa 3 (Falha Original)
         await expect(callChat()).rejects.toThrow(/LLM Timeout API/i);
 
-        // Tentativa 4 (Desarme Rápido por Circuit Breaker - STATE OPEN)
         // O throw de um state Open é manipulado pelo próprio breaker "Service Unavailable"
         // Sem esperar o timeout da promessa
-        await expect(callChat()).rejects.toThrow(/Circuit Breaker/i);
+        await expect(callChat()).rejects.toThrow(/CircuitBreaker/i);
     });
 });

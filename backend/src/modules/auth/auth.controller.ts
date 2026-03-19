@@ -18,6 +18,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagg
 import { LoginDto } from './dto/login.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { Response } from 'express';
+import { AuthenticatedUser } from './interfaces/auth.interfaces';
 
 const IS_PROD = process.env.NODE_ENV === 'production';
 const COOKIE_BASE = { httpOnly: true, secure: IS_PROD, sameSite: 'lax' as const };
@@ -37,7 +38,7 @@ export class AuthController {
     @ApiResponse({ status: 200, description: 'Login realizado com sucesso — retorna access_token e refresh_token' })
     @ApiResponse({ status: 401, description: 'Credenciais inválidas' })
     @ApiResponse({ status: 429, description: 'Muitas tentativas. Aguarde 1 minuto.' })
-    async login(@Request() req, @Body() _loginDto: LoginDto, @Res({ passthrough: true }) res: Response) {
+    async login(@Request() req: { user: AuthenticatedUser }, @Body() _loginDto: LoginDto, @Res({ passthrough: true }) res: Response) {
         const result = await this.authService.login(req.user);
         // Setar tokens como httpOnly cookies (não acessíveis via JS — proteção XSS)
         res.cookie('access_token', result.access_token, { ...COOKIE_BASE, maxAge: ACCESS_TOKEN_TTL, path: '/' });
@@ -54,7 +55,7 @@ export class AuthController {
     @ApiResponse({ status: 401, description: 'Refresh token inválido ou expirado' })
     async refresh(
         @Body('refresh_token') bodyToken: string,
-        @Req() req: any,
+        @Req() req: { cookies: Record<string, string>, user?: AuthenticatedUser },
         @Res({ passthrough: true }) res: Response,
     ) {
         const token = bodyToken || req.cookies?.refresh_token;
@@ -75,7 +76,7 @@ export class AuthController {
     @ApiResponse({ status: 200, description: 'Sessão encerrada com sucesso' })
     async logout(
         @Body('refresh_token') bodyToken: string,
-        @Req() req: any,
+        @Req() req: { cookies: Record<string, string>, user?: AuthenticatedUser },
         @Res({ passthrough: true }) res: Response,
     ) {
         const token = bodyToken || req.cookies?.refresh_token;
@@ -92,7 +93,9 @@ export class AuthController {
     @SkipThrottle()
     @ApiBearerAuth()
     @ApiOperation({ summary: 'Obter perfil do usuário logado' })
-    getProfile(@Request() req) {
-        return req.user;
+    getProfile(@Request() req: { user: AuthenticatedUser }) {
+        // Retorna apenas campos seguros — evita expor permissions[], departments IDs internos
+        const { id, email, companyId, role, departments } = req.user;
+        return { id, email, companyId, role, departments };
     }
 }

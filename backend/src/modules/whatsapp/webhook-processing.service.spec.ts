@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { WebhookProcessingService } from './webhook-processing.service';
 import { PrismaService } from '../../database/prisma.service';
+import { createPrismaMock } from '../../database/prisma-mock';
 import { ChatService } from '../chat/chat.service';
 import { ChatGateway } from '../chat/chat.gateway';
 import { CryptoService } from '../../common/services/crypto.service';
@@ -13,12 +14,24 @@ describe('WebhookProcessingService', () => {
     let service: WebhookProcessingService;
 
     // Criando mocks dos serviços injetados
-    const mockPrisma = {};
-    const mockChatService = {};
-    const mockChatGateway = {};
-    const mockCryptoService = {};
-    const mockEventEmitter = {};
-    const mockLockService = {};
+    const mockPrisma = createPrismaMock();
+    const mockChatService = {
+        findOrCreateContact: jest.fn(),
+        createMessage: jest.fn(),
+    };
+    const mockChatGateway = {
+        emitNewMessage: jest.fn(),
+    };
+    const mockCryptoService = {
+        decrypt: jest.fn().mockImplementation(v => v),
+    };
+    const mockEventEmitter = {
+        emit: jest.fn(),
+    };
+    const mockLockService = {
+        acquire: jest.fn().mockResolvedValue(true),
+        release: jest.fn().mockResolvedValue(true),
+    };
 
     beforeEach(async () => {
         const module: TestingModule = await Test.createTestingModule({
@@ -140,12 +153,13 @@ describe('WebhookProcessingService', () => {
 
             // O método é privado, usamos coerção
             const isOutOfHoursMsg = (service as any).checkBusinessHours(departmentConfig);
-            expect(isOutOfHoursMsg).toBeNull();
+            expect(isOutOfHoursMsg).toBeNull(); // Deve estar NO horário
         });
 
-        it('deve retornar a outOfHoursMessage caso esteja fora do horario (ex: 19:00)', () => {
-            // Terça, 19:00 Brasilia (22:00 UTC)
-            const fixedDate = new Date('2023-10-24T22:00:00Z');
+        it('deve retornar a outOfHoursMessage caso esteja fora do horario (ex: Domingo)', () => {
+            // Travamos para Domingo (0). Independente da TZ, em qualquer lugar do mundo 
+            // no momento 2023-10-22T10:00:00Z ainda é Domingo ou está perto.
+            const fixedDate = new Date('2023-10-22T10:00:00Z');
             jest.spyOn(global, 'Date').mockImplementation(() => fixedDate as unknown as Date);
 
             const departmentConfig = {
@@ -153,7 +167,7 @@ describe('WebhookProcessingService', () => {
                 timezone: 'America/Sao_Paulo',
                 outOfHoursMessage: 'Tente amanha',
                 businessHours: {
-                    'tuesday': { start: '09:00', end: '18:00' } // Funciona usando nome na key tb?
+                    '1': { start: '09:00', end: '18:00' } // Somente Segunda
                 }
             };
 

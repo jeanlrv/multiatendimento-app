@@ -46,10 +46,9 @@ export class WebhooksController {
 
             this.logger.log(`[WEBHOOK] tipo=${type || '(sem type)'} instanceId=${instanceId || '(vazio)'} fromMe=${payload.fromMe} phone=${payload.phone || '-'}`);
 
-            // Validar token de segurança de forma síncrona — antes de enfileirar.
-            // Em produção, instanceId vazio é suspeito e deve ser rejeitado.
-            if (!instanceId && process.env.NODE_ENV === 'production') {
-                this.logger.warn('[WEBHOOK] Rejeitado: instanceId ausente em produção');
+            // Rejeitar webhooks sem instanceId em qualquer ambiente — segurança obrigatória
+            if (!instanceId) {
+                this.logger.warn('[WEBHOOK] Rejeitado: instanceId ausente');
                 return { success: false, error: 'instanceId obrigatório' };
             }
 

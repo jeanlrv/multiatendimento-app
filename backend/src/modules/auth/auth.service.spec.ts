@@ -5,6 +5,7 @@ import { UsersService } from '../users/users.service';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../database/prisma.service';
+import { createPrismaMock } from '../../database/prisma-mock';
 import * as bcrypt from 'bcryptjs';
 
 // ── Mocks ──────────────────────────────────────────────────────────────────────
@@ -31,13 +32,7 @@ const mockConfigService = {
         return config[key] ?? def;
     }),
 };
-const mockPrismaService = {
-    refreshToken: {
-        create: jest.fn().mockResolvedValue({ token: 'refresh-token-hex', userId: 'user-uuid-1', expiresAt: new Date() }),
-        findUnique: jest.fn(),
-        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
-    },
-};
+const mockPrismaService = createPrismaMock();
 
 // ── Suite ──────────────────────────────────────────────────────────────────────
 

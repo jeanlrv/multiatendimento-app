@@ -6,39 +6,78 @@ export interface BulkActionParams {
     targetId?: string;
 }
 
+export interface TicketFilters {
+    status?: string | string[];
+    departmentId?: string;
+    assignedUserId?: string;
+    search?: string;
+    priority?: string;
+    connectionId?: string;
+    page?: number;
+    limit?: number;
+}
+
+export interface Ticket {
+    id: string;
+    status: string;
+    companyId: string;
+    departmentId?: string;
+    assignedUserId?: string;
+    contactId: string;
+    createdAt: string;
+    updatedAt: string;
+    [key: string]: unknown;
+}
+
+export interface PaginatedTickets {
+    data: Ticket[];
+    meta: {
+        total: number;
+        page: number;
+        limit: number;
+        totalPages: number;
+    };
+}
+
+export interface BulkActionResult {
+    success: boolean;
+    count: number;
+    message?: string;
+}
+
 export const ticketsService = {
-    findAll: async (params: any, signal?: AbortSignal) => {
-        const response = await api.get('/tickets', { params, signal });
+    findAll: async (params: TicketFilters, signal?: AbortSignal): Promise<PaginatedTickets> => {
+        const response = await api.get<PaginatedTickets>('/tickets', { params, signal });
         return response.data;
     },
 
-    findOne: async (id: string) => {
-        const response = await api.get(`/tickets/${id}`);
+    findOne: async (id: string): Promise<Ticket> => {
+        const response = await api.get<Ticket>(`/tickets/${id}`);
         return response.data;
     },
 
-    update: async (id: string, data: any) => {
-        const response = await api.patch(`/tickets/${id}`, data);
+    update: async (id: string, data: Partial<Ticket>): Promise<Ticket> => {
+        const response = await api.patch<Ticket>(`/tickets/${id}`, data);
         return response.data;
     },
 
-    resolve: async (id: string) => {
-        const response = await api.post(`/tickets/${id}/resolve`);
+    resolve: async (id: string): Promise<Ticket> => {
+        const response = await api.post<Ticket>(`/tickets/${id}/resolve`);
         return response.data;
     },
 
-    pause: async (id: string) => {
-        const response = await api.post(`/tickets/${id}/pause`);
+    pause: async (id: string): Promise<Ticket> => {
+        const response = await api.post<Ticket>(`/tickets/${id}/pause`);
         return response.data;
     },
 
-    assign: async (id: string, userId: string) => {
-        const response = await api.post(`/tickets/${id}/assign`, { userId });
+    assign: async (id: string, userId: string): Promise<Ticket> => {
+        const response = await api.post<Ticket>(`/tickets/${id}/assign`, { userId });
         return response.data;
     },
 
-    bulkAction: async (params: BulkActionParams) => {
-        const response = await api.post('/tickets/bulk', params);
+    bulkAction: async (params: BulkActionParams): Promise<BulkActionResult> => {
+        const response = await api.post<BulkActionResult>('/tickets/bulk', params);
         return response.data;
     }
 };

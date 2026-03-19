@@ -135,6 +135,10 @@ export class TicketsService {
             limit = 20,
         } = filters;
 
+        // Sanitizar paginação: cap de 100 registros por página, mínimo 1
+        const safePage = Math.max(1, Number(page) || 1);
+        const safeLimit = Math.min(Math.max(1, Number(limit) || 20), 100);
+
         const where: any = {
             companyId,
             ...(status && { status }),
@@ -176,7 +180,7 @@ export class TicketsService {
             };
         }
 
-        const skip = (page - 1) * limit;
+        const skip = (safePage - 1) * safeLimit;
 
         const [data, total] = await this.prisma.$transaction([
             this.prisma.ticket.findMany({
@@ -192,7 +196,7 @@ export class TicketsService {
                 },
                 orderBy: [{ lastMessageAt: 'desc' }, { updatedAt: 'desc' }],
                 skip,
-                take: limit,
+                take: safeLimit,
             }),
             this.prisma.ticket.count({ where }),
         ]);
@@ -201,9 +205,9 @@ export class TicketsService {
             data,
             meta: {
                 total,
-                page,
-                limit,
-                totalPages: Math.ceil(total / limit),
+                page: safePage,
+                limit: safeLimit,
+                totalPages: Math.ceil(total / safeLimit),
             },
         };
     }
@@ -783,6 +787,14 @@ export class TicketsService {
                     companyId,
                     newStatus,
                 });
+
+                // Emitir ticket.resolved para acionar CSAT e análise de sentimento
+                if (action === BulkTicketAction.RESOLVE) {
+                    this.eventEmitter.emit('ticket.resolved', {
+                        ticketId: id,
+                        companyId,
+                    });
+                }
             }
         }
 

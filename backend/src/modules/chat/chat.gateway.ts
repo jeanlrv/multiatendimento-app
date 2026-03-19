@@ -8,7 +8,7 @@ import {
     MessageBody,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { Logger, UseGuards, OnModuleInit } from '@nestjs/common';
+import { Logger, UseGuards, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { createAdapter } from '@socket.io/redis-adapter';
 import { Redis } from 'ioredis';
@@ -27,7 +27,7 @@ const WS_ALLOWED_ORIGINS: string[] = process.env.CORS_ORIGIN
     },
     namespace: 'chat',
 })
-export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect, OnModuleInit {
+export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect, OnModuleInit, OnModuleDestroy {
     @WebSocketServer()
     server: Server;
 
@@ -79,6 +79,13 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect, On
         this.jwtRevalidationInterval = setInterval(() => {
             this.revalidateConnectedClients();
         }, 5 * 60 * 1000);
+    }
+
+    onModuleDestroy() {
+        if (this.jwtRevalidationInterval) {
+            clearInterval(this.jwtRevalidationInterval);
+            this.jwtRevalidationInterval = null;
+        }
     }
 
     private extractTokenFromCookie(cookieHeader: string | undefined): string | null {
@@ -135,10 +142,13 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect, On
         if (!sockets) return;
 
         for (const [, socket] of sockets) {
-            const token = socket.handshake?.auth?.token || socket.handshake?.headers?.authorization;
-            if (!token) { socket.disconnect(); continue; }
+            // Verificar token via auth header, authorization header OU cookie httpOnly
+            const authToken = socket.handshake?.auth?.token || socket.handshake?.headers?.authorization;
+            const cookieToken = this.extractTokenFromCookie(socket.handshake?.headers?.cookie as string);
+            const rawToken = authToken || cookieToken;
+            if (!rawToken) { socket.disconnect(); continue; }
             try {
-                this.jwtService.verify(token.replace('Bearer ', ''));
+                this.jwtService.verify(rawToken.replace('Bearer ', ''));
             } catch {
                 this.logger.debug(`JWT expirado — desconectando socket ${socket.id}`);
                 socket.emit('error', 'Sessão expirada. Reconecte-se.');

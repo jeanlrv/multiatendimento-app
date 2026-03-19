@@ -89,13 +89,13 @@ const embeddings = await this.generateEmbeddingBatch(
 
 Entidades chave do `schema.prisma`:
 *   **Company**: Tenant principal com limites de uso (`limitTokens`).
-*   **KnowledgeBase**: Coleção de documentos vetoriais.
-*   **Document**: Metadados de arquivos com status (`PENDING`, `READY`, `ERROR`).
-*   **DocumentChunk**: Fragmentos de texto com vetores (1536d).
-*   **Conversation**: Histórico de chat do Playground.
-*   **Notification**: Alertas de sistema e feedback de jobs.
-*   **AIUsage**: Log granular de consumo de tokens para BI.
-*   **WorkflowRule**: Definição de grafos (JSON Nodes/Edges).
+*   **Customer / Contact**: Micro-CRM integrado.
+*   **KnowledgeBase / Document**: RAG nativo e Embeddings.
+*   **Broadcast / ScheduledMessage**: Eventos em massa e automações de disparo.
+*   **ProviderConfig**: Múltiplos provedores e chaves geridas (S3, LLM).
+*   **EmbedChatSession**: Chatbot headless para sites.
+*   **APIKey**: Chaves de acesso persistentes para clientes da API.
+*   **WorkflowRule**: Definição de grafos (JSON Nodes/Edges) para fluxos de chat.
 
 ---
 
@@ -107,7 +107,7 @@ Entidades chave do `schema.prisma`:
 *   Uploads: `multipart/form-data` gerenciado por Multer + Fast-Check.
 
 ### 6.2 WebSocket (Real-time)
-*   Namespace: `/` (Default).
+*   Namespace: `/chat` (Autenticado).
 *   Eventos Principais:
     - `notification.created`: Alertas de processamento concluído.
     - `ticket.updated`: Atualizações de status em tempo real.
@@ -136,6 +136,10 @@ O sistema utiliza uma imagem otimizada:
 | `DATABASE_URL` | PostgreSQL com pgvector |
 | `ENCRYPTION_KEY` | Chave de 32 bytes para dados sensíveis |
 | `JWT_SECRET` | Chave de assinatura para tokens de acesso |
+| `JWT_REFRESH_SECRET` | Chave de assinatura para refresh tokens |
+| `JWT_EXPIRATION` | Tempo de expiração em horas (ex: 24h) |
+| `CORS_ORIGIN` | URL do frontend (proteção CORS) |
+| `BACKEND_PUBLIC_URL` | URL do servidor (necessário p/ Webhooks) |
 | `LLM_PROVIDER` | Provedor padrão (openai, gemini, anthropic, etc) |
 | `S3_ENABLED` | Define se usa S3 para armazenamento de mídias |
 | `REDIS_URL` | Redis para filas BullMQ |
@@ -143,6 +147,18 @@ O sistema utiliza uma imagem otimizada:
 ---
 
 ## 9. Diretrizes (Antigravity Standard)
-1. **Zero `any`**: Tipagem estrita em interfaces de IA.
-2. **Modularidade**: Serviços de IA devem ser agnósticos ao provedor.
-3. **Audit First**: Toda ação de IA deve gerar um `AIUsage` log.
+1. **Zero `any`**: Tipagem estrita não apenas na IA, mas em todos os Controllers e Services do Backend e Frontend via Interfaces e DTOs fortes.
+2. **Modularidade**: Serviços e integrações Z-API/LLM Providers encapsulados.
+3. **Audit First**: Toda ação de IA gera `AIUsage` log; toda exceção grave vai ao Sentry com sanitização de headers.
+
+---
+
+## 10. Cobertura de Testes
+O projeto possui uma sólida cobertura composta por 14 suítes de testes unitários:
+- Auth, TenantGuard e PermissionsGuard (RBAC).
+- Chat Gateway (Sockets / Conexões Válidas) e Chat Service.
+- Webhook Processing / Webhook Integration.
+- Tickets Controller / Tickets Service.
+- Servições de IA (AI Chat, AI Integration, Workflow Orchestrator).
+- WhatsApp Service (Envio, Recepção, Fallbacks).
+- CryptoService (Criptografia, Hashes, Tokens transparentes em Repouso).

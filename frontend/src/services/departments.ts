@@ -7,7 +7,7 @@ export interface Department {
     emoji?: string;
     color?: string;
     displayOrder?: number;
-    businessHours?: any;
+    businessHours?: Record<string, unknown>;
     slaFirstResponseMin?: number;
     slaResolutionMin?: number;
     outOfHoursMessage?: string;

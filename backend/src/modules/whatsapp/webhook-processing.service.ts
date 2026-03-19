@@ -61,6 +61,12 @@ export class WebhookProcessingService {
                 `⚠️ instanceId=${instanceId}: Z-API enviou clientToken mas sistema não tem token configurado. ` +
                 `Configure o Security Token na conexão para validar webhooks.`
             );
+        } else if (!incomingToken && storedToken) {
+            // Instância espera validação mas webhook não enviou token — rejeitar
+            this.logger.warn(`Webhook Z-API rejeitado: instanceId=${instanceId} possui token configurado mas webhook não enviou clientToken`);
+            return false;
+        } else if (!incomingToken && !storedToken) {
+            this.logger.debug(`instanceId=${instanceId}: nenhum token configurado — webhook aceito sem validação de segurança`);
         }
 
         return true;

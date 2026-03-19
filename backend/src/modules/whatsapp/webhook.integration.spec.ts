@@ -10,17 +10,22 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 describe('Webhook Race Conditions (Integração Média)', () => {
     let service: WebhookProcessingService;
     let prismaCreateSpy: jest.Mock;
-
     beforeEach(async () => {
-        // Mock simulado com latência no banco de dados
-        prismaCreateSpy = jest.fn().mockImplementation(async () => {
-            await new Promise(res => setTimeout(res, 50)); // Simula I/O demorado
-            return { id: 'contact-1', phone: '551199999999' };
+        // Estado compartilhado para simular DB real na race condition
+        const dbState = { contacts: new Map<string, any>() };
+
+        prismaCreateSpy = jest.fn().mockImplementation(async (args: any) => {
+            const newContact = { id: 'contact-1', ...args.data };
+            dbState.contacts.set(args.data.phoneNumber, newContact);
+            await new Promise(res => setTimeout(res, 50)); 
+            return newContact;
         });
 
         const mockPrisma = {
             contact: {
-                findFirst: jest.fn().mockResolvedValue(null), // Sempre diz que contato não existe
+                findFirst: jest.fn().mockImplementation(async (args: any) => {
+                    return dbState.contacts.get(args.where.phoneNumber) || null;
+                }),
                 create: prismaCreateSpy,
                 update: jest.fn()
             },
@@ -31,11 +36,15 @@ describe('Webhook Race Conditions (Integração Média)', () => {
                 create: jest.fn(),
             },
             company: {
-                findFirst: jest.fn().mockResolvedValue({ id: 'company-1' }),
+                findFirst: jest.fn().mockResolvedValue({ id: 'company-1', zapiToken: null }),
+            },
+            customer: {
+                findFirst: jest.fn().mockResolvedValue(null),
+                create: jest.fn().mockResolvedValue({ id: 'cust-1' }),
             },
             whatsAppInstance: {
-                findFirst: jest.fn().mockResolvedValue({ id: 'inst-1', companyId: 'company-1', isConnected: true }),
-                findUnique: jest.fn().mockResolvedValue({ id: 'inst-1', companyId: 'company-1', isConnected: true }),
+                findFirst: jest.fn().mockResolvedValue({ id: 'inst-1', companyId: 'company-1', isConnected: true, zapiToken: null }),
+                findUnique: jest.fn().mockResolvedValue({ id: 'inst-1', companyId: 'company-1', isConnected: true, zapiToken: null }),
             }
         };
 

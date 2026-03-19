@@ -7,10 +7,14 @@ O KSZap Aero é uma plataforma SaaS multiempresa para gestão de atendimentos, a
 O sistema é estruturado para:
 
 - Multiempresa (Tenant-based architecture)
-- Controle de acesso por papéis (RBAC)
+- Controle de acesso por papéis (RBAC) e segurança robusta (Helmet, JWT rotating)
 - Escalabilidade horizontal e Deploy Automatizado
-- Experiência CRM moderna com IA preditiva
+- Experiência CRM moderna com IA preditiva (Mini-CRM Customers)
 - Hub de IA Multimodal (Texto e Visão)
+- Broadcast e Mensagens Agendadas integradas ao CRM
+- CSAT / Avaliações para controle de Qualidade
+- Embed Widget para integração em sites externos
+- Respostas Rápidas (Macros)
 - Interface Liquid Glass com Dark Mode nativo
 
 ---
@@ -22,6 +26,8 @@ O sistema é estruturado para:
 - Automação inteligente via Workflows baseados em grafos.
 - Atendimento híbrido (Humano + IA) com análise de sentimento e transcrição.
 - Notificações em tempo real para eventos críticos e processos de background.
+- Atendimento pró-ativo via Broadcast e Mensagens Agendadas.
+- Coleta de métricas e Qualidade via CSAT.
 - Gestão de custos de IA através de limites granulares por empresa.
 
 ---
@@ -33,8 +39,8 @@ Cada dado pertence obrigatoriamente a uma empresa (`companyId`).
 Regras:
 - Isolamento total de banco de dados por `companyId`.
 - JWT carrega `companyId` e `role`.
-- Proteção nativa contra SSRF e Injeção de dependências em automações.
-- Módulos auditados: Contacts, Tickets, Users, Workflows, AI Hub, Dashboard, Settings.
+- Mapeamento avançado de segurança: `httpOnly` cookies persistentes para tokens, `AES-256-GCM` para credenciais (`SMTPPassword`, `ZApiTokens`), limitadores de taxa globais, validação JWT com rotatividade.
+- Módulos auditados: Contacts, Customers (Mini-CRM), Tickets, Users, Workflows, Quick Replies, AI Hub, Dashboard, Settings, Embed Widget, Broadcast.
 
 ---
 

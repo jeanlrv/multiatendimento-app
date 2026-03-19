@@ -3,6 +3,7 @@ import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { NestExpressApplication } from '@nestjs/platform-express';
+import { Request, Response, NextFunction } from 'express';
 import { join } from 'path';
 import helmet from 'helmet';
 import * as cookieParser from 'cookie-parser';
@@ -99,7 +100,7 @@ async function bootstrap() {
         // ── CORS para Embed (deve ser PRIMEIRO, antes do enableCors global) ──────
         // Preflight OPTIONS de sites externos chega aqui ANTES do global CORS,
         // garantindo que 'Access-Control-Allow-Origin: *' seja enviado corretamente.
-        app.use('/api/embed', (req: any, res: any, next: any) => {
+        app.use('/api/embed', (req: Request, res: Response, next: NextFunction) => {
             res.setHeader('Access-Control-Allow-Origin', '*');
             res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
             res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Origin, Accept');
@@ -166,7 +167,7 @@ async function bootstrap() {
         }
 
         // Health check endpoint sem prefixo /api — usado pelo Docker healthcheck
-        app.getHttpAdapter().get('/health', (_req: any, res: any) => {
+        app.getHttpAdapter().get('/health', (_req: Request, res: Response) => {
             res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
         });
 

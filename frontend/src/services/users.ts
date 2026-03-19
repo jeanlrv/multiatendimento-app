@@ -81,18 +81,18 @@ export const usersService = {
         await api.delete(`/users/${id}`);
     },
 
-    getMentionable: async () => {
-        const response = await api.get('/users/mentionable');
+    getMentionable: async (): Promise<{ id: string; name: string }[]> => {
+        const response = await api.get<{ id: string; name: string }[]>('/users/mentionable');
         return response.data;
     },
 
-    getMe: async () => {
-        const response = await api.get('/users/me');
+    getMe: async (): Promise<User> => {
+        const response = await api.get<User>('/users/me');
         return response.data;
     },
 
-    updateMe: async (data: { name?: string; avatar?: string }) => {
-        const response = await api.patch('/users/me', data);
+    updateMe: async (data: { name?: string; avatar?: string }): Promise<User> => {
+        const response = await api.patch<User>('/users/me', data);
         return response.data;
     },
 };
