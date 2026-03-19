@@ -223,7 +223,8 @@ export class ReportsService {
         return this.prisma.internalChatMessage.findMany({
             where,
             include: {
-                sender: { select: { id: true, name: true, email: true } },
+                senderUser: { select: { id: true, name: true, email: true } },
+                senderAiAgent: { select: { id: true, name: true, avatar: true } },
                 chat: { select: { id: true, name: true, type: true } }
             },
             orderBy: { sentAt: 'desc' },
