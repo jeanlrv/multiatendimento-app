@@ -1,0 +1,8 @@
+﻿Prisma schema loaded from prisma\schema.prisma
+Datasource "db": PostgreSQL database "railway", schema "public" at "autorack.proxy.rlwy.net:11425"
+
+Applying migration `20260220142556_init_enterprise`
+Applying migration `20260221000001_add_nodes_edges_to_workflow_version`
+Applying migration `20260222000001_sync_schema_roles_collaboration`
+Applying migration `20260222000002_users_roleid_not_null`
+Applying migration `20260222000003_indexes_columns_fixes`
