@@ -6,15 +6,13 @@ import { useCollaboration } from '@/hooks/useCollaboration';
 import { Users, Search, Circle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-interface UserPresence {
+interface Participant {
     id: string;
     name: string;
     avatar?: string | null;
-    email: string;
-    presence: {
-        status: 'ONLINE' | 'OFFLINE' | 'BUSY';
-        lastSeen: string;
-    };
+    email?: string;
+    chatStatus: string;
+    isAi?: boolean;
 }
 
 interface PresenceSidebarProps {
@@ -22,32 +20,41 @@ interface PresenceSidebarProps {
 }
 
 export const PresenceSidebar: React.FC<PresenceSidebarProps> = ({ onSelectUser }) => {
-    const [users, setUsers] = useState<UserPresence[]>([]);
+    const [participants, setParticipants] = useState<Participant[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [loading, setLoading] = useState(true);
     const { presence, openDirectChat } = useCollaboration();
 
     useEffect(() => {
-        const fetchUsers = async () => {
+        const fetchParticipants = async () => {
             try {
                 const res = await api.get('/collaboration/users');
-                setUsers(res.data);
+                // A API retorna { users: [], aiAgents: [] }
+                const { users = [], aiAgents = [] } = res.data || {};
+                
+                const all = [
+                    ...users.map((u: any) => ({ ...u, isAi: false })),
+                    ...aiAgents.map((a: any) => ({ ...a, isAi: true, chatStatus: 'ONLINE' }))
+                ];
+
+                setParticipants(all);
             } catch (error) {
-                console.error('Erro ao buscar usuários:', error);
+                console.error('Erro ao buscar participantes:', error);
+                setParticipants([]);
             } finally {
                 setLoading(false);
             }
         };
 
-        fetchUsers();
+        fetchParticipants();
     }, []);
 
-    const filteredUsers = users.filter(u =>
-        u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        u.email.toLowerCase().includes(searchTerm.toLowerCase())
-    ).map(u => ({
-        ...u,
-        currentStatus: presence[u.id] || u.presence.status
+    const filteredParticipants = participants.filter(p =>
+        p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (p.email && p.email.toLowerCase().includes(searchTerm.toLowerCase()))
+    ).map(p => ({
+        ...p,
+        currentStatus: presence[p.id] || p.chatStatus || 'OFFLINE'
     })).sort((a, b) => {
         if (a.currentStatus === 'ONLINE' && b.currentStatus !== 'ONLINE') return -1;
         if (a.currentStatus !== 'ONLINE' && b.currentStatus === 'ONLINE') return 1;
@@ -90,7 +97,7 @@ export const PresenceSidebar: React.FC<PresenceSidebarProps> = ({ onSelectUser }
                     </div>
                 ) : (
                     <AnimatePresence>
-                        {filteredUsers.map(u => (
+                        {filteredParticipants.map(u => (
                             <motion.button
                                 layout
                                 initial={{ opacity: 0, x: -10 }}
@@ -112,9 +119,12 @@ export const PresenceSidebar: React.FC<PresenceSidebarProps> = ({ onSelectUser }
                                     </div>
                                 </div>
                                 <div className="flex-1 text-left overflow-hidden">
-                                    <p className="text-sm font-bold text-gray-800 dark:text-gray-200 truncate group-hover:text-primary transition-colors">
-                                        {u.name}
-                                    </p>
+                                    <div className="flex items-center gap-1.5">
+                                        <p className="text-sm font-bold text-gray-800 dark:text-gray-200 truncate group-hover:text-primary transition-colors">
+                                            {u.name}
+                                        </p>
+                                        {u.isAi && <span className="text-[8px] bg-primary/10 text-primary px-1 rounded font-black tracking-tighter uppercase">AI</span>}
+                                    </div>
                                     <p className="text-[10px] text-gray-500 uppercase font-black tracking-tighter opacity-60">
                                         {u.currentStatus}
                                     </p>

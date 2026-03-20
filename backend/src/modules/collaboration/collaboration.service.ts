@@ -35,6 +35,7 @@ export class CollaborationService {
             select: { 
                 id: true, 
                 name: true, 
+                email: true,
                 avatar: true, 
                 chatStatus: true 
             }
