@@ -20,6 +20,7 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "prisma:generate": "npx prisma@6 generate",
     "prisma:migrate": "npx prisma@6 migrate dev",
+    "prisma:status": "npx prisma@6 migrate status",
     "prisma:studio": "npx prisma@6 studio",
     "seed": "node dist/prisma/seed.js"
   },

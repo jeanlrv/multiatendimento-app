@@ -48,8 +48,8 @@ docker-compose up -d
 # Entre no container do backend
 docker exec -it whatsapp-backend sh
 
-# Execute as migrations do Prisma
-npx prisma migrate dev --name init
+# Execute as migrations do Prisma (USE SEMPRE @6)
+npx prisma@6 migrate dev --name init
 
 # Popule o banco com dados iniciais
 npm run seed
@@ -121,14 +121,14 @@ docker-compose up -d --build
 # Entrar no container
 docker exec -it whatsapp-backend sh
 
-# Gerar Prisma Client
-npx prisma generate
+# Gerar Prisma Client (USE SEMPRE @6)
+npx prisma@6 generate
 
-# Criar migration
-npx prisma migrate dev --name nome_da_migration
+# Criar migration (USE SEMPRE @6)
+npx prisma@6 migrate dev --name nome_da_migration
 
-# Abrir Prisma Studio (GUI do banco)
-npx prisma studio
+# Abrir Prisma Studio (USE SEMPRE @6)
+npx prisma@6 studio
 
 # Executar seed
 npm run seed
@@ -232,9 +232,12 @@ docker-compose logs postgres
 
 ### Prisma não gera os tipos
 
+> [!WARNING]
+> Nunca use o comando sem a tag `@6`. O uso da v7 causará erro P1012.
+
 ```bash
 docker exec -it whatsapp-backend sh
-npx prisma generate
+npx prisma@6 generate
 ```
 
 ---

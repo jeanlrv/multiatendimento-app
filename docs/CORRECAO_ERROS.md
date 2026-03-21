@@ -10,6 +10,10 @@
 **Problema**: Scripts npm/npx bloqueados no Windows  
 **Solução**: Use os comandos abaixo
 
+### 3. Erro P1012 - Prisma 7 (BREAKING CHANGE)
+**Problema**: `The datasource property url is no longer supported in schema files.`  
+**Solução**: O projeto depende do Prisma v6. Use sempre `npx prisma@6` em vez de apenas `npx prisma`. O Prisma 7 removeu o suporte direto ao `env("DATABASE_URL")` no schema sem configuração extra.
+
 ---
 
 ## 🚀 Como Iniciar Agora
@@ -127,7 +131,7 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
 
 Após os containers iniciarem com sucesso:
 
-1. ✅ Execute migrations: `npx prisma migrate dev --name init`
+1. ✅ Execute migrations: `npx prisma@6 migrate dev --name init`
 2. ✅ Execute seed: `npm run seed`
 3. ✅ Acesse http://localhost:3000
-4. ✅ Faça login com: `admin@whatsapp-saas.com` / `Admin@123`
+4. ✅ Faça login com: `admin@kszap.com` / `Admin@123`

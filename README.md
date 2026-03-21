@@ -36,7 +36,7 @@ Plataforma completa e open-source para gerenciamento de atendimento via WhatsApp
 
 ### Backend
 - **NestJS** (Node.js)
-- **Prisma ORM**
+- **Prisma ORM v6** (🚨 Não fazer upgrade para v7)
 - **PostgreSQL**
 - **Redis** (cache e filas)
 - **Swagger** (documentação API)
@@ -101,11 +101,15 @@ docker-compose up -d
 
 ### Backend
 
+> [!IMPORTANT]
+> **Use sempre Prisma v6**. A versão 7 possui breaking changes na validação do `DATABASE_URL` que impedem o funcionamento correto deste projeto.
+> Ao rodar comandos npx, use sempre a tag de versão: `npx prisma@6 ...`
+
 ```bash
 cd backend
 npm install
-npx prisma generate
-npx prisma migrate dev
+npx prisma@6 generate
+npx prisma@6 migrate dev
 npm run seed
 npm run start:dev
 ```

@@ -6,6 +6,11 @@ export class CreateAIAgentDto {
     @IsString()
     name: string;
 
+    @ApiProperty({ description: 'URL do avatar do agente', required: false })
+    @IsString()
+    @IsOptional()
+    avatar?: string;
+
     @ApiProperty({ description: 'Descrição do agente', required: false })
     @IsString()
     @IsOptional()
@@ -100,6 +105,11 @@ export class CreateAIAgentDto {
     @ApiProperty({ description: 'Limite de mensagens por sessão (10min)', required: false })
     @IsOptional()
     embedRateLimit?: number;
+
+    @ApiProperty({ description: 'Permite uso do agente no chat interno', required: false })
+    @IsBoolean()
+    @IsOptional()
+    allowInInternalChat?: boolean;
 
     @ApiProperty({ description: 'Permite downgrade automático para queries simples', required: false })
     @IsBoolean()

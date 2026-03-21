@@ -3,6 +3,7 @@ import { api } from './api';
 export interface AIAgent {
     id: string;
     name: string;
+    avatar?: string;
     description?: string;
     prompt?: string;
     modelId?: string;
@@ -12,6 +13,9 @@ export interface AIAgent {
     knowledgeBaseId?: string;
     embeddingProvider?: string;
     embeddingModel?: string;
+    allowInInternalChat?: boolean;
+    allowModelDowngrade?: boolean;
+    limitTokensPerDay?: number;
     // Embed configuration
     embedId?: string;
     embedEnabled?: boolean;
